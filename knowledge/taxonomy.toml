@@ -1,0 +1,61 @@
+# ADA Sensei knowledge taxonomy.
+# Each category lists the known topic identifiers. To request an example the
+# student/instructor uses one of these topics (RQ-EX-010).
+
+[kotlin]
+topics = [
+    "null-safety",
+    "scope-functions",
+    "sealed-classes",
+    "generics",
+    "coroutines",
+    "flows",
+    "extension-functions",
+    "data-classes",
+]
+
+[compose]
+topics = [
+    "state",
+    "recomposition",
+    "remember",
+    "lazycolumn",
+    "viewmodel",
+    "navigation",
+    "theming",
+    "side-effects",
+    "composable-functions",
+]
+
+[architecture]
+topics = [
+    "mvvm",
+    "mvi",
+    "clean-architecture",
+    "repository-pattern",
+    "dependency-injection",
+    "modularization",
+]
+
+[android]
+topics = [
+    "lifecycle",
+    "activities",
+    "fragments",
+    "intents",
+    "permissions",
+    "networking",
+    "room",
+    "workmanager",
+    "datastore",
+]
+
+[testing]
+topics = [
+    "unit-testing",
+    "junit",
+    "robolectric",
+    "instrumented-tests",
+    "mockk",
+    "compose-testing",
+]

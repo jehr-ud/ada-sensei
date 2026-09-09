@@ -1,0 +1,16 @@
+{
+  "id": "example://architecture-mvvm",
+  "concept": "mvvm",
+  "category": "architecture",
+  "level": "intermediate",
+  "source": "curated",
+  "body": "MVVM separates the UI from state and logic. The ViewModel holds UI state and exposes it as observable state; the View observes it and forwards user events to the ViewModel. This isolates the UI from the data layer and survives configuration changes.\n\n```kotlin\nclass CounterViewModel : ViewModel() {\n    private val _count = MutableStateFlow(0)\n    val count: StateFlow<Int> = _count.asStateFlow()\n\n    fun increment() { _count.value++ }\n}\n\n@Composable\nfun CounterScreen(vm: CounterViewModel) {\n    val count by vm.count.collectAsStateWithLifecycle()\n    Button(onClick = vm::increment) { Text(\"$count\") }\n}\n```\n\nThis works because the ViewModel outlives the composable and keeps the source of truth away from the UI, while StateFlow provides a single observable stream the UI collects.",
+  "common_mistake": {
+    "incorrect_code": "var count by mutableStateOf(0)\n// UI reads/writes count directly everywhere",
+    "explanation": "Putting state directly in the composable mixes logic with presentation, resets on configuration change, and makes behavior hard to test in isolation."
+  },
+  "teaching_questions": [
+    "What belongs in the ViewModel versus the composable?",
+    "How does the screen update when increment() changes the StateFlow value?"
+  ]
+}

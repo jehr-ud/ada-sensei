@@ -1,0 +1,57 @@
+Screen {
+    layout: vertical;
+}
+
+#session-bar {
+    dock: top;
+    height: 1;
+    background: $primary;
+    color: $text;
+    padding: 0 1;
+}
+
+#log {
+    height: 1fr;
+    border: round $primary;
+    padding: 0 1;
+}
+
+#prompt-row {
+    height: auto;
+    dock: bottom;
+}
+
+#action-row {
+    height: auto;
+    dock: bottom;
+    padding: 0 1;
+}
+
+#action-select {
+    width: 1fr;
+}
+
+#evaluate-btn {
+    width: auto;
+    margin-left: 1;
+}
+
+#input {
+    width: 1fr;
+}
+
+#prompt-label {
+    width: auto;
+}
+
+#status-bar {
+    dock: bottom;
+    height: 1;
+    background: $panel;
+    color: $text;
+    padding: 0 1;
+}
+
+Input {
+    border: tall $primary;
+}

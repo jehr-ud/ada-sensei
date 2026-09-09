@@ -1,0 +1,25 @@
+# Tasks
+
+- [ ] Define `Evidence`, `EvaluationCriterion`, `EvaluationResult` models (foundation).
+- [ ] Implement `Rubric` (dimensions, weights, 0–4 scale, deterministic score).
+- [ ] Implement `AndroidProjectAnalyzer` (structure, modules, source files).
+- [ ] Implement `GradleTool` (wrapper discovery, build, timeouts, limitation reporting).
+- [ ] Implement `TestTool` (collect unit-test reports; do not execute instrumented tests by default).
+- [ ] Implement `StaticAnalysisTool` (Android Lint + detekt via wrapper, report parsing with ERROR/WARNING/INFO severity).
+- [ ] Implement `RequirementMatcher` (evidence ↔ `req://` ids, not-evaluated marking).
+- [ ] Implement exercise resolution (`--exercise` → session → structural-only).
+- [ ] Implement user confirmation gate before Gradle execution.
+- [ ] Implement reserved `--instrumented` rejection (no connectedAndroidTest).
+- [ ] Create evaluation prompt with rubric (40/20/15/15/10) and evidence rules.
+- [ ] Implement structured evaluation parsing (max 3 attempts) + deterministic score override.
+- [ ] Wire `ResultStore` persistence bound to attempt and next-activity history reuse.
+- [ ] Add sample Android fixture project.
+- [ ] Add build-success integration test.
+- [ ] Add build-failure integration test (RQ-EVA-018).
+- [ ] Add no-evidence / missing-tool integration tests (RQ-EVA-012/014).
+- [ ] Add requirement-evaluation integration test.
+- [ ] Implement non-interactive confirmation policy (`--yes`) and tests.
+- [ ] Implement rubric hierarchy validation (top-level 100%; functional subweights within the fixed 40% dimension).
+- [ ] Mark evaluated attempt as completed after successful evaluation.
+- [ ] Append evaluation outcome to student history.
+- [ ] Add explicit persistence-failure reporting tests.

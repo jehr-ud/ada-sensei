@@ -1,0 +1,34 @@
+# Tasks
+
+- [ ] Create Python package skeleton and `pyproject.toml` (Python >= 3.11).
+- [ ] Implement `ConfigLoader` with precedence and TOML/env parsing.
+- [ ] Implement XDG path resolution (data/config/cache + overrides).
+- [ ] Implement `Secrets` (env-only keys + redaction utility).
+- [ ] Define core domain models in `models.py`, including `Attempt` and distinct
+      `student_id`/`project_id`/`exercise_id`/`attempt_id`.
+- [ ] Add `severity` (error | warning | info) to the `Evidence` model.
+- [ ] Define `LLMClient` abstraction.
+- [ ] Implement `OllamaProvider` (OpenAI-compatible).
+- [ ] Implement JSON-Schema generation and `validation.py` validator.
+- [ ] Implement `StructuredPipeline` with max 3 attempts and clean failure.
+- [ ] Implement `JsonStore` (versioned, atomic, URN routing).
+- [ ] Implement `HistoryStore` (student profile/history + confirmed creation).
+- [ ] Implement `ExerciseStore`.
+- [ ] Implement `AttemptStore`.
+- [ ] Implement `ResultStore`.
+- [ ] Implement `SessionContext` with session resume.
+- [ ] Implement `SubprocessRunner` with timeouts and limitation reporting.
+- [ ] Implement `ProjectInspector` (read-only).
+- [ ] Implement tool discovery (gradlew/gradle, JDK, Android SDK).
+- [ ] Implement `ContextManager` (deterministic priority reduction, optional LLM summarization, reduction metadata and notice).
+- [ ] Add unit tests for every component above.
+- [ ] Add integration test: structured pipeline against a fake provider (3 attempts).
+- [ ] Add runtime metadata test (Python/JDK/AGP requirements declared).
+- [ ] Add XDG layout tests (paths, fallbacks, overrides).
+- [ ] Add test: Attempt persistence and lifecycle status.
+- [ ] Add context tests for deterministic reduction, identity preservation, and LLM-derived summary metadata.
+- [ ] Add structured-output test proving no more than 3 total attempts (initial + 2 retries maximum).
+- [ ] Declare the default model (`qwen2.5-coder:7b` via Ollama) in configuration and `docs/runtime.md`.
+- [ ] Implement `DefaultModelProvisioner` (Ollama detection/install, model pull, outcome recording, one-command installer script `install.sh`).
+- [ ] Add provisioning unit tests (missing server, missing model, failure reported as limitation, no redundant work).
+- [ ] Add metadata test proving GitHub-only install (`pip install git+https://github.com/jehr-ud/ada-sensei.git`).

@@ -1,0 +1,16 @@
+{
+  "id": "example://kotlin-sealed-classes",
+  "concept": "sealed-classes",
+  "category": "kotlin",
+  "level": "intermediate",
+  "source": "curated",
+  "body": "A sealed class restricts the subclasses to the same file and package, which makes exhaustive when-expressions possible.\n\n```kotlin\nsealed class Result {\n    data class Success(val value: Int) : Result()\n    data class Failure(val error: String) : Result()\n}\n\nfun describe(r: Result): String = when (r) {\n    is Result.Success -> \"ok: ${r.value}\"\n    is Result.Failure -> \"error: ${r.error}\"\n}\n```\n\nBecause every subclass is known at compile time, the compiler verifies the when is exhaustive, so a new subclass forces updating every where statement that handles Result.",
+  "common_mistake": {
+    "incorrect_code": "interface Result\nclass Success(val value: Int) : Result\nclass Failure(val error: String) : Result",
+    "explanation": "An interface allows any class to implement Result from anywhere, so a when over Result cannot be exhaustive and adding a case at runtime is possible. Sealed classes keep the hierarchy closed and exhaustive."
+  },
+  "teaching_questions": [
+    "When would you choose a sealed class over an interface?",
+    "What happens to existing when-expressions when you add a new subclass?"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "example://compose-state",
+  "concept": "state",
+  "category": "compose",
+  "level": "basic",
+  "source": "curated",
+  "body": "State in Compose is any value that changes over time and drives the UI. A state held in a composable is remembered across recompositions with remember. A plain val resets every recomposition.\n\n```kotlin\n@Composable\nfun Counter() {\n    var count by remember { mutableStateOf(0) }\n    Button(onClick = { count++ }) { Text(\"$count\") }\n}\n```\n\nThis works because Compose keeps the remembered slot for the count and re-reads it on every recomposition, redrawing only the Text that reads the state.",
+  "common_mistake": {
+    "incorrect_code": "val count = 0\nButton(onClick = { count++ }) { Text(\"$count\") }",
+    "explanation": "count is a plain local value: recomposition resets it to 0 and the button does not update. State must be observable and remembered (mutableStateOf + remember)."
+  },
+  "teaching_questions": [
+    "When the button is tapped, which part of the UI recomposes and why?",
+    "What would change if you removed remember but kept mutableStateOf?"
+  ]
+}
