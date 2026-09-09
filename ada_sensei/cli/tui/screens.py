@@ -3,23 +3,21 @@
 from __future__ import annotations
 
 from textual.app import ComposeResult
-from textual.containers import Horizontal
 from textual.screen import Screen
-from textual.widgets import Footer, Header, Input, RichLog
+from textual.widgets import Footer, Header, RichLog
 
-from .widgets import SessionBar, StatusBar
+from .widgets import PromptArea, SessionBar, SessionFooter
 
 
 class MainScreen(Screen):
-    """Primary conversation screen: header, log, prompt, status."""
+    """Primary conversation screen: header, log, input, status."""
 
     BINDINGS = []
 
     def compose(self) -> ComposeResult:
         yield SessionBar(id="session-bar")
         yield RichLog(id="log", markup=True, wrap=True)
-        with Horizontal(id="prompt-row"):
-            yield Input(placeholder="type a command (/help)", id="input")
-        yield StatusBar(id="status-bar")
+        yield PromptArea("", id="input")
+        yield SessionFooter(id="session-footer")
         yield Footer()
         yield Header()

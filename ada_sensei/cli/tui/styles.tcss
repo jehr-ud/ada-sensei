@@ -16,14 +16,8 @@ Screen {
     padding: 0 1;
 }
 
-#prompt-row {
-    height: auto;
-    dock: bottom;
-}
-
 #action-row {
-    height: auto;
-    dock: bottom;
+    height: 3;
     padding: 0 1;
 }
 
@@ -31,13 +25,11 @@ Screen {
     width: 1fr;
 }
 
-#evaluate-btn {
-    width: auto;
-    margin-left: 1;
-}
-
 #input {
     width: 1fr;
+    height: 7;
+    max-height: 40%;
+    border: tall $primary;
 }
 
 #prompt-label {
@@ -52,6 +44,9 @@ Screen {
     padding: 0 1;
 }
 
-Input {
-    border: tall $primary;
+#session-footer {
+    height: 1;
+    background: $boost;
+    color: $text;
+    padding: 0 1;
 }

@@ -1,9 +1,17 @@
-"""TUI widgets (RQ-TUI-004)."""
+"""TUI widgets (RQ-TUI-004, RQ-TUI-032).
+
+All widgets are presentation-only. They render values supplied by the
+application/session layer; they never calculate scores, select AI models, or
+infer student identity (RQ-TUI-002, RQ-TUI-032).
+"""
 
 from __future__ import annotations
 
+from textual import events
+from textual.binding import Binding
 from textual.containers import Horizontal
-from textual.widgets import Static
+from textual.message import Message
+from textual.widgets import Static, TextArea
 
 
 class SessionBar(Static):
@@ -19,8 +27,78 @@ class SessionBar(Static):
         self.update(f"ADA Sensei{suffix}")
 
 
+class SessionFooter(Static):
+    """Persistent bottom session footer (RQ-TUI-032).
+
+    Shows the authoritative session metadata supplied by the application layer:
+    student name, current score, active AI model, current action, and operation
+    status. Unavailable values are rendered as ``—``.
+    """
+
+    EMPTY = "—"
+
+    def _fmt(self, value) -> str:
+        return f"{value}" if value not in (None, "") else self.EMPTY
+
+    def update_session(
+        self,
+        *,
+        student: str | None,
+        score: float | None,
+        model: str | None,
+        action: str | None,
+        status: str | None = None,
+    ) -> None:
+        parts = [
+            f"Student: {self._fmt(student)}",
+            f"Score: {self._fmt(score)}",
+            f"AI: {self._fmt(model)}",
+            f"Action: {self._fmt(action)}",
+        ]
+        if status:
+            parts.append(f"{self._fmt(status)}")
+        self.update(" | ".join(parts))
+
+
+class PromptArea(TextArea):
+    """Editable multi-line input where Enter runs the selected action.
+
+    Per RQ-TUI-021 and RQ-TUI-030, Enter executes the currently selected action
+    and Shift+Enter inserts a new line. The base ``TextArea`` inserts a new line
+    on Enter, so Enter is consumed here and re-posted as :class:`PromptSubmitted`
+    for the App to execute. Shift+Enter is declared as a widget binding so the
+    Footer visibly communicates the gesture.
+    """
+
+    BINDINGS = [
+        Binding("shift+enter", "insert_newline", "New line"),
+    ]
+
+    class PromptSubmitted(Message):
+        """Enter was pressed and the current text should be executed."""
+
+    async def _on_key(self, event: events.Key) -> None:
+        if event.key == "enter":
+            event.stop()
+            event.prevent_default()
+            self.post_message(self.PromptSubmitted())
+            return
+        await super()._on_key(event)
+
+    def action_insert_newline(self) -> None:
+        self._restart_blink()
+        if self.read_only:
+            return
+        start, end = self.selection
+        self._replace_via_keyboard("\n", start, end)
+
+
 class StatusBar(Static):
-    """Footer/status area (RQ-TUI-004)."""
+    """Fallback footer/status area (RQ-TUI-004).
+
+    Kept for backward compatibility; the richer :class:`SessionFooter` is the
+    primary persistent session line.
+    """
 
 
 class Divider(Horizontal):

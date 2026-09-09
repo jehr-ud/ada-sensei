@@ -81,6 +81,10 @@ The TUI uses the same Command Router as direct CLI commands. Slash commands are
 parsed into the same typed command objects that direct CLI argument parsing
 produces.
 
+Free text that does not start with `/` is submitted by pressing Enter and is
+converted into a typed command according to the currently selected action.
+
+
 ## Design Principles
 
 1. Both direct CLI and TUI converge on the same Command Router.
@@ -100,30 +104,62 @@ produces.
 
 ## Main Layout (TUI)
 
+The TUI SHALL prioritize a simple conversational workflow:
+
+1. Select the desired action.
+2. Type the request in the persistent input area.
+3. Press Enter to execute the selected action.
+4. Use Shift+Enter when a new line is required.
+5. Observe the result in the conversation area.
+
+The primary action selector SHALL include all principal actions:
+
+- `ask`
+- `practice`
+- `examples`
+- `evaluate`
+
+`evaluate` is a normal selectable action. It SHALL NOT be represented as a separate
+button outside the action selector.
+
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ ADA Sensei   Student: alice   Project: app   Exercise: compose-state        │
+│ ADA Sensei                                                                    │
+│ Student: Jorge   Project: app   Exercise: compose-state                      │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
-│  Conversation / exercise / evaluation output                                │
+│  Conversation / exercise / examples / evaluation output                     │
 │                                                                              │
 │                                                                              │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│ ┌─────────────┐ ┌────────────────────────────────────────────────────────┐  │
-│ │ Action: ▼   │ │                                                          │  │
-│ │ ask ▼       │ │  Type your question, topic, or request here...         │  │
-│ │ practice    │ │  (supports multiple lines, press Ctrl+Enter to send)   │  │
-│ │ examples    │ │                                                          │  │
-│ └─────────────┘ └────────────────────────────────────────────────────────┘  │
+│ Action: [ ask ▼ ]                                                            │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│ [Evaluate]  /help  /practice  /ask  /examples  /evaluate  /hint  /more  /quit│
+│ Type your question, topic, request, or evaluation input...                   │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ Student: Jorge | Score: 85 | AI: qwen2.5-coder:7b | Action: ask | Ready     │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ Enter Run  Shift+Enter New line  Ctrl+C Cancel  Ctrl+Q Quit  F2 Help         │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-The input area SHALL be a multi-line text area (not a single-line input) to
-support writing longer questions, code snippets, or detailed requests. The user
-SHALL be able to press Enter to add new lines and Ctrl+Enter (or a configurable
-keybinding) to submit.
+The input area SHALL remain an editable multiline Textual `TextArea`. The common
+execution gesture SHALL be **Enter**.
+
+- Enter SHALL submit the current input.
+- Shift+Enter SHALL insert a new line.
+- The input SHALL remain editable and focusable.
+- The input SHALL regain focus after a command completes, fails, or is cancelled.
+- The UI SHALL make the Enter-to-run behavior visible to the user.
+- The selector SHALL remain independently changeable without clearing conversation
+  output or the current input.
+- `evaluate` SHALL be selected through the same action selector as the other
+  principal actions.
+
+This interaction is intentionally optimized for a conversational terminal:
+**select action → type → Enter**.
 
 ## Technology
 

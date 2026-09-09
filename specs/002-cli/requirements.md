@@ -131,11 +131,15 @@ TUI SHALL NOT implement duplicate versions of actions.
 
 The TUI SHALL provide:
 
-- a header showing ADA Sensei and relevant session context;
+- a compact header showing ADA Sensei and relevant session context;
 - a scrollable main output/conversation area;
-- a persistent text input area;
-- a visible, changeable action selector (RQ-TUI-030);
-- a status/help area.
+- a persistent editable text input area;
+- a visible, changeable action selector;
+- a persistent footer/status area showing session and operation information;
+- concise keyboard/help guidance.
+
+The main action selector SHALL include `ask`, `practice`, `examples`, and `evaluate`.
+`evaluate` SHALL NOT require a separate Evaluate button.
 
 ## RQ-TUI-005 Slash commands
 
@@ -257,10 +261,13 @@ configuration values in normal output, diagnostics, or error messages.
 
 The TUI SHALL support at least:
 
-- Enter to submit the current input;
+- Enter to execute the currently selected action;
+- Shift+Enter to insert a new line in the text area;
 - Ctrl+C or an equivalent safe cancellation behavior;
 - Ctrl+D or `/quit` to exit the application cleanly;
 - scrolling of the main output area.
+
+The Enter-to-run behavior SHALL be discoverable from the visible UI.
 
 ## RQ-TUI-022 Command palette
 
@@ -317,16 +324,27 @@ greet the user by that name (`Welcome back, <name>!`). The display name SHALL
 NOT be inferred from any context; identity always comes from a name the user
 provides (RQ-CLI-006, RQ-TUI-007).
 
-## RQ-TUI-030 Action selector and free-text input
+## RQ-TUI-030 Action selector and free-text execution
 
-The TUI SHALL present a persistent, visible action selector for the principal
-actions: `ask`, `practice`, and `examples`. The selector SHALL be changeable at
-any time without leaving the conversation view.
+The TUI SHALL present a persistent, visible action selector containing:
 
-The text input area SHALL remain always present and SHALL be a multi-line text
-area (not a single-line input) to support writing longer questions, code
-snippets, or detailed requests. The user SHALL be able to press Enter to add
-new lines and Ctrl+Enter (or a configurable keybinding) to submit the content.
+- `ask`
+- `practice`
+- `examples`
+- `evaluate`
+
+The selector SHALL be changeable at any time without leaving the conversation
+view.
+
+The text input area SHALL remain always present and SHALL be an editable
+multi-line `TextArea`. The common execution gesture SHALL be **Enter**.
+
+- Enter SHALL execute the currently selected action.
+- Shift+Enter SHALL insert a new line.
+- The text area SHALL remain editable and focusable.
+- The TUI SHALL restore focus to the text area after command completion, error,
+  or cancellation.
+- The UI SHALL visibly communicate that Enter executes the selected action.
 
 When the submitted text starts with `/`, it SHALL be parsed as a slash command
 (RQ-TUI-005). Otherwise the submitted text SHALL be sent to the currently
@@ -334,16 +352,71 @@ selected action:
 
 - `ask`: the free text becomes the question;
 - `practice`: the free text becomes the topic (may be empty);
-- `examples`: the free text becomes the topic.
+- `examples`: the free text becomes the topic;
+- `evaluate`: the command SHALL use the normal evaluation flow and confirmation
+  policy; free text SHALL NOT bypass the typed command contract.
 
-`evaluate` SHALL be available as a separate, visible action that does not
-consume free text (RQ-TUI-013).
+`evaluate` SHALL use the same selector as the other principal actions. It SHALL
+NOT be represented by a separate Evaluate button.
 
 The action selector and free-text routing SHALL build the same typed command
 objects used by the CLI and dispatched through the shared `CommandRouter`
 (RQ-TUI-003).
 
+
 ---
+
+
+## RQ-TUI-031 Input focus and execution
+
+The TUI SHALL keep the text input editable whenever the application is in a state
+that accepts user input. On initial readiness and after a command finishes, fails,
+or is cancelled, the TUI SHALL return focus to the text input unless the user is
+actively interacting with another control.
+
+Normal text entry SHALL NOT be consumed by global application bindings.
+
+## RQ-TUI-032 Persistent session footer
+
+The TUI SHALL display a persistent footer/status area containing, when available:
+
+- current student name;
+- latest authoritative evaluation score;
+- currently configured AI model;
+- current selected action;
+- current operation status.
+
+Unavailable values SHALL be displayed explicitly (for example, `Score: —`) rather
+than inferred or fabricated.
+
+The TUI SHALL NOT calculate scores or select the AI model. It SHALL render values
+provided by the application/session/LLM configuration layers.
+
+## RQ-TUI-033 Action selector completeness
+
+The visible action selector SHALL be the primary mechanism for choosing the current
+principal action. It SHALL include `ask`, `practice`, `examples`, and `evaluate`.
+
+Changing the selector SHALL immediately update presentation state, input
+placeholder, footer action value, and subsequent free-text routing.
+
+The selector SHALL not clear existing conversation output.
+
+## RQ-TUI-034 Conversational visual hierarchy
+
+The TUI SHALL visually prioritize:
+
+1. conversation/output;
+2. current action selector;
+3. text input;
+4. persistent session footer;
+5. concise keyboard guidance.
+
+The interface SHALL avoid presenting a separate Evaluate button when `evaluate` is
+already available in the action selector.
+
+The input area SHALL have sufficient visible height for multiline text while
+remaining subordinate to the conversation area.
 
 ## Traceability
 

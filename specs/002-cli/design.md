@@ -282,21 +282,21 @@ TuiApp
   │    ├── ExampleMessage
   │    ├── EvaluationMessage
   │    └── ErrorMessage
-  ├── ActionSelector        (Select: ask | practice | examples)
-  ├── EvaluateButton        (separate action, no free text)
-  ├── InputWidget           (multi-line text area, persistent)
+  ├── ActionSelector        (Select: ask | practice | examples | evaluate)
+  ├── InputWidget           (multi-line text area, persistent, PromptArea)
   └── StatusBar
 ```
 
 The visible, changeable action selector (Textual `Select`) is the discoverable
 action selection mechanism (RQ-TUI-022, RQ-TUI-030). Free text that does not
 start with `/` is sent to the selected action; slash-prefixed text is parsed as
-a slash command.
+a slash command. `evaluate` is a regular selector option and SHALL NOT be
+represented by a separate Evaluate button (RQ-TUI-033/034).
 
 The `InputWidget` SHALL be a multi-line text area (Textual `TextArea` or
 equivalent) supporting:
-- Multiple lines of input (Enter adds a new line)
-- Ctrl+Enter (or configured keybinding) to submit
+- Multiple lines of input (Shift+Enter inserts a new line)
+- Enter to execute the currently selected action
 - Horizontal and vertical scrolling for long content
 - Placeholder text indicating the current action context
 
@@ -414,3 +414,65 @@ the name always comes from the user, ADR-015).
 10. terminal resizing/minimum size;
 11. direct CLI regression tests;
 12. architecture/dependency isolation.
+
+## Unified action and input interaction
+
+The TUI SHALL use one persistent action selector for:
+
+```text
+ask | practice | examples | evaluate
+```
+
+The common interaction is:
+
+```text
+Select action
+     ↓
+Type request
+     ↓
+Enter
+     ↓
+Build typed Command
+     ↓
+CommandRouter.dispatch()
+     ↓
+Application Action
+     ↓
+Render result
+     ↓
+Refresh footer
+     ↓
+Return focus to TextArea
+```
+
+Enter executes the selected action. Shift+Enter creates a new line in the multiline
+TextArea.
+
+`evaluate` follows the same selector mechanism. There is no separate Evaluate button.
+Evaluation confirmation remains mandatory before Gradle-based execution.
+
+## Persistent session footer
+
+The bottom status area is a compact persistent presentation component:
+
+```text
+Student: Jorge | Score: 85 | AI: qwen2.5-coder:7b | Action: ask | Ready
+```
+
+The footer receives authoritative values from session/application/LLM configuration
+layers. It does not calculate scores, select models, or infer identity.
+
+## Input focus policy
+
+The TextArea is the primary interaction control. It receives focus when the
+application is ready and after completed interactions, errors, and cancellations
+unless the user explicitly focuses another control.
+
+Global bindings must not consume ordinary TextArea typing. Enter is the submit gesture;
+Shift+Enter is the newline gesture.
+
+## Visual hierarchy
+
+The conversation/output area receives the largest portion of the screen. The action
+selector is compact and always visible. The TextArea receives useful multiline height.
+The footer remains a single compact row, and keyboard guidance remains concise.

@@ -20,5 +20,6 @@ BINDINGS: tuple[Binding, ...] = (
     Binding("ctrl+q", "quit", "Quit"),
     Binding("ctrl+d", "quit", "Quit (clean exit)"),
     Binding("ctrl+c", "cancel_operation", "Cancel current operation"),
+    Binding("enter", "submit", "Enter Run"),
     Binding("f2", "show_help", "Help"),
 )

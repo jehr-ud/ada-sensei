@@ -15,6 +15,7 @@ from typing import Any
 from ..actions.ask import AskAction
 from ..actions.base import ActionServices
 from ..actions.evaluate import (
+    EvalResult,
     EvaluateAction,
     EvaluateInput,
     EvaluationAborted,
@@ -79,6 +80,7 @@ class CommandRouter:
         self.secrets = Secrets.from_config(config, env=env)
         self.context = SessionContext(config=config, data_dir=config.resolved_data_dir)
         self.client: LLMClient | None = client or self._build_client()
+        self._last_score: float | None = None
 
     def _build_client(self) -> LLMClient:
         cfg = self.config.llm
@@ -161,13 +163,29 @@ class CommandRouter:
         )
 
     def _evaluate(self, cmd: EvaluateCommand) -> CommandResult:
-        return EvaluateAction(self.services()).run(
+        result = EvaluateAction(self.services()).run(
             EvaluateInput(
                 exercise_id=cmd.exercise_id,
                 instrumented=cmd.instrumented,
                 confirmed=cmd.confirmed,
             )
         )
+        if isinstance(result, EvalResult):
+            self._last_score = result.result.overall_score
+        return result
+
+    def model_name(self) -> str:
+        """Authoritative active AI model name from the configured LLM
+        implementation (RQ-TUI-032). Never hardcoded; read from config."""
+        return self.config.llm.model
+
+    def last_score(self) -> float | None:
+        """Most recent authoritative evaluation overall score (RQ-TUI-032).
+
+        ``None`` when no evaluation has completed yet. The TUI only renders this
+        value; it never calculates a score.
+        """
+        return self._last_score
 
     def _project(self, cmd: ProjectCommand) -> CommandResult:
         if cmd.path:

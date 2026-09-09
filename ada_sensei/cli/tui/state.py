@@ -8,10 +8,10 @@ state, pending input). Authoritative domain state remains in the shared
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 
-class View(str, Enum):
+class View(StrEnum):
     CHAT = "chat"
     HELP = "help"
     EVALUATE = "evaluate"
@@ -23,7 +23,7 @@ class PresentationState:
 
     view: View = View.CHAT
     busy: bool = False
-    status: str = "ready"
+    status: str = "Ready"
     messages: list[str] = field(default_factory=list)
     pending_input: str = ""
     cancelled: bool = False
