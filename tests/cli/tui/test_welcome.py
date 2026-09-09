@@ -12,6 +12,7 @@ from ada_sensei.cli.tui.app import AdaSenseiTUI
 from ada_sensei.config import Config
 from ada_sensei.llm.base import LLMClient
 from ada_sensei.storage.history import HistoryStore
+from ada_sensei.storage.last_student import LastStudentStore
 
 
 class FakeClient(LLMClient):
@@ -81,3 +82,60 @@ def test_identity_not_inferred_from_greeting(tmp_path):
     assert app.ui_state.awaiting_name is True
     assert app.router.context.student_id is None
     assert any("didn't catch" in text for text in captured)
+
+
+def test_mount_asks_when_nothing_remembered(tmp_path):
+    app = Fixtures.make_app(tmp_path)
+    captured = []
+    app._emit = lambda text: captured.append(text)
+    app.on_mount()
+    assert app.ui_state.awaiting_name is True
+    assert app.router.context.student_id is None
+    assert any("What is your name?" in text for text in captured)
+
+
+def test_mount_skips_ask_when_remembered(tmp_path):
+    history = HistoryStore(str(tmp_path))
+    history.create_profile("alice", confirmed=True)
+    history.set_name("alice", "alice")
+    LastStudentStore(str(tmp_path)).save("alice")
+
+    app = Fixtures.make_app(tmp_path)
+    captured = []
+    app._emit = lambda text: captured.append(text)
+    app.on_mount()
+
+    assert app.ui_state.awaiting_name is False
+    assert app.ui_state.user_name == "alice"
+    assert app.router.context.student_id == "alice"
+    assert not any("What is your name?" in text for text in captured)
+    assert any("Welcome back, alice" in text for text in captured)
+
+
+def test_name_persisted_as_last_student(tmp_path):
+    app = Fixtures.make_app(tmp_path)
+    app._resolve_pending_name("Eve")
+    assert LastStudentStore(str(tmp_path)).load() == "Eve"
+
+
+def test_name_command_updates_identity(tmp_path):
+    app = Fixtures.make_app(tmp_path)
+    app._resolve_pending_name("Alice")
+    captured = []
+    app._emit = lambda text: captured.append(text)
+    app._handle_name_command("/name Bob")
+    assert app.router.context.student_id == "Bob"
+    assert app.ui_state.user_name == "Bob"
+    assert LastStudentStore(str(tmp_path)).load() == "Bob"
+    assert HistoryStore(str(tmp_path)).has("Bob")
+    assert any("Identity updated to Bob" in text for text in captured)
+
+
+def test_name_command_requires_a_name(tmp_path):
+    app = Fixtures.make_app(tmp_path)
+    app._resolve_pending_name("Alice")
+    captured = []
+    app._emit = lambda text: captured.append(text)
+    app._handle_name_command("/name")
+    assert app.router.context.student_id == "Alice"
+    assert any("Usage: /name" in text for text in captured)

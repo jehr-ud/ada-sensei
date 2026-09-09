@@ -72,6 +72,7 @@ The TUI SHALL support slash commands:
 /hint
 /more
 /solution
+/name <name>  (update the student identity)
 /clear
 /quit
 ```

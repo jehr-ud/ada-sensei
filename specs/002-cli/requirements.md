@@ -302,15 +302,20 @@ a documented reason why automated testing is not applicable.
 
 ## RQ-TUI-029 Welcome greeting with name
 
-On startup, the TUI SHALL ask the user for their name before proceeding and
-SHALL use that name as the current student identity (`student_id`). The TUI
-SHALL persist the name to the student's `StudentProfile` so the profile records
-the identity.
+On the first run, the TUI SHALL ask the user for their name before proceeding
+and SHALL use that name as the current student identity (`student_id`). The TUI
+SHALL persist the received name to the student's `StudentProfile` and also SHALL
+save it as the last used student name in the data directory.
+
+On subsequent runs, when a last used student name exists, the TUI SHALL start
+directly with that identity and SHALL NOT ask for the name again. The user MAY
+update their identity at any time with the `/name <name>` command; an updated
+name SHALL become the current identity and SHALL replace the remembered one.
 
 When a profile for the received name already exists, the welcome message SHALL
 greet the user by that name (`Welcome back, <name>!`). The display name SHALL
-NOT be inferred from any context; identity always comes from the name the user
-provides at the welcome greeting (RQ-CLI-006, RQ-TUI-007).
+NOT be inferred from any context; identity always comes from a name the user
+provides (RQ-CLI-006, RQ-TUI-007).
 
 ## RQ-TUI-030 Action selector and free-text input
 

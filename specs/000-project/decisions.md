@@ -88,12 +88,14 @@ notice when context was reduced or summarized.
 
 ## ADR-015 — Name-Based Student Identity
 
-Student identity is established by the name the student provides at the start of
+Student identity is established by a name the student provides at the start of
 an interactive session (the TUI welcome greeting) and is never inferred from
 prompt content. No `--student`/`/student` option or command exists; the provided
 name becomes the current `student_id`. If the student record does not exist, it
-is created after the name is received. Identity SHALL be kept as separate
-fields: `student_id`, `project_id`, `exercise_id`, `attempt_id`.
+is created after the name is received. The last used name is remembered in the
+data directory so later runs do not re-ask; the student can update the identity
+with `/name <name>`. Identity SHALL be kept as separate fields: `student_id`,
+`project_id`, `exercise_id`, `attempt_id`.
 
 ## ADR-016 — Evaluation Execution Safety and Default Scope
 

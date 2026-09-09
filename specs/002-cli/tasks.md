@@ -102,10 +102,14 @@
 
 ## Phase 15.5 — TUI welcome identity (RQ-TUI-029, RQ-TUI-007)
 
-- [ ] On TUI mount, prompt for the student's name.
-- [ ] Use the received name as `student_id` and persist it to the
-      `StudentProfile` (`HistoryStore.set_name` / `create_profile`).
+- [ ] On TUI mount, if a last used student name exists, start directly with it
+      and do not re-ask; otherwise prompt for the student's name.
+- [ ] Use the received name as `student_id`, persist it to the
+      `StudentProfile` (`HistoryStore.set_name` / `create_profile`), and save it
+      as the last used name (`LastStudentStore`).
 - [ ] Greet a returning profile with `Welcome back, <name>!`.
+- [ ] Implement `/name <name>` to update the student identity and the remembered
+      name.
 - [ ] Never infer identity from context; identity comes only from the received
       name (RQ-CLI-006, RQ-TUI-007).
 - [ ] Add TUI welcome/identity tests (`tests/cli/tui/test_welcome.py`).

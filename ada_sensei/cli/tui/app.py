@@ -18,6 +18,7 @@ from textual.widgets import Button, Footer, Header, Input, RichLog, Select
 from textual.worker import Worker, WorkerState
 
 from ...storage.history import HistoryStore
+from ...storage.last_student import LastStudentStore
 from ..commands import (
     AskCommand,
     ClearCommand,
@@ -61,6 +62,7 @@ HELP_TEXT = (
     "  /hint\n"
     "\n"
     "Your name at startup is your student identity.\n"
+    "  /name <name>             update your student identity\n"
 )
 
 #: Action selector options (label, value) — RQ-TUI-030.
@@ -124,7 +126,15 @@ class AdaSenseiTUI(App):
         self.refresh_session_bar()
         self.ui_state.awaiting_name = True
         self._set_name_prompt()
-        self._emit("Welcome to ADA Sensei. What is your name?")
+        remembered = self._remembered_name()
+        if remembered:
+            self._resolve_pending_name(remembered)
+        else:
+            self._emit("Welcome to ADA Sensei. What is your name?")
+
+    def _remembered_name(self) -> str | None:
+        store = LastStudentStore(str(self.router.config.resolved_data_dir))
+        return store.load()
 
     def _set_name_prompt(self) -> None:
         with contextlib.suppress(Exception):
@@ -135,13 +145,12 @@ class AdaSenseiTUI(App):
             placeholder = ACTION_PROMPTS.get(self.ui_state.action, "type a text…")
             self.query_one("#input", Input).placeholder = placeholder
 
-    def _resolve_pending_name(self, raw: str) -> None:
-        name = raw.strip()
+    def _set_identity(self, name: str) -> bool:
+        """Bind ``name`` as the current identity and remember it.
+
+        Returns whether the profile already existed (returning student).
+        """
         self.ui_state.awaiting_name = False
-        if not name:
-            self.ui_state.awaiting_name = True
-            self._emit("Sorry, I didn't catch that. What is your name?")
-            return
         self.ui_state.user_name = name
         store = HistoryStore(str(self.router.config.resolved_data_dir))
         self.router.context.set_student(name)
@@ -149,6 +158,17 @@ class AdaSenseiTUI(App):
         if not returning:
             store.create_profile(name, confirmed=True)
         store.set_name(name, name)
+        LastStudentStore(str(self.router.config.resolved_data_dir)).save(name)
+        self.refresh_session_bar()
+        return returning
+
+    def _resolve_pending_name(self, raw: str) -> None:
+        name = raw.strip()
+        if not name:
+            self.ui_state.awaiting_name = True
+            self._emit("Sorry, I didn't catch that. What is your name?")
+            return
+        returning = self._set_identity(name)
         greeting = (
             f"Welcome back, {name}! Type /help for commands."
             if returning
@@ -156,6 +176,14 @@ class AdaSenseiTUI(App):
         )
         self._emit(greeting)
         self._apply_action_prompt()
+
+    def _handle_name_command(self, raw: str) -> None:
+        name = raw.removeprefix("/name").strip()
+        if not name:
+            self._emit("Usage: /name <your name>")
+            return
+        self._set_identity(name)
+        self._emit(f"Identity updated to {name}.")
 
     # ------------------------------------------------------------------
     # Presentation helpers
@@ -223,6 +251,9 @@ class AdaSenseiTUI(App):
             return
         if self._pending_eval is not None:
             self._resolve_pending_eval(self._pending_eval, line)
+            return
+        if line.startswith("/name"):
+            self._handle_name_command(line)
             return
         try:
             command = self._command_from_line(line)

@@ -355,27 +355,34 @@ A CI architecture test SHOULD fail if `core`, `actions`, `llm`, `student`, or
 
 ## 20. Welcome Greeting (TUI, RQ-TUI-029)
 
-On mount, the TUI prompts for the student's name; the received name IS the
-student identity:
+On mount, the TUI restores the last used student name if present; otherwise it
+prompts for the student's name. The received name IS the student identity:
 
 ```text
 TUI mount
    ▼
-prompt "What is your name?" (always, when no session identity is restored)
+LastStudentStore.load()?
+   ├── yes ► skip the prompt, bind the remembered name
+   └── no  ► prompt "What is your name?" (first run only)
    ▼
 HistoryStore.has(name)?
    ├── no ► create_profile(name, confirmed=True); set_name(name)
    │         "Welcome, <name>!"
    └── yes ► "Welcome back, <name>!"
    ▼
-SessionContext.set_student(name)
+SessionContext.set_student(name); LastStudentStore.save(name)
 ```
+
+The user can update their identity at any time with `/name <name>`, which binds
+the new name and replaces the remembered one (identity SHALL NOT be inferred;
+the name always comes from the user, ADR-015).
 
 - The name provided by the student at the welcome greeting is used as
   `student_id` (`RQ-CLI-006`, `RQ-TUI-007`, ADR-015).
-- The name is persisted to the student's `StudentProfile`.
-- The name SHALL NOT be inferred from input; identity always comes from the
-  name the user provides at the welcome greeting.
+- The name is persisted to the student's `StudentProfile` and remembered as the
+  last used name so later runs do not re-ask.
+- The name SHALL NOT be inferred from input; identity always comes from a name
+  the user provides.
 
 ## 21. Testing Strategy
 
