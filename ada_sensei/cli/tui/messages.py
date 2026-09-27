@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from textual.message import Message
 
-from .state import View
+from .state import MessageKind, View
 
 
 class ViewChanged(Message):
@@ -25,8 +25,14 @@ class BusyChanged(Message):
 
 
 class OutputReady(Message):
-    """A rendered output fragment is available to append to the log."""
+    """A rendered conversation entry is available to append to the log.
 
-    def __init__(self, text: str) -> None:
+    ``kind`` is the presentation role of the entry (user, assistant, system, ...)
+    so the log can render a distinguishable message per RQ-TUI-034. It is purely
+    presentational and never affects application state.
+    """
+
+    def __init__(self, text: str, kind: MessageKind | str = MessageKind.SYSTEM) -> None:
         super().__init__()
         self.text = text
+        self.kind = MessageKind(kind)

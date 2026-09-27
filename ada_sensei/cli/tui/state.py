@@ -17,6 +17,24 @@ class View(StrEnum):
     EVALUATE = "evaluate"
 
 
+class MessageKind(StrEnum):
+    """Presentation role of a conversation entry (RQ-TUI-034).
+
+    These are rendering roles only; they never carry domain meaning into the
+    application layer and are never used to infer identity or compute scores.
+    """
+
+    SYSTEM = "system"
+    USER = "user"
+    ASSISTANT = "assistant"
+    PRACTICE = "practice"
+    EXERCISE = "exercise"
+    HINT = "hint"
+    EXAMPLE = "example"
+    EVALUATION = "evaluation"
+    ERROR = "error"
+
+
 @dataclass
 class PresentationState:
     """Lightweight, non-authoritative UI state."""

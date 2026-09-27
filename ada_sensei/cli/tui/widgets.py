@@ -101,5 +101,15 @@ class StatusBar(Static):
     """
 
 
+class StatusIndicator(Static):
+    """Transient in-conversation processing indicator.
+
+    Shows a lightweight, animated ``Running…``/``Evaluating…`` line while a
+    long-running operation is active. It is strictly transient: the canonical
+    status lives on the presentation state (machine-readable ``Running``) and
+    this widget only mirrors the animated display. It holds no domain data.
+    """
+
+
 class Divider(Horizontal):
     pass
