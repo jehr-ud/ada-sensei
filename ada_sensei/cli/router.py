@@ -21,12 +21,23 @@ from ..actions.evaluate import (
     EvaluationAborted,
     InstrumentedNotSupportedError,
 )
+from ..actions.examine import (
+    ExamConfirmationRequired,
+    ExamFinishInput,
+    ExamineAction,
+    ExamNotActiveError,
+    ExamStartInput,
+)
 from ..actions.examples import ExamplesAction
 from ..actions.practice import PracticeAction, PracticeInput
 from ..config import Config, ConfigLoader, Secrets
 from ..context import SessionContext
+from ..events import AppEventBus
+from ..exams.models import ASK_SUCCESS_EVENTS, ExamAttempt, ExamError
+from ..exams.store import ExamStore
 from ..llm.base import LLMClient
 from ..llm.ollama import OllamaProvider
+from ..models import Timestamps
 from ..urns import URN
 from .commands import (
     AskCommand,
@@ -37,7 +48,10 @@ from .commands import (
     CommandResult,
     ErrorResponse,
     EvaluateCommand,
+    ExamineFinishCommand,
+    ExamineStartCommand,
     ExamplesCommand,
+    ExamStatus,
     HelpCommand,
     HelpResult,
     HintCommand,
@@ -51,6 +65,24 @@ from .commands import (
     SolutionCommand,
 )
 from .errors import CLIError
+
+
+def _elapsed_seconds(attempt: ExamAttempt) -> int | None:
+    """Seconds elapsed for a display timer.
+
+    A finished attempt reports its persisted ``duration_seconds``; a live one is
+    measured from the persisted ``started_at`` so the timer reflects the attempt
+    log rather than UI bookkeeping.
+    """
+    if attempt.duration_seconds is not None:
+        return attempt.duration_seconds
+    if attempt.started_at is None:
+        return None
+    if attempt.finished_at is not None:
+        return max(
+            0, int((attempt.finished_at - attempt.started_at).total_seconds())
+        )
+    return max(0, int((Timestamps.now() - attempt.started_at).total_seconds()))
 
 
 class CommandRouter:
@@ -81,6 +113,10 @@ class CommandRouter:
         self.context = SessionContext(config=config, data_dir=config.resolved_data_dir)
         self.client: LLMClient | None = client or self._build_client()
         self._last_score: float | None = None
+        #: One bus for the whole session. The exam subscribes to ``/ask`` events
+        #: in one dispatch and must still receive them in later dispatches, so
+        #: the bus cannot be rebuilt per action invocation (RQ-EXM-005/031).
+        self.event_bus = AppEventBus()
 
     def _build_client(self) -> LLMClient:
         cfg = self.config.llm
@@ -94,7 +130,9 @@ class CommandRouter:
         )
 
     def services(self) -> Any:
-        return ActionServices.build(self.config, self.context, self.client)
+        return ActionServices.build(
+            self.config, self.context, self.client, self.event_bus
+        )
 
     # ------------------------------------------------------------------
     # Dispatch
@@ -111,6 +149,10 @@ class CommandRouter:
                 return self._examples(command)
             if isinstance(command, EvaluateCommand):
                 return self._evaluate(command)
+            if isinstance(command, ExamineStartCommand):
+                return self._examine_start(command)
+            if isinstance(command, ExamineFinishCommand):
+                return self._examine_finish(command)
             if isinstance(command, ProjectCommand):
                 return self._project(command)
             if isinstance(command, (HintCommand, MoreCommand, SolutionCommand)):
@@ -124,6 +166,7 @@ class CommandRouter:
         except CLIError as exc:
             return ErrorResponse(message=str(exc))
         except (EvaluationAborted, InstrumentedNotSupportedError,
+                ExamConfirmationRequired, ExamNotActiveError, ExamError,
                 NotImplementedError) as exc:
             return ErrorResponse(message=str(exc))
         except (ValueError, LookupError) as exc:
@@ -151,7 +194,9 @@ class CommandRouter:
     def _ask(self, cmd: AskCommand) -> CommandResult:
         if not cmd.question.strip():
             return ErrorResponse(message="ask requires a question")
-        return AskAction(self.services()).run(cmd.question)
+        return AskAction(self.services()).run(
+            cmd.question, is_cancelled=cmd.is_cancelled
+        )
 
     def _examples(self, cmd: ExamplesCommand) -> CommandResult:
         if not cmd.topic.strip():
@@ -173,6 +218,58 @@ class CommandRouter:
         if isinstance(result, EvalResult):
             self._last_score = result.result.overall_score
         return result
+
+    # -- exam workflow (007-examine) --------------------------------------
+
+    def _examine_start(self, cmd: ExamineStartCommand) -> CommandResult:
+        return ExamineAction(self.services()).start(
+            ExamStartInput(
+                statement=cmd.statement,
+                student_id=cmd.student_id,
+                project_id=cmd.project_id,
+                exercise_id=cmd.exercise_id,
+                confirmed=cmd.confirmed,
+            )
+        )
+
+    def _examine_finish(self, cmd: ExamineFinishCommand) -> CommandResult:
+        return ExamineAction(self.services()).finish(
+            ExamFinishInput(
+                confirmed=cmd.confirmed,
+                instrumented=cmd.instrumented,
+            )
+        )
+
+    def exam_status(self) -> ExamStatus | None:
+        """Authoritative exam status for the TUI, or ``None`` when idle.
+
+        Read from the persisted attempt and its event log, never from
+        presentation state, so the displayed timer and ask count cannot drift
+        from the attempt log (RQ-EXM-005, RQ-EXM-007, RQ-EXM-031).
+        """
+        exam_attempt_id = self.context.exam_attempt_id
+        if not exam_attempt_id:
+            return None
+        store = ExamStore(str(self.config.resolved_data_dir))
+        attempt = store.get(exam_attempt_id)
+        if attempt is None:
+            return None
+        # Recount from the event log rather than trusting a stored total, so a
+        # reloaded session still shows the true number of successful asks.
+        ask_count = sum(
+            1
+            for event in store.list_events(exam_attempt_id)
+            if event.type in ASK_SUCCESS_EVENTS
+        )
+        return ExamStatus(
+            exam_attempt_id=attempt.exam_attempt_id,
+            exam_id=attempt.exam_id,
+            ask_count=ask_count,
+            allowed_ask_count=attempt.allowed_ask_count,
+            duration_seconds=_elapsed_seconds(attempt),
+            allowed_duration_seconds=attempt.allowed_duration_seconds,
+            is_completed=attempt.is_completed,
+        )
 
     def model_name(self) -> str:
         """Authoritative active AI model name from the configured LLM

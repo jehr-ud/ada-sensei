@@ -1,86 +1,168 @@
-# Evaluate Action Specification
+# ADA Sensei — 006 Evaluate Specification
 
 ## Objective
 
-Evaluate a student's Android project against the requirements of an exercise and
-provide evidence-based pedagogical feedback.
+Evaluate an Android project against an exercise or structural evaluation criteria
+and produce an evidence-based `EvaluationResult`.
+
+The evaluation subsystem is also the reusable evidence and rubric infrastructure
+for higher-level workflows such as `007-examine`.
 
 ## Core Principle
 
 The LLM SHALL interpret collected evidence. It SHALL NOT be the sole source of
-evidence (ADR-003, RQ-EVA-007). Evidence is collected by deterministic tools and
-associated with criteria before any interpretation. The LLM may interpret
-evidence but SHALL NOT invent it.
+evidence and SHALL NOT invent evidence.
+
+Evidence is collected by deterministic tools and associated with criteria before
+LLM interpretation. Objective evidence SHALL be scored deterministically wherever
+the rubric defines an objective rule.
+
+## Scope
+
+`006-evaluate` owns:
+
+- Android project inspection;
+- Gradle build/test execution;
+- Android Lint and Detekt evidence collection;
+- requirement-to-evidence matching;
+- reusable evidence context;
+- rubric mechanics and deterministic score computation;
+- the default `/evaluate` rubric definition;
+- structured LLM interpretation of evaluation evidence;
+- `EvaluationResult` persistence;
+- evaluation-specific attempt completion/history updates.
+
+The reusable evaluation infrastructure MAY be consumed by other workflows.
+
+`006-evaluate` does NOT own:
+
+- examination lifecycle;
+- exam timing;
+- exam `/ask` counting;
+- exam-specific documentation;
+- exam-specific scoring dimensions;
+- exam PDF report generation.
+
+Those concerns belong to `007-examine`.
+
+## Evaluation Engine Boundary
+
+The implementation SHALL expose a reusable evaluation engine conceptually equivalent
+to:
+
+```text
+EvaluationEngine
+├── AndroidProjectAnalyzer
+├── GradleTool
+├── TestTool
+├── StaticAnalysisTool
+├── RequirementMatcher
+├── EvidenceContextBuilder
+├── RubricEngine
+└── EvaluationAgent
+```
+
+`EvaluateAction` orchestrates the engine using the default evaluation rubric.
+
+Other workflows MAY orchestrate the same engine with a different rubric definition
+without duplicating evidence collection or Android analysis.
 
 ## Exercise Resolution
 
 `/evaluate` evaluates against an exercise when available:
 
-1. explicit `--exercise exercise://<uuid>` (RQ-CLI-010);
-2. else the session's current exercise (`SessionContext.current_exercise_id`);
-3. else structural evaluation only: project inspection, static analysis, and
-   unit tests — with no requirement-level scoring (RQ-EVA-006/017).
+1. explicit `--exercise exercise://<uuid>`;
+2. otherwise `SessionContext.current_exercise_id`;
+3. otherwise structural evaluation only.
 
-## Confirmation (ADR-016)
+When no exercise exists, requirement-level scoring SHALL be skipped.
 
-`/evaluate` SHALL prompt the user for confirmation before executing Gradle-based
-tasks. Declining aborts the evaluation cleanly (RQ-CLI-014). Project inspection
-alone does not require confirmation.
+## Confirmation
 
-In a non-interactive environment, `evaluate` SHALL abort before Gradle execution
-unless the explicit `--yes` confirmation override is supplied.
+Before any Gradle-based task, explicit confirmation is required.
 
-## Default Evaluation Scope (ADR-016)
+Project inspection alone does not require confirmation.
 
-The default evaluation runs, in order:
+In a non-interactive environment, Gradle execution SHALL require explicit `--yes`.
 
-1. **Project inspection** — read-only structure and source analysis;
-2. **Build (compile)** — `./gradlew` compile/assemble task;
-3. **Unit tests** — `./gradlew test` / unit test reports;
-4. **Android Lint** — `./gradlew lint`;
-5. **Detekt** — `./gradlew detekt`.
+Declining confirmation SHALL prevent Gradle execution.
 
-`connectedAndroidTest` (instrumented tests) SHALL NOT run by default; it is
-reserved for a future explicit `--instrumented` option (RQ-CLI-015).
+## Default Evidence Scope
 
-## Evaluation Pipeline
+The default `/evaluate` workflow executes:
+
+1. project inspection;
+2. Gradle build/compile;
+3. unit tests;
+4. Android Lint;
+5. Detekt.
+
+`connectedAndroidTest` SHALL NOT run by default.
+
+The future `--instrumented` option remains outside the current implementation.
+
+## Evidence Pipeline
 
 ```text
 Student Project
       ↓
-Project Analyzer            # read-only project structure
+AndroidProjectAnalyzer
       ↓
-[CONFIRM Gradle execution → approve]
+EvaluationEngine
+      ├── GradleTool
+      ├── TestTool
+      └── StaticAnalysisTool
       ↓
-Build (./gradlew compile)
+EvidenceContext
       ↓
-Tests (./gradlew test)
+RequirementMatcher
       ↓
-Static Analysis (Android Lint + detekt)
+RubricEngine + rubric definition
       ↓
-Requirement Evidence        # RequirementMatcher: evidence ↔ req:// ids
+EvaluationAgent
       ↓
-LLM Evaluation              # interprets evidence under the rubric
+Deterministic score computation
       ↓
-EvaluationResult            # persisted via ResultStore (bound to attempt)
+EvaluationResult
+      ↓
+ResultStore
 ```
 
-## Rubric and Scoring (ADR-017)
+The LLM may provide qualitative interpretation, strengths, weaknesses,
+recommendations, and explanations, but SHALL NOT replace deterministic evidence.
 
-Five weighted dimensions (weights sum to 100%):
+## Rubric Model
 
-| Dimension | Weight | Evidence source |
-|---|---|---|
-| Functional requirements | 40% | requirement mapping, build/compile gate, source inspection, unit tests |
-| Tests | 20% | unit test execution and reports |
-| Code quality | 15% | detekt findings (ERROR/WARNING/INFO), code organization, error handling |
-| Architecture | 15% | project structure, detekt, source-level LLM interpretation |
-| Android practices | 10% | Android Lint findings (ERROR/WARNING/INFO) |
+Rubric mechanics SHALL be reusable and separate from rubric definitions.
 
-Functional-requirement criteria are driven by the exercise `evaluation_criteria`
-when an exercise is present; otherwise the dimension is evaluated structurally.
+A `RubricDefinition` contains:
 
-Each evaluated dimension receives an integer score on a 0–4 scale:
+- stable rubric id;
+- version;
+- dimensions;
+- weights;
+- optional subcriteria;
+- score scale;
+- evidence sufficiency rules.
+
+The default `/evaluate` rubric is:
+
+| Dimension | Weight |
+|---|---:|
+| Functional requirements | 40% |
+| Tests | 20% |
+| Code quality | 15% |
+| Architecture | 15% |
+| Android practices | 10% |
+
+These weights remain specific to `/evaluate`.
+
+A future workflow such as `007-examine` MAY define another rubric without modifying
+the default evaluate rubric.
+
+## Scoring
+
+Each evaluated dimension uses a 0–4 integer score.
 
 | Score | Meaning |
 |---|---|
@@ -90,12 +172,10 @@ Each evaluated dimension receives an integer score on a 0–4 scale:
 | 1 | Unsatisfactory — minimal or incorrect implementation |
 | 0 | Unsupported — no indication of satisfaction |
 
-Overall score SHALL be computed deterministically by the `Rubric`.
+The overall score is normalized to 0–100.
 
-For each top-level dimension `D`, the dimension score is on a 0–4 scale. When
-an exercise is present, functional requirement scores are first aggregated
-using their normalized per-exercise subweights. Those subweights apply only
-inside the fixed 40% functional-requirements dimension.
+For exercise functional requirements, requirement subweights apply only within the
+fixed 40% functional-requirements dimension.
 
 ```text
 functional_dimension_score =
@@ -106,67 +186,104 @@ overall =
           / Σ(top_level_weight[D] for evaluated dimensions)
 ```
 
-The fixed top-level weights are:
-`functional_requirements=0.40`, `tests=0.20`, `code_quality=0.15`,
-`architecture=0.15`, `android_practices=0.10`.
+Top-level weights SHALL sum to 1.0.
 
-Only evaluated top-level dimensions are included in the denominator. The rubric
-MUST validate that top-level weights sum to 1.0 and that explicit functional
-subweights sum to 1.0.
+Functional subweights SHALL sum to 1.0 when explicitly supplied.
 
-Dimensions marked **not evaluated** (no evidence) are excluded from the
-numerator and denominator (ADR-011). If no dimension is evaluated, no overall
-score is produced. Where objective evidence exists (tests, lint, detekt,
-compile), scores SHALL be determined deterministically before LLM
-interpretation; the LLM SHALL NOT override computed findings.
+Dimensions with insufficient evidence are `not_evaluated` and excluded from the
+score denominator.
 
-## Static Analysis Severity (ADR-012)
+The LLM SHALL NOT override deterministic objective findings or the recomputed
+overall score.
 
-Android Lint and detekt findings carry `severity: ERROR | WARNING | INFO`.
-Findings are **evidence**, and SHALL NOT automatically map one-to-one to grade
-deductions; the rubric interprets them in aggregate with the LLM's pedagogical
-judgement.
+## Static Analysis
 
-## Evidence Sufficiency (ADR-011 / RQ-EVA-012)
+Android Lint and Detekt findings SHALL preserve:
 
-- A dimension without evidence is reported as **not evaluated**, never pass/fail.
-- If the **build fails**, the functional-requirements dimension (and any
-  compilation-dependent analysis) is marked not evaluated; the result reports
-  the build as the blocking limitation and recommends fixing it first.
-- If **tests** cannot run or do not exist, the tests dimension is marked not
-  evaluated with the reason; absence of tests is not success.
-- If **static analysis** cannot run (tool missing), affected dimensions are
-  marked not evaluated with the reason (RQ-FND-019).
-- The LLM SHALL fail cleanly (structured pipeline) rather than invent evidence.
+- `ERROR`
+- `WARNING`
+- `INFO`
 
-## Feedback
+Findings are evidence. A finding SHALL NOT automatically become a one-to-one
+grade deduction.
 
-The result SHALL include score, strengths, weaknesses, evidence,
-recommendations, and a next learning activity. Feedback SHALL explain why an
-issue matters and guide toward correction instead of merely grading
-(RQ-EVA-008..010).
+## Evidence Sufficiency
+
+- Missing evidence SHALL NOT be interpreted as success.
+- If build failure prevents meaningful requirement evaluation, affected criteria
+  are `not_evaluated` and the build failure is reported as a blocking limitation.
+- If tests cannot execute, the tests dimension is `not_evaluated` with a reason.
+- If static analysis is unavailable, affected dimensions are `not_evaluated`.
+- Tool failures SHALL be visible in the result.
+
+## Structured LLM Output
+
+Structured LLM responses SHALL follow:
+
+```text
+LLM
+ ↓
+structured parser
+ ↓
+schema validation
+ ↓
+retry if invalid
+ ↓
+final failure after 3 total attempts
+```
+
+Malformed or incomplete structured output SHALL never be silently accepted.
+
+The LLM may interpret evidence but cannot invent evidence.
+
+## Result Persistence
+
+`EvaluationResult` SHALL be persisted using `ResultStore` as:
+
+```text
+result://<uuid>
+```
+
+The result SHALL preserve:
+
+- `student_id`;
+- `project_id`;
+- `exercise_id` when available;
+- `attempt_id`;
+- rubric id/version;
+- evidence;
+- score;
+- limitations;
+- feedback.
+
+A successful evaluation for a known attempt SHALL mark the attempt completed and
+append the evaluation outcome to `HistoryStore`.
+
+Persistence failures SHALL be explicitly reported.
 
 ## Safety
 
-Evaluation tools SHALL be read-only except for temporary build artifacts created
-by the normal Android/Gradle toolchain (RQ-EVA-011). Evaluation results persist
-via `ResultStore` (`result://<uuid>`) bound to the session attempt, never inside
-the student project.
-## Attempt completion and history
+Standard evaluation SHALL NOT modify source code or student-owned project files.
 
-When an evaluation successfully completes for a known attempt, `EvaluateAction`
-shall mark the attempt as `completed` and append the evaluation outcome to
-`HistoryStore`.
+Temporary build/test artifacts created by the normal Gradle toolchain are allowed.
 
-```text
-EvaluationResult
-      ↓
-ResultStore.write()
-      ↓
-AttemptStore.mark_completed()
-      ↓
-HistoryStore.append_evaluation()
-```
+Evaluation results are stored outside the student project.
 
-All operations preserve `student_id`, `project_id`, `exercise_id`, and
-`attempt_id`. Persistence failures are reported explicitly.
+## Reuse Contract for 007-examine
+
+`007-examine` SHALL reuse the evaluation infrastructure for:
+
+- Android project inspection;
+- build evidence;
+- unit-test evidence;
+- Android Lint;
+- Detekt;
+- requirement matching;
+- evidence context;
+- deterministic rubric mechanics;
+- structured LLM interpretation where applicable.
+
+`007-examine` SHALL NOT modify the default `/evaluate` rubric.
+
+`007-examine` owns its own exam lifecycle, exam rubric definition, exam metrics,
+and exam report generation.

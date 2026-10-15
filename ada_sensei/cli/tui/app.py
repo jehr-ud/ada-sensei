@@ -31,6 +31,8 @@ from ..commands import (
     CommandResult,
     ErrorResponse,
     EvaluateCommand,
+    ExamineFinishCommand,
+    ExamineStartCommand,
     ExamplesCommand,
     HelpCommand,
     HintCommand,
@@ -51,7 +53,8 @@ from .widgets import PromptArea, SessionBar, SessionFooter, StatusIndicator
 
 HELP_TEXT = (
     "ADA Sensei commands\n\n"
-    "Pick an action from the selector above (ask / practice / examples / evaluate)\n"
+    "Pick an action from the selector above "
+    "(ask / practice / examples / evaluate / exam-init / exam-finish)\n"
     "and type freely in the text field; press Enter to run that action.\n"
     "  e.g. action: ask, type: why does LazyColumn not update?, press Enter\n\n"
     "The text field is multi-line: Shift+Enter inserts a new line, Enter runs\n"
@@ -59,6 +62,8 @@ HELP_TEXT = (
     "Slash commands:\n"
     "  /help                      show this help\n"
     "  /practice, /ask, /examples, /evaluate   run an action\n"
+    "  /exam-init <statement>      start an exam (asks for confirmation)\n"
+    "  /exam-finish               finish the active exam (asks for confirmation)\n"
     "  /hint, /more, /solution    advance the assistance level\n"
     "  /clear                     clear the view\n"
     "  /quit                      exit the TUI\n"
@@ -68,6 +73,8 @@ HELP_TEXT = (
     "  /ask why does LazyColumn not update?\n"
     "  /examples ViewModel\n"
     "  /evaluate --yes\n"
+    "  /exam-init docs/exam.md\n"
+    "  /exam-finish\n"
     "  /hint\n"
     "\n"
     "Your name at startup is your student identity.\n"
@@ -80,6 +87,8 @@ ACTION_OPTIONS = [
     ("practice", "practice"),
     ("examples", "examples"),
     ("evaluate", "evaluate"),
+    ("exam-init", "exam-init"),
+    ("exam-finish", "exam-finish"),
 ]
 
 #: Placeholder shown in the input depending on the selected action.
@@ -88,10 +97,15 @@ ACTION_PROMPTS = {
     "practice": "enter a topic… e.g. compose-state (optional)",
     "examples": "enter a topic… e.g. ViewModel",
     "evaluate": "evaluate the current project (Enter to run)",
+    "exam-init": "exam statement… e.g. docs/exam.md (Enter to start)",
+    "exam-finish": "finish the exam and generate the report (Enter to run)",
 }
 
+#: Commands that require an explicit confirmation before running.
+CONFIRMING_ACTIONS = ("evaluate", "exam-init", "exam-finish")
+
 #: Statuses that receive the animated ``Running…`` treatment.
-ANIMATABLE_STATUSES = frozenset({"Running", "Evaluating"})
+ANIMATABLE_STATUSES = frozenset({"Running", "Evaluating", "Examining"})
 
 #: Dot-count cycle for the animation: ``Running``, ``Running.``, ``Running..``,
 #: ``Running...``, then back down. The internal status stays machine-readable
@@ -102,6 +116,9 @@ ANIM_FRAMES = (0, 1, 2, 3, 2, 1)
 #: loop and no dedicated thread (RQ-TUI-016).
 ANIM_INTERVAL = 0.4
 
+#: Seconds between exam-timer footer refreshes while an exam is active.
+EXAM_TIMER_INTERVAL = 1.0
+
 #: Role label used in the conversation viewport per entry kind.
 MESSAGE_LABELS = {
     MessageKind.USER: "You",
@@ -111,6 +128,7 @@ MESSAGE_LABELS = {
     MessageKind.HINT: "Hint",
     MessageKind.EXAMPLE: "Examples",
     MessageKind.EVALUATION: "Evaluation",
+    MessageKind.EXAM: "Exam",
     MessageKind.ERROR: "Error",
 }
 
@@ -120,9 +138,68 @@ _COMMAND_KINDS = {
     PracticeCommand: MessageKind.PRACTICE,
     ExamplesCommand: MessageKind.EXAMPLE,
     EvaluateCommand: MessageKind.EVALUATION,
+    ExamineStartCommand: MessageKind.EXAM,
+    ExamineFinishCommand: MessageKind.EXAM,
     HintCommand: MessageKind.HINT,
     MoreCommand: MessageKind.HINT,
     SolutionCommand: MessageKind.HINT,
+}
+
+#: Commands whose result is shown as a distinct user request in the log.
+_USER_VISIBLE_COMMANDS = (
+    AskCommand,
+    PracticeCommand,
+    ExamplesCommand,
+    EvaluateCommand,
+    ExamineStartCommand,
+    ExamineFinishCommand,
+)
+
+#: Commands that run the Gradle evidence scope.
+_EVIDENCE_COMMANDS = (EvaluateCommand, ExamineFinishCommand)
+
+#: Confirmation prompt shown before a consequential action runs.
+_CONFIRM_PROMPT = {
+    EvaluateCommand: (
+        "Evaluation runs Gradle build/tests/lint/detekt. "
+        "Reply `yes` to confirm or `no` to abort."
+    ),
+    ExamineStartCommand: (
+        "Starting an exam records its duration and every /ask, and writes "
+        "documentation into the project under docs/ada-sensei/. "
+        "Reply `yes` to start the exam or `no` to abort."
+    ),
+    ExamineFinishCommand: (
+        "Finishing the exam stops the timer, scores the project, and writes a "
+        "PDF report. Reply `yes` to confirm or `no` to abort."
+    ),
+}
+
+#: Confirmation aborted message per command.
+_ABORT_ECHO = {
+    EvaluateCommand: "Evaluation aborted before running any Gradle task.",
+    ExamineStartCommand: "Exam start aborted; no attempt was created.",
+    ExamineFinishCommand: "Exam finish aborted; the attempt is still active.",
+}
+
+#: Echo used as the user message when a no-argument action is submitted empty.
+_PLACEHOLDER_ECHO = {
+    EvaluateCommand: "evaluate the current project",
+    ExamineFinishCommand: "finish the exam",
+}
+
+#: Presentation view shown while waiting for each confirmation.
+_CONFIRM_VIEW = {
+    EvaluateCommand: View.EVALUATE,
+    ExamineStartCommand: View.EXAM_START,
+    ExamineFinishCommand: View.EXAM_FINISH,
+}
+
+#: Status shown while a command runs, keyed by the scope it touches.
+_RUN_STATUS = {
+    EvaluateCommand: "Evaluating",
+    ExamineFinishCommand: "Examining",
+    ExamineStartCommand: "Examining",
 }
 
 _FENCE_RE = re.compile(r"```")
@@ -152,9 +229,13 @@ class AdaSenseiTUI(App):
         self.ui_state = PresentationState()
         self._active_worker = None
         self._pending_eval: EvaluateCommand | None = None
+        self._pending_exam: (
+            EvaluateCommand | ExamineStartCommand | ExamineFinishCommand | None
+        ) = None
         self._anim_timer: Timer | None = None
         self._anim_step = 0
         self._current_kind: MessageKind = MessageKind.SYSTEM
+        self._exam_timer: Timer | None = None
 
     def compose(self) -> ComposeResult:
         yield SessionBar(id="session-bar")
@@ -183,6 +264,31 @@ class AdaSenseiTUI(App):
             self._resolve_pending_name(remembered)
         else:
             self._emit("Welcome to ADA Sensei. What is your name?")
+
+    # ------------------------------------------------------------------
+    # Exam timer (RQ-EXM-007)
+    # ------------------------------------------------------------------
+
+    def _sync_exam_timer(self) -> None:
+        """Run the footer refresh only while an exam is in progress.
+
+        Presentation only: the elapsed value comes from the persisted attempt,
+        so a paused or throttled UI can never change the recorded duration.
+        """
+        status = self._exam_status()
+        active = status is not None and status.is_active
+        if active and self._exam_timer is None and self._is_mounted:
+            with contextlib.suppress(Exception):
+                self._exam_timer = self.set_interval(
+                    EXAM_TIMER_INTERVAL,
+                    self.refresh_footer,
+                    name="exam-timer",
+                )
+        elif not active and self._exam_timer is not None:
+            with contextlib.suppress(Exception):
+                self._exam_timer.stop()
+            self._exam_timer = None
+        self.refresh_footer()
 
     def _focus_input(self) -> None:
         with contextlib.suppress(Exception):
@@ -272,7 +378,19 @@ class AdaSenseiTUI(App):
             model=self.router.model_name(),
             action=self.ui_state.action,
             status=self._display_status(),
+            exam=self._exam_status(),
         )
+
+    def _exam_status(self):
+        """Authoritative exam status, or ``None`` when no exam is active.
+
+        Read through the router so the TUI renders persisted state only; it
+        never counts asks or measures the exam itself (RQ-EXM-031).
+        """
+        getter = getattr(self.router, "exam_status", None)
+        if getter is None:
+            return None
+        return getter()
 
     def _status(self, text: str) -> None:
         self.ui_state.status = text
@@ -404,14 +522,18 @@ class AdaSenseiTUI(App):
                 self._resolve_pending_name("")
                 return
             # Empty free text is only meaningful for an empty practice topic
-            # (RQ-TUI-030) or for running the evaluate flow.
-            if self.ui_state.action not in ("practice", "evaluate"):
+            # (RQ-TUI-030) or for running a no-argument action.
+            if self.ui_state.action not in (
+                "practice",
+                "evaluate",
+                "exam-finish",
+            ):
                 return
         if self.ui_state.awaiting_name:
             self._resolve_pending_name(line)
             return
-        if self._pending_eval is not None:
-            self._resolve_pending_eval(self._pending_eval, line)
+        if self._pending_exam is not None:
+            self._resolve_pending_exam(self._pending_exam, line)
             return
         if line.startswith("/name"):
             self._handle_name_command(line)
@@ -426,9 +548,9 @@ class AdaSenseiTUI(App):
 
     def _render_user_message(self, line: str, command: Command) -> None:
         """Show the submitted request as a distinct user message for actions."""
-        if not isinstance(command, (AskCommand, PracticeCommand, ExamplesCommand, EvaluateCommand)):
+        if not isinstance(command, _USER_VISIBLE_COMMANDS):
             return
-        shown = line if line else "(evaluate the current project)"
+        shown = line or f"({_PLACEHOLDER_ECHO[type(command)]})"
         self._emit_user(shown)
 
     def _command_from_line(self, line: str) -> Command:
@@ -441,13 +563,25 @@ class AdaSenseiTUI(App):
             return CommandParser.parse_line(line)
         action = self.ui_state.action
         if action == "ask":
-            return AskCommand(question=line)
+            return AskCommand(
+                question=line,
+                # Read at emit time, not here: the worker starts after this
+                # command is built, and ``_run_nonblocking`` clears the flag
+                # first. A run the student aborts is then recorded as cancelled
+                # instead of completed, so it is not charged to the exam ask
+                # allowance (RQ-EXM-005).
+                is_cancelled=lambda: self.ui_state.cancelled,
+            )
         if action == "practice":
             return PracticeCommand(topic=line or None)
         if action == "examples":
             return ExamplesCommand(topic=line)
         if action == "evaluate":
             return EvaluateCommand()
+        if action == "exam-init":
+            return ExamineStartCommand(statement=line)
+        if action == "exam-finish":
+            return ExamineFinishCommand()
         raise CLIError(f"no text action selected: {action!r}")
 
     def _handle_command(self, command: Command) -> None:
@@ -463,44 +597,58 @@ class AdaSenseiTUI(App):
             self.ui_state.messages.clear()
             self._emit("(view cleared)")
             return
-        if isinstance(command, EvaluateCommand):
+        if isinstance(
+            command, (EvaluateCommand, ExamineStartCommand, ExamineFinishCommand)
+        ):
             self._confirm_then_run(command)
             return
         self._run_nonblocking(command)
 
     # ------------------------------------------------------------------
-    # Evaluation with confirmation (RQ-TUI-013 / 014)
+    # Confirmation for Gradle-scope and exam actions
+    # (RQ-TUI-013 / 014, RQ-EXM-003 / 004)
     # ------------------------------------------------------------------
 
-    def _confirm_then_run(self, command: EvaluateCommand) -> None:
-        if command.confirmed:
+    def _confirm_then_run(self, command: Command) -> None:
+        """Require an explicit confirmation before a consequential action.
+
+        ``/evaluate`` runs Gradle; ``/exam-init`` starts an exam; ``/exam-finish``
+        scores and closes the active exam. Each is confirmed unless it already
+        carries an explicit ``yes``.
+        """
+        if getattr(command, "confirmed", False):
             self._run_nonblocking(command)
             return
-        self.ui_state.view = View.EVALUATE
-        self._pending_eval = command
+        self._pending_exam = command
+        self.ui_state.view = _CONFIRM_VIEW.get(type(command), View.EVALUATE)
+        self._pending_eval = command if isinstance(command, EvaluateCommand) else None
         self._status("Waiting for confirmation")
-        self._emit(
-            "Evaluation runs Gradle build/tests/lint/detekt. "
-            "Reply `yes` to confirm or `no` to abort."
-        )
+        self._emit(_CONFIRM_PROMPT[type(command)])
 
-    def _resolve_pending_eval(self, pending: EvaluateCommand, answer: str) -> None:
+    def _resolve_pending_exam(self, pending: Command, answer: str) -> None:
+        self._pending_exam = None
         self._pending_eval = None
         self.ui_state.view = View.CHAT
         if answer.strip().lower() in {"y", "yes"}:
             self._run_nonblocking(pending)
         else:
             self._status("Ready")
-            self._emit("Evaluation aborted before running any Gradle task.")
+            self._emit(_ABORT_ECHO[type(pending)])
             self._focus_input()
+
+    #: Backward-compatible alias for the evaluate-only flow.
+    _resolve_pending_eval = _resolve_pending_exam
 
     # ------------------------------------------------------------------
     # Non-blocking dispatch (RQ-TUI-016 / 017)
     # ------------------------------------------------------------------
 
     def _run_nonblocking(self, command: Command) -> None:
-        status = "Evaluating" if isinstance(command, EvaluateCommand) else "Running"
+        status = _RUN_STATUS.get(type(command), "Running")
         self._current_kind = _COMMAND_KINDS.get(type(command), MessageKind.SYSTEM)
+        # Cleared before the worker starts so an abort from a previous run
+        # cannot be mistaken for one against this command.
+        self.ui_state.cancelled = False
         self._set_busy(True, status)
         worker = self.run_worker(
             lambda: self._dispatch_worker(command),
@@ -556,6 +704,7 @@ class AdaSenseiTUI(App):
         if notice:
             self._emit("Note: " + self.formatter.error(notice))
         self.refresh_session_bar()
+        self._sync_exam_timer()
         self._focus_input()
 
     def on_output_ready(self, message: OutputReady) -> None:

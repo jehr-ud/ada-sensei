@@ -15,6 +15,8 @@ from .commands import (
     ClearCommand,
     Command,
     EvaluateCommand,
+    ExamineFinishCommand,
+    ExamineStartCommand,
     ExamplesCommand,
     HelpCommand,
     HintCommand,
@@ -26,7 +28,14 @@ from .commands import (
 )
 from .errors import CLIError
 
-AVAILABLE_ACTIONS = ("practice", "ask", "examples", "evaluate")
+AVAILABLE_ACTIONS = (
+    "practice",
+    "ask",
+    "examples",
+    "evaluate",
+    "exam-init",
+    "exam-finish",
+)
 
 SLASH_COMMANDS = (
     "help",
@@ -99,6 +108,21 @@ class CommandParser:
                 yes=bool(options.get("yes", False)),
                 instrumented=bool(options.get("instrumented", False)),
             )
+        if action == "exam-init":
+            # RQ-EXM-001: identity is never read from the statement. The
+            # statement is a path, a structured definition, or inline text.
+            return ExamineStartCommand(
+                statement=" ".join(positional),
+                student_id=options.get("student"),
+                project_id=options.get("project-id"),
+                exercise_id=options.get("exercise"),
+                yes=bool(options.get("yes", False)),
+            )
+        if action == "exam-finish":
+            return ExamineFinishCommand(
+                yes=bool(options.get("yes", False)),
+                instrumented=bool(options.get("instrumented", False)),
+            )
         raise CLIError(f"unknown action: {action!r}")
 
     @classmethod
@@ -152,6 +176,12 @@ class CommandParser:
             if token == "/evaluate":
                 options, positional = cls._parse_flags(rest[1:])
                 return cls._action_command("evaluate", options, positional)
+            if token == "/exam-init":
+                options, positional = cls._parse_flags(rest[1:])
+                return cls._action_command("exam-init", options, positional)
+            if token in ("/exam-finish", "/finish-exam"):
+                options, positional = cls._parse_flags(rest[1:])
+                return cls._action_command("exam-finish", options, positional)
             if token == "/ask":
                 return AskCommand(question=" ".join(rest[1:]))
             raise CLIError(f"unknown slash command: {token} (try /help)")
@@ -226,6 +256,13 @@ class CommandParser:
                 "    e.g. examples ViewModel",
                 "  evaluate [--exercise <uri>] [--yes] [--instrumented (future)]",
                 "    e.g. evaluate --yes",
+                "  exam-init [<statement>] [--yes]",
+                "    start an exam from an instructor statement (file, Markdown,",
+                "    structured definition, or inline text)",
+                "    e.g. exam-init ~/exams/midterm.md --yes",
+                "  exam-finish [--yes]",
+                "    finish the active exam, score it, and generate the report",
+                "    e.g. exam-finish --yes",
                 "",
                 "Interactive (slash) commands:",
                 "  /help                     show this help",
@@ -240,6 +277,10 @@ class CommandParser:
                 "    e.g. /examples ViewModel",
                 "  /evaluate [--yes]         evaluate the project",
                 "    e.g. /evaluate --yes",
+                "  /exam-init [<statement>]   start an exam (needs confirmation)",
+                "    e.g. /exam-init docs/exam.md",
+                "  /exam-finish              finish the active exam",
+                "    e.g. /exam-finish",
                 "  /hint /more /solution     advance the assistance level",
                 "  /clear                    clear the presentation view",
                 "",

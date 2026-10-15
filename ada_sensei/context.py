@@ -19,6 +19,9 @@ class SessionState(BaseModel):
     student_id: str | None = None
     project_id: str | None = None
     attempt_id: str | None = None
+    #: Set while an exam is running so ``/ask`` and ``Finish Exam`` can find the
+    #: attempt without the student restating its id (RQ-EXM-001, RQ-EXM-004).
+    exam_attempt_id: str | None = None
     current_exercise_id: str | None = None
     assistance_level: AssistanceLevel = AssistanceLevel.guiding_question
     conversation: list[Turn] = []
@@ -61,6 +64,18 @@ class SessionContext:
     @current_exercise_id.setter
     def current_exercise_id(self, value: str | None) -> None:
         self.state.current_exercise_id = value
+
+    @property
+    def exam_attempt_id(self) -> str | None:
+        return self.state.exam_attempt_id
+
+    @exam_attempt_id.setter
+    def exam_attempt_id(self, value: str | None) -> None:
+        self.state.exam_attempt_id = value
+
+    def clear_exam(self) -> None:
+        """Leave exam mode: no further ``/ask`` is attributed to the exam."""
+        self.state.exam_attempt_id = None
 
     @property
     def assistance_level(self) -> AssistanceLevel:
@@ -120,12 +135,6 @@ class SessionContext:
             self.assistance_level = order[idx]
         return self.assistance_level
 
-    def to_messages(self) -> list[dict[str, str]]:
-        msgs: list[dict[str, str]] = []
-        for turn in self.conversation[-20:]:
-            msgs.append({"role": turn.role, "content": turn.content})
-        return msgs
-
     def persist(self) -> None:
         self._session_dir.mkdir(parents=True, exist_ok=True)
         path = self._session_dir / f"{self.session_key}.json"
@@ -143,12 +152,3 @@ class SessionContext:
             return SessionState.model_validate(data)
         except Exception:
             return None
-
-    def resume(self) -> bool:
-        if not self.state.student_id:
-            return False
-        saved = self._load_state()
-        if saved:
-            self.state = saved
-            return True
-        return False

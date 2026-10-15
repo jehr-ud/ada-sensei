@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from ada_sensei.actions.base import ActionServices
@@ -8,26 +9,57 @@ from ada_sensei.config import Config
 from ada_sensei.context import SessionContext
 from ada_sensei.llm.base import LLMClient
 
-INTERPRETATION = {
-    "strengths": ["clear separation of concerns"],
-    "weaknesses": ["no error handling on IO"],
+#: Evidence ids are handed to the model as ``- ev://<n> [source/type/status] ...``
+EVIDENCE_ID = re.compile(r"ev://[0-9a-fA-F-]+")
+
+TEXT = {
+    "strengths": "clear separation of concerns",
+    "weaknesses": "no error handling on IO",
+    "recommendations": "Add a repository boundary.",
+    "findings": "The project compiles and the reported checks pass.",
+}
+NARRATIVE = {
     "feedback": "Good structure with room to improve error handling.",
-    "recommendations": ["Add a repository boundary."],
     "next_learning_activity": "Practice error handling with sealed classes.",
 }
 
 
+def grounded_payload(evidence_refs: list[str]) -> str:
+    """A schema-valid, evidence-grounded interpretation payload.
+
+    Every claim cites real ``ev://`` ids so the grounding validator accepts it
+    (RQ-EVA-035). This is what a compliant model returns; a payload with bare
+    strings or dangling references would be rejected and would make assertions
+    about strengths/weaknesses vacuous.
+    """
+    claims = {
+        kind: [{"claim": text, "evidence_refs": evidence_refs, "kind": kind}]
+        for kind, text in TEXT.items()
+    }
+    return json.dumps({**claims, **NARRATIVE, "limitations": []})
+
+
 class FakeClient(LLMClient):
+    """Grounded interpretation client driven by the evidence in the prompt."""
+
     def __init__(self, payload=None):
-        self.payload = payload if payload is not None else json.dumps(INTERPRETATION)
+        self.payload = payload
+        self.calls: list[list[dict[str, str]]] = []
+
+    def _respond(self, messages) -> str:
+        self.calls.append(list(messages))
+        if self.payload is not None:
+            return self.payload
+        prompt = "\n".join(m.get("content", "") for m in messages)
+        return grounded_payload(sorted(set(EVIDENCE_ID.findall(prompt))))
 
     def chat(self, messages, *, model=None, temperature=None):
-        return ""
+        return self._respond(messages)
 
     def chat_structured(
         self, messages, *, model=None, json_schema=None, temperature=None
     ):
-        return self.payload
+        return self._respond(messages)
 
 
 class Fixture:

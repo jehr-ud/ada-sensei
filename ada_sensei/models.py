@@ -66,6 +66,20 @@ class Evidence(BaseModel):
     file: str | None = None
     line: int | None = None
     command: str | None = None
+    #: Stable provenance handle (``ev://<n>``) assigned by ``EvidenceContext``
+    #: so LLM claims can reference evidence without restating it (RQ-EVA-035).
+    id: str | None = None
+
+
+class NotEvaluatedReason(StrEnum):
+    """Why a criterion or dimension carries no score (ADR-011, RQ-EVA-014)."""
+
+    no_evidence = "no_evidence"
+    tool_unavailable = "tool_unavailable"
+    build_failed = "build_failed"
+    no_exercise = "no_exercise"
+    no_limit = "no_limit"
+    ungrounded_claim = "ungrounded_claim"
 
 
 class EvaluationCriterion(BaseModel):
@@ -74,6 +88,12 @@ class EvaluationCriterion(BaseModel):
     weight: float = 1.0
     score: int | None = None
     evidence: list[Evidence] = Field(default_factory=list)
+    #: Evidence ids backing this criterion's score (RQ-EVA-005, RQ-EVA-033).
+    evidence_refs: list[str] = Field(default_factory=list)
+    #: Set when ``score`` is ``None``; a criterion is never silently passed
+    #: or failed (RQ-EVA-014, RQ-EVA-018).
+    not_evaluated_reason: NotEvaluatedReason | None = None
+    note: str = ""
 
 
 Criterion = EvaluationCriterion
@@ -143,21 +163,51 @@ class StudentProfile(BaseModel):
         )
 
 
+class UnsupportedClaim(BaseModel):
+    """An LLM claim that could not be grounded in collected evidence.
+
+    Recorded rather than silently accepted so the final result identifies
+    unsupported claims instead of treating them as evidence (RQ-EVA-035).
+    """
+
+    claim: str
+    kind: str = "finding"
+    reason: str = ""
+
+
 class EvaluationResult(BaseModel):
     id: str = Field(default_factory=lambda: URN.make("result"))
     attempt_id: str | None = None
     exercise_id: str | None = None
     student_id: str | None = None
     project_id: str | None = None
+    #: Rubric that produced the score, as ``<rubric_id>:<version>``
+    #: (e.g. ``evaluate-default:v1``), so historical results stay
+    #: attributable to their rubric version (ADR-023).
+    rubric_id: str | None = None
+    rubric_version: str | None = None
     overall_score: float | None = None
     criteria: list[EvaluationCriterion] = Field(default_factory=list)
+    #: Deterministic per-dimension scores, including fractional functional
+    #: subweighted scores and ``None`` for not-evaluated dimensions.
+    dimension_scores: dict[str, float | None] = Field(default_factory=dict)
+    evidence: list[Evidence] = Field(default_factory=list)
     strengths: list[str] = Field(default_factory=list)
     weaknesses: list[str] = Field(default_factory=list)
     feedback: str = ""
     recommendations: list[str] = Field(default_factory=list)
     next_learning_activity: str = ""
     limitations: list[str] = Field(default_factory=list)
+    not_evaluated: list[str] = Field(default_factory=list)
+    unsupported_claims: list[UnsupportedClaim] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=Timestamps.now)
+
+    @property
+    def rubric_ref(self) -> str | None:
+        """``<rubric_id>:<version>`` when the rubric is known (ADR-023)."""
+        if not self.rubric_id or not self.rubric_version:
+            return None
+        return f"{self.rubric_id}:{self.rubric_version}"
 
 
 class PracticeResult(BaseModel):

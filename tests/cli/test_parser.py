@@ -5,6 +5,8 @@ from ada_sensei.cli.commands import (
     AskCommand,
     ClearCommand,
     EvaluateCommand,
+    ExamineFinishCommand,
+    ExamineStartCommand,
     ExamplesCommand,
     HelpCommand,
     HintCommand,
@@ -52,7 +54,24 @@ def test_known_actions():
     for action in AVAILABLE_ACTIONS:
         cmd = CommandParser.parse_argv([action])
         assert isinstance(cmd, (PracticeCommand, AskCommand, ExamplesCommand,
-                                EvaluateCommand))
+                                EvaluateCommand, ExamineStartCommand,
+                                ExamineFinishCommand))
+
+
+def test_exam_init_parses():
+    cmd = CommandParser.parse_argv(["exam-init", "~/exams/midterm.md", "--yes"])
+    assert isinstance(cmd, ExamineStartCommand)
+    assert cmd.statement == "~/exams/midterm.md"
+    assert cmd.confirmed is True
+
+
+def test_exam_finish_slash():
+    cmd = CommandParser.parse_argv(["/exam-finish"])
+    assert isinstance(cmd, ExamineFinishCommand)
+    assert cmd.confirmed is False
+    finish = CommandParser.parse_argv(["/finish-exam", "--yes"])
+    assert isinstance(finish, ExamineFinishCommand)
+    assert finish.confirmed is True
 
 
 def test_unknown_action_error():

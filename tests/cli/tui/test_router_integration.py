@@ -6,7 +6,12 @@ command object dispatches to the same router the CLI uses.
 
 from __future__ import annotations
 
-from ada_sensei.cli.commands import AskCommand, ErrorResponse
+from ada_sensei.cli.commands import (
+    AskCommand,
+    ErrorResponse,
+    ExamineFinishCommand,
+    ExamineStartCommand,
+)
 from ada_sensei.cli.router import Router
 from ada_sensei.cli.tui.app import HELP_TEXT, AdaSenseiTUI
 from ada_sensei.config import Config
@@ -45,3 +50,14 @@ def test_app_uses_same_router_as_cli(tmp_path):
 def test_help_text_lists_principal_actions():
     for token in ("/practice", "/ask", "/examples", "/evaluate", "/quit"):
         assert token in HELP_TEXT
+
+
+def test_exam_commands_route_without_exception(tmp_path):
+    # The TUI dispatches typed exam commands through the same shared router.
+    # With no active exam these must degrade to a normal error response, not
+    # crash the dispatch worker.
+    app = Fixtures.make_app(tmp_path)
+    result = app._dispatch_worker(ExamineStartCommand(statement="", yes=True))
+    assert isinstance(result, ErrorResponse)
+    result = app._dispatch_worker(ExamineFinishCommand(yes=True))
+    assert isinstance(result, ErrorResponse)

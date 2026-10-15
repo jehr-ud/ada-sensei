@@ -66,6 +66,10 @@ AskCommand(question: str)
 ExamplesCommand(topic: str)
 EvaluateCommand(exercise_id: str | None, yes: bool,
                 instrumented: bool = False)
+ExamineStartCommand(statement: str, student_id: str | None,
+                    project_id: str | None, exercise_id: str | None,
+                    yes: bool)
+ExamineFinishCommand(yes: bool, instrumented: bool = False)
 ProjectCommand(path: str | None)
 HintCommand
 MoreCommand
@@ -94,6 +98,8 @@ CommandResult
   | Answer
   | ExampleResult
   | EvaluationResult
+  | ExamStartResult
+  | ExamFinishResult
   | AssistanceResult
   | HelpResult
   | ClearResult
@@ -172,10 +178,10 @@ with code `2`; secrets are never exposed.
   Check the local log for details.
 ```
 
-## 8. Confirmation Flow (Evaluation)
+## 8. Confirmation Flow (Evaluation and Exam)
 
-Evaluation confirmation applies in both modes. In the direct CLI, an interactive
-prompt is shown; in a non-interactive environment, Gradle execution is blocked
+Evaluation and exam confirmation applies in both modes. In the direct CLI, an interactive
+prompt is shown; in a non-interactive environment, execution is blocked
 unless `--yes` is supplied (RQ-CLI-014, RQ-CLI-016, ADR-019).
 
 ```text
@@ -199,6 +205,46 @@ Abort              ▼
                     └─ Detekt
                     ▼
                EvaluationResult
+```
+
+```text
+/exam-init  or  ada-sensei exam-init <statement>
+   │
+   ▼
+Confirm start exam?
+   │
+ ┌─┴─────────────┐
+No               Yes
+ │                 │
+Abort              ▼
+                ExamineAction.start()
+                    ├─ resolve ExamDefinition
+                    ├─ create ExamAttempt
+                    ├─ write docs/ada-sensei/exams/
+                    └─ attach ask-event bridge
+                    ▼
+               ExamStartResult
+```
+
+```text
+/exam-finish  or  ada-sensei exam-finish
+   │
+   ▼
+Confirm finish exam?
+   │
+ ┌─┴─────────────┐
+No               Yes
+ │                 │
+Abort              ▼
+                ExamineAction.finish()
+                    ├─ stop timer
+                    ├─ collect evidence
+                    ├─ score deterministically
+                    ├─ LLM qualitative interpretation
+                    ├─ generate PDF
+                    └─ persist result
+                    ▼
+               ExamFinishResult
 ```
 
 `connectedAndroidTest` SHALL not be launched (RQ-CLI-015).
@@ -282,7 +328,7 @@ TuiApp
   │    ├── ExampleMessage
   │    ├── EvaluationMessage
   │    └── ErrorMessage
-  ├── ActionSelector        (Select: ask | practice | examples | evaluate)
+  ├── ActionSelector        (Select: ask | practice | examples | evaluate | exam-init | exam-finish)
   ├── InputWidget           (multi-line text area, persistent, PromptArea)
   └── StatusBar
 ```
@@ -420,7 +466,7 @@ the name always comes from the user, ADR-015).
 The TUI SHALL use one persistent action selector for:
 
 ```text
-ask | practice | examples | evaluate
+ask | practice | examples | evaluate | exam-init | exam-finish
 ```
 
 The common interaction is:
@@ -448,8 +494,9 @@ Return focus to TextArea
 Enter executes the selected action. Shift+Enter creates a new line in the multiline
 TextArea.
 
-`evaluate` follows the same selector mechanism. There is no separate Evaluate button.
-Evaluation confirmation remains mandatory before Gradle-based execution.
+`evaluate`, `exam-init`, and `exam-finish` follow the same selector mechanism.
+There is no separate Evaluate or Exam button. Confirmation remains mandatory before
+Gradle-based execution and before starting or finishing an exam.
 
 ## Persistent session footer
 

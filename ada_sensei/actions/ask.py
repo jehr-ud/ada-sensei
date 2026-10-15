@@ -1,9 +1,18 @@
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 from ..context import MAX_TURNS
+from ..events import (
+    ASK_CANCELLED,
+    ASK_COMPLETED,
+    ASK_FAILED,
+    ASK_STARTED,
+    AppEvent,
+)
 from ..llm import StructuredPipeline
 from ..models import Answer, AssistanceLevel, LearningEvent, Turn
 from ..tools.inspector import ProjectInspector
@@ -85,6 +94,11 @@ class QuestionClassifier:
         return "conceptual"
 
     def needs_project_inspection(self, category: str) -> bool:
+        """Whether answering this category benefits from the student's own files.
+
+        Single source of truth for the decision: ``ContextBuilder.build`` asks this
+        instead of re-testing the category inline, so the two cannot drift.
+        """
         return category == "debugging"
 
 
@@ -94,10 +108,12 @@ class ContextBuilder:
         services: ActionServices,
         project_path: str | None = None,
         inspector: ProjectInspector | None = None,
+        classifier: QuestionClassifier | None = None,
     ) -> None:
         self.services = services
         self.project_path = project_path
         self._inspector = inspector
+        self.classifier = classifier or QuestionClassifier()
 
     def _inspector_for(self, project_path: str) -> ProjectInspector | None:
         if self._inspector is not None:
@@ -122,7 +138,8 @@ class ContextBuilder:
         )
 
         excerpts: list[str] = []
-        if classification == "debugging" and self.project_path:
+        inspect_project = self.classifier.needs_project_inspection(classification)
+        if inspect_project and self.project_path:
             inspector = self._inspector_for(str(self.project_path))
             if inspector is not None:
                 excerpts = self._file_excerpts(inspector, question)
@@ -255,10 +272,12 @@ class AskAction:
         self.classifier = QuestionClassifier()
         self.builder = ContextBuilder(services)
 
-    def run(self, question: str) -> AskResult:
+    def run(
+        self, question: str, *, is_cancelled: Callable[[], bool] | None = None
+    ) -> AskResult:
         if not question.strip():
             raise ValueError("ask requires a question")
-        return self._answer(question, classify=True)
+        return self._answer(question, classify=True, is_cancelled=is_cancelled)
 
     def escalate(self, command: str) -> AskResult:
         """Re-answer the last question at the advanced assistance level."""
@@ -273,19 +292,79 @@ class AskAction:
             self.services.context.advance_assistance()
         return self._answer(turn.content, classify=False, record=False)
 
-    def _answer(self, question: str, classify: bool, record: bool = True) -> AskResult:
+    def _answer(
+        self,
+        question: str,
+        classify: bool,
+        record: bool = True,
+        *,
+        is_cancelled: Callable[[], bool] | None = None,
+    ) -> AskResult:
         classification = (
             self.classifier.classify(question)
             if classify
             else (self.services.context.last_classification or "conceptual")
         )
         ctx = self.builder.build(question, classification)
-        answer = TutorAgent(self.services).answer(
-            question,
-            classification,
-            ctx,
-            self.services.context.assistance_level,
-        )
+        # An exam subscribes to these events to count `/ask` usage. Only a
+        # successful answer counts; failures and cancellations are recorded
+        # separately but not charged to the exam allowance (spec.md §Ask
+        # tracking). The tutor's behaviour is unchanged — the events are
+        # published, never shown.
+        publish = self.services.event_bus
+        counted = record
+        started = time.monotonic()
+        if counted:
+            publish.emit(
+                AppEvent(
+                    ASK_STARTED,
+                    {
+                        "question_id": None,
+                        "question": question,
+                        "classification": classification,
+                        "exam_attempt_id": self.services.context.exam_attempt_id,
+                    },
+                )
+            )
+        try:
+            answer = TutorAgent(self.services).answer(
+                question,
+                classification,
+                ctx,
+                self.services.context.assistance_level,
+            )
+        except Exception as exc:
+            if counted:
+                cancelled = bool(is_cancelled and is_cancelled())
+                publish.emit(
+                    AppEvent(
+                        ASK_CANCELLED if cancelled else ASK_FAILED,
+                        {
+                            "question": question,
+                            "duration_ms": int((time.monotonic() - started) * 1000),
+                            "error": f"{type(exc).__name__}: {exc}",
+                            "exam_attempt_id": self.services.context.exam_attempt_id,
+                        },
+                    )
+                )
+            raise
+        if counted:
+            # A cancelled run still returns its answer, because a thread worker
+            # runs to completion and only discards the result. Recording it as
+            # completed would charge an ask the student chose to abort, so the
+            # cancellation is checked before the terminal event is published.
+            cancelled = bool(is_cancelled and is_cancelled())
+            publish.emit(
+                AppEvent(
+                    ASK_CANCELLED if cancelled else ASK_COMPLETED,
+                    {
+                        "question_id": answer.id,
+                        "duration_ms": int((time.monotonic() - started) * 1000),
+                        "classification": classification,
+                        "exam_attempt_id": self.services.context.exam_attempt_id,
+                    },
+                )
+            )
         if record:
             self.services.context.last_classification = classification
             self.services.context.add_turn("user", question)

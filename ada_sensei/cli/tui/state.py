@@ -15,6 +15,8 @@ class View(StrEnum):
     CHAT = "chat"
     HELP = "help"
     EVALUATE = "evaluate"
+    EXAM_START = "exam-start"
+    EXAM_FINISH = "exam-finish"
 
 
 class MessageKind(StrEnum):
@@ -32,6 +34,7 @@ class MessageKind(StrEnum):
     HINT = "hint"
     EXAMPLE = "example"
     EVALUATION = "evaluation"
+    EXAM = "exam"
     ERROR = "error"
 
 

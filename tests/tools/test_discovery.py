@@ -12,7 +12,9 @@ def test_missing_reported(tmp_path, clean_env, monkeypatch):
     assert gradle.available
     assert gradle.command == str(wrapper)
 
-    missing = ToolDiscovery.find_gradle(tmp_path / "does-not-exist", env=dict(clean_env))
+    missing = ToolDiscovery.find_gradle(
+        tmp_path / "does-not-exist", env=dict(clean_env)
+    )
     assert not missing.available
 
 

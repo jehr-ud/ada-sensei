@@ -21,6 +21,15 @@ rather than a code generator.
 - JDK 17+ (required only for `/evaluate`)
 - An Android project using the Gradle wrapper (`./gradlew`) for `/evaluate`
 
+## Dev installation
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+
 ## Installation (GitHub only)
 
 ADA Sensei installs directly from its GitHub repository — no PyPI publication is

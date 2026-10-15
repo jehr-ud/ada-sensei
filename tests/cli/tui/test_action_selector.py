@@ -56,14 +56,21 @@ def mounted(tmp_path, fn):
     return asyncio.run(_run())
 
 
-def test_selector_contains_ask_practice_examples_evaluate(tmp_path):
+def test_selector_contains_ask_practice_examples_evaluate_and_exam(tmp_path):
     labels = [label for label, _ in ACTION_OPTIONS]
-    assert labels == ["ask", "practice", "examples", "evaluate"]
+    assert labels == [
+        "ask",
+        "practice",
+        "examples",
+        "evaluate",
+        "exam-init",
+        "exam-finish",
+    ]
 
     async def check(app, pilot):
         select = app.query_one("#action-select", Select)
         options = [str(o[0]) for o in select._options]
-        return options == ["ask", "practice", "examples", "evaluate"]
+        return options == labels
 
     assert mounted(tmp_path, check)
 

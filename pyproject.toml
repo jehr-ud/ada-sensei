@@ -29,6 +29,9 @@ repository = "https://github.com/jehr-ud/ada-sensei"
 [tool.setuptools.packages.find]
 include = ["ada_sensei*"]
 
+[tool.setuptools.package-data]
+"ada_sensei" = ["**/*.tcss"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 

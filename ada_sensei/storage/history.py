@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from ..models import EvaluationResult, LearningEvent, StudentProfile
 from .json_store import JsonStore
+
+if TYPE_CHECKING:
+    from ..exams.models import ExamResult
 
 KIND = "student"
 
@@ -120,6 +125,38 @@ class HistoryStore:
                 attempt_id=result.attempt_id,
                 result_id=result.id,
                 payload={"overall_score": result.overall_score},
+            ),
+        )
+
+    def append_exam_result(self, student_id: str, result: ExamResult) -> None:
+        """RQ-EXM-027: record a completed exam in the student history.
+
+        Takes an :class:`~ada_sensei.exams.models.ExamResult` structurally, so the
+        history layer does not import the exam package. The exam identity and the
+        0-50/1.0-5.0 grade pair are kept in the payload for instructor review.
+        """
+        self.append_event(
+            student_id,
+            LearningEvent(
+                type="exam_completed",
+                student_id=self._urn(student_id),
+                project_id=result.project_id,
+                exercise_id=result.exercise_id,
+                attempt_id=result.attempt_id,
+                result_id=result.id,
+                payload={
+                    "exam_id": result.exam_id,
+                    "exam_attempt_id": result.exam_attempt_id,
+                    "overall_score": result.overall_score,
+                    "raw_score_50": result.raw_score_50,
+                    "suggested_grade": result.suggested_grade,
+                    "ask_count": result.ask_count,
+                    "allowed_ask_count": result.allowed_ask_count,
+                    "duration_seconds": result.duration_seconds,
+                    "allowed_duration_seconds": result.allowed_duration_seconds,
+                    "report_path": result.report_path,
+                    "not_evaluated": list(result.not_evaluated),
+                },
             ),
         )
 

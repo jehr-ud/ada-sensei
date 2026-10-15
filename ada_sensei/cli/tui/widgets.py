@@ -33,12 +33,40 @@ class SessionFooter(Static):
     Shows the authoritative session metadata supplied by the application layer:
     student name, current score, active AI model, current action, and operation
     status. Unavailable values are rendered as ``—``.
+
+    While an exam is active it also shows the exam elapsed time and the
+    ``/ask`` count. Both are read from the persisted attempt and its event log
+    via ``CommandRouter.exam_status()``; the footer never counts asks or times
+    an exam itself (RQ-EXM-005, RQ-EXM-007, RQ-EXM-031).
     """
 
     EMPTY = "—"
 
     def _fmt(self, value) -> str:
         return f"{value}" if value not in (None, "") else self.EMPTY
+
+    @staticmethod
+    def _mmss(seconds) -> str:
+        seconds = int(seconds)
+        return f"{seconds // 60:02d}:{seconds % 60:02d}"
+
+    @classmethod
+    def _exam_text(cls, status) -> str:
+        if status is None:
+            return ""
+        label = "Exam done" if status.is_completed else "Exam"
+        elapsed = (
+            cls._mmss(status.duration_seconds)
+            if status.duration_seconds is not None
+            else cls.EMPTY
+        )
+        if status.allowed_duration_seconds is not None:
+            allowed = cls._mmss(status.allowed_duration_seconds)
+            elapsed = f"{elapsed}/{allowed}"
+        asks = str(status.ask_count)
+        if status.allowed_ask_count is not None:
+            asks = f"{asks}/{status.allowed_ask_count}"
+        return f"{label} {elapsed} | Asks {asks}"
 
     def update_session(
         self,
@@ -48,6 +76,7 @@ class SessionFooter(Static):
         model: str | None,
         action: str | None,
         status: str | None = None,
+        exam=None,
     ) -> None:
         parts = [
             f"Student: {self._fmt(student)}",
@@ -57,6 +86,9 @@ class SessionFooter(Static):
         ]
         if status:
             parts.append(f"{self._fmt(status)}")
+        exam_text = self._exam_text(exam)
+        if exam_text:
+            parts.append(exam_text)
         self.update(" | ".join(parts))
 
 

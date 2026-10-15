@@ -1,134 +1,396 @@
 # Design
 
-## Components
+## 1. Architecture
+
+```text
+                         EvaluationEngine
+                                │
+          ┌─────────────────────┼─────────────────────┐
+          │                     │                     │
+          ▼                     ▼                     ▼
+ AndroidProjectAnalyzer     EvidenceCollector     RequirementMatcher
+                                  │
+                    ┌─────────────┼─────────────┐
+                    │             │             │
+                    ▼             ▼             ▼
+               GradleTool      TestTool    StaticAnalysisTool
+                    │             │             │
+                    └─────────────┴─────────────┘
+                                  │
+                                  ▼
+                           EvidenceContext
+                                  │
+                         ┌────────┴────────┐
+                         │                 │
+                         ▼                 ▼
+                   RubricEngine     EvaluationAgent
+                         │                 │
+                         └────────┬────────┘
+                                  ▼
+                          EvaluationResult
+                                  │
+                              ResultStore
+```
+
+`EvaluateAction` is an orchestration layer over this engine. It owns the
+`/evaluate` workflow, confirmation policy, exercise resolution, and persistence
+integration. The reusable engine does not own CLI/TUI concerns.
+
+## 2. Core Components
+
+### EvaluationEngine
+
+Conceptual interface:
+
+```python
+class EvaluationEngine:
+    def collect_evidence(
+        self,
+        project: ProjectContext,
+        exercise: Exercise | None,
+        execution_policy: EvaluationExecutionPolicy,
+    ) -> EvidenceContext:
+        ...
+
+    def evaluate(
+        self,
+        evidence: EvidenceContext,
+        rubric: RubricDefinition,
+        context: EvaluationContext,
+    ) -> EvaluationResult:
+        ...
+```
+
+The exact implementation language/API may follow the foundation conventions.
+
+### AndroidProjectAnalyzer
+
+Read-only inspection of:
+
+- modules;
+- source directories;
+- Gradle configuration;
+- manifests;
+- Compose usage;
+- architecture-relevant structure.
+
+### GradleTool
+
+Responsible for:
+
+- wrapper discovery;
+- build/compile;
+- unit-test execution;
+- command timeouts;
+- subprocess result capture.
+
+Default timeout remains 600 seconds unless overridden by foundation policy.
+
+### TestTool
+
+Collects unit-test reports and associates test evidence with requirements when
+traceable.
+
+It does not execute `connectedAndroidTest` by default.
+
+### StaticAnalysisTool
+
+Runs:
+
+```text
+./gradlew lint
+./gradlew detekt
+```
+
+and parses findings into evidence records preserving:
+
+```text
+ERROR | WARNING | INFO
+```
+
+### RequirementMatcher
+
+Maps evidence to `req://` requirement identifiers and records unmatched evidence.
+
+It is independently callable by higher-level workflows.
+
+### EvidenceContext
+
+A workflow-neutral representation containing:
+
+```text
+project evidence
+build evidence
+test evidence
+lint evidence
+detekt evidence
+structure evidence
+requirement mappings
+limitations
+```
+
+The context SHALL preserve provenance for each evidence item.
+
+### RubricEngine
+
+Contains scoring mechanics but not a hard-coded workflow rubric.
+
+Conceptual input:
+
+```text
+RubricDefinition
++
+CriterionScores
++
+EvidenceStatus
+```
+
+Conceptual output:
+
+```text
+ScoreBreakdown
+overall_score_0_100
+evaluated_dimensions
+not_evaluated_dimensions
+```
+
+### RubricDefinition
+
+```text
+RubricDefinition
+├── id
+├── version
+├── dimensions[]
+│   ├── id
+│   ├── weight
+│   └── subcriteria[]
+├── score_scale
+└── evidence_policy
+```
+
+The definition must validate:
+
+- unique dimension ids;
+- non-negative weights;
+- top-level weight sum = 1.0;
+- subcriteria weights = 1.0 when explicitly defined.
+
+## 3. Default Evaluate Rubric
+
+The default rubric is versioned independently:
+
+```text
+evaluate-default:v1
+```
+
+```text
+functional_requirements = 0.40
+tests                  = 0.20
+code_quality           = 0.15
+architecture           = 0.15
+android_practices      = 0.10
+```
+
+`EvaluateAction` always resolves this rubric unless a future explicit evaluate
+configuration mechanism is introduced.
+
+Other workflows cannot mutate this definition.
+
+## 4. Evidence Flow
+
+```text
+Project + Exercise + ExecutionPolicy
+                │
+                ▼
+        EvaluationEngine
+                │
+        ┌───────┴────────┐
+        ▼                ▼
+  deterministic       requirement
+     tools             matching
+        │                │
+        └───────┬────────┘
+                ▼
+         EvidenceContext
+                │
+                ▼
+        EvaluationAgent
+                │
+                ▼
+      structured interpretation
+                │
+                ▼
+          schema validation
+          /                   valid          invalid
+         │              │
+         │          retry (max 3 total)
+         │              │
+         └───────┬──────┘
+                 ▼
+          RubricEngine
+                 │
+                 ▼
+      deterministic final score
+```
+
+The final score is computed from validated evidence and criterion scores. An LLM
+overall score, if returned, is informational and SHALL NOT replace the computed
+score.
+
+## 5. Structured LLM Contract
+
+The evaluation agent SHALL return a schema-conformant structure containing, at
+minimum:
+
+```text
+dimension assessments
+criterion assessments
+evidence references
+strengths
+weaknesses
+limitations
+recommendations
+next activity
+```
+
+Each claim about the project must reference available evidence where applicable.
+
+Parsing behavior:
+
+```text
+attempt 1 → parse + validate
+       ↓ invalid
+attempt 2 → parse + validate
+       ↓ invalid
+attempt 3 → parse + validate
+       ↓ invalid
+explicit structured-output failure
+```
+
+No malformed result is accepted silently.
+
+## 6. Confirmation Flow
 
 ```text
 EvaluateAction
-    │  (requires user confirmation before Gradle tasks)
-    ├── AndroidProjectAnalyzer      # structure, modules, source files (read-only)
-    ├── GradleTool                  # build + SubprocessRunner + discovery
-    ├── TestTool                    # unit test reports collector
-    ├── StaticAnalysisTool          # Android Lint + detekt (via wrapper)
-    ├── RequirementMatcher          # evidence ↔ req:// ids (ExerciseStore)
-    ├── Rubric                      # 5 dimensions, weights, 0–4 scale, deterministic score
-    ├── ResultStore                 # persist result://<uuid> bound to attempt
-    └── EvaluationAgent             # LLM structured interpretation
+     │
+     ├── project inspection
+     │
+     ├── needs Gradle?
+     │
+     └── confirmation
+            │
+        ┌───┴───┐
+        no      yes
+        │        │
+      abort      ▼
+              GradleTool
 ```
 
-## Evidence Model (001-foundation)
+In non-interactive execution:
 
 ```text
-Evidence
-- source: build | test | lint | detekt | file | llm
-- type: compilation | unit_test | android_lint | detekt | structure | requirement
-- severity: error | warning | info | null   # static-analysis findings
-- status: pass | fail | skipped | missing
-- message, file, line, command
+--yes present → proceed
+--yes absent  → abort before Gradle
 ```
 
-## Execution Scope (ADR-016)
+## 7. Result Persistence
 
 ```text
-inspect project            (no confirmation needed)
-→ confirm Gradle execution (RQ-CLI-014)
-→ ./gradlew compile/test    unit tests
-→ ./gradlew lint            Android Lint
-→ ./gradlew detekt          detekt
-connectedAndroidTest NOT run (reserved: --instrumented)
+EvaluationResult
+      │
+      ▼
+ResultStore.write(result://uuid)
+      │
+      ├── AttemptStore.mark_completed(attempt_id)
+      │
+      └── HistoryStore.append_evaluation(...)
 ```
 
-## Evidence Flow
+Persistence happens outside the student source tree.
+
+Failures are explicit.
+
+## 8. Reuse by 007-examine
+
+The exam workflow should use:
 
 ```text
-Exercise (req:// ids, evaluation_criteria) + session attempt
-        +
-Project Evidence
-        ↓
-RequirementMatcher   # match evidence records to requirement ids
-        ↓
-Evaluation Context   # rubric + matched evidence, bounded by ContextManager
-        ↓
-LLM structured call  # schema for EvaluationResult (max 3 attempts)
-        ↓
-deterministic score computation (Rubric)   # overrides any LLM overall claim
-        ↓
-ResultStore.write(result://<uuid>)   # attempt_id + exercise_id bound
+007-examine
+     │
+     ▼
+EvaluationEngine
+     ├── project inspection
+     ├── Gradle/test evidence
+     ├── Lint/Detekt evidence
+     ├── RequirementMatcher
+     └── RubricEngine
 ```
 
-## Static Analysis Tooling (ADR-012)
-
-- **detekt** → `./gradlew detekt`; parse report into Evidence records
-  (`source=detekt`, `severity` from the finding: ERROR/WARNING/INFO).
-- **Android Lint** → `./gradlew lint`; parse report into Evidence records
-  (`source=lint`, `severity` from the finding).
-- Both run through `GradleTool` with subprocess timeouts (default 600 s). If a
-  task or tool is unavailable, `Evidence(status=missing)` + `ToolUnavailable`
-  is emitted (RQ-FND-019), never silence.
-- Findings feed the rubric as evidence; they are not automatically converted
-  into grade deductions (ADR-012 / RQ-EVA-015).
-
-## Requirement Matching
-
-Given an exercise, `evaluation_criteria` provide `requirement_id`, `dimension`,
-and normalized `weight` subweights. For generated exercises, these criteria
-belong to the `functional_requirements` dimension and their subweights sum to
-1.0. The matcher attaches:
-- build/compile success → functional-requirements dimension (where mapping is
-  explicit via requirement ids or file paths);
-- passed/failed unit tests referencing requirement ids or test names → tests +
-  functional mapping when explicit;
-- lint/detekt findings with file/line and severity → Android practices / code
-  quality dimensions;
-- structural findings → architecture / code quality.
-
-Unmatched evidence is still recorded in the result.
-
-## Rubric and Scoring (ADR-017)
+But it supplies its own:
 
 ```text
-Top-level dimensions:
-  functional_requirements  0.40
-  tests                    0.20
-  code_quality             0.15
-  architecture             0.15
-  android_practices        0.10
+ExamRubricDefinition
+ExamAttempt context
+Exam metrics
+Exam report generator
 ```
 
-For an exercise, functional `evaluation_criteria` use normalized subweights
-within the fixed functional dimension. Their subweights must sum to 1.0.
-Therefore the functional dimension contributes at most 40% to the final score.
+Therefore:
 
 ```text
-functional_dimension_score =
-    Σ(functional_subweight_i × requirement_score_i)
+/evaluate
+    → EvaluateAction
+    → EvaluationEngine
+    → evaluate-default:v1
 
-overall =
-    100 × Σ(top_level_weight_D × dimension_score_D / 4)
-          / Σ(top_level_weight_D for evaluated dimensions)
+/exam-init
+    → ExamineAction
+    → EvaluationEngine
+    → exam-default:v1
 ```
 
-The rubric validates that top-level weights sum to 1.0 and functional
-subweights sum to 1.0 when explicitly supplied. Invalid configurations are
-rejected. Functional subweights never add extra global score weight.
+No action calls the other action internally.
 
-Deterministic evidence is scored before LLM interpretation. The LLM may provide
-qualitative interpretation but cannot change deterministic evidence or the
-recomputed overall score.
+## 9. Package Direction
 
-## Result Persistence
+Suggested implementation boundary:
 
-`EvaluationResult` is written via `ResultStore` (`result://<uuid>`) and is bound
-to the session `attempt_id` (and `exercise_id` when present). After successful
-evaluation, `AttemptStore.mark_completed(attempt_id)` marks the attempt
-completed and `HistoryStore.append_evaluation(...)` records the outcome for
-future learning recommendations. Persistence failures are explicit.
+```text
+actions/evaluate.py
+evaluation/
+    engine.py
+    evidence.py
+    matcher.py
+    rubric.py
+    models.py
+    agent.py
+tools/
+    gradle.py
+    tests.py
+    static_analysis.py
+```
 
-## Safety
+The exact package location may follow the final foundation package conventions.
 
-Write operations are limited to temporary build/test artifacts inside the
-project (`build/`, `.gradle/`) created only after user confirmation, plus the
-`ResultStore` data directory. Source files are never modified.
-## Non-interactive confirmation
+The reusable evaluation package MUST NOT import CLI/TUI modules.
 
-In non-interactive execution, Gradle tasks require the explicit `--yes`
-confirmation override; otherwise evaluation aborts before Gradle execution.
+## 10. Testing Strategy
+
+Test the reusable engine independently from `EvaluateAction`.
+
+Required categories:
+
+- evidence collection;
+- requirement matching;
+- rubric validation;
+- deterministic scoring;
+- structured output validation;
+- retry limit;
+- evidence provenance;
+- evaluate rubric isolation;
+- external workflow reuse;
+- persistence;
+- Gradle confirmation;
+- build failure;
+- missing-tool behavior.

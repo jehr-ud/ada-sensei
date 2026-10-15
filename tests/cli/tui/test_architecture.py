@@ -44,7 +44,13 @@ def test_textual_imports_confined_to_tui():
 def test_non_tui_packages_do_not_import_textual():
     for pkg in NON_TUI_PACKAGES:
         target = ROOT / pkg
-        files = [target] if target.is_file() else list(target.rglob("*.py")) if target.exists() else []
+        files = (
+            [target]
+            if target.is_file()
+            else list(target.rglob("*.py"))
+            if target.exists()
+            else []
+        )
         for py in files:
             text = py.read_text(encoding="utf-8")
             assert "textual" not in text, f"{py.relative_to(ROOT)} imports textual"

@@ -21,6 +21,8 @@ _ROUTING: dict[str, str] = {
     "answer": "answers",
     "learning": "learning",
     "session": "sessions",
+    "exam_attempt": "exam_attempts",
+    "exam_event": "exam_events",
 }
 
 
