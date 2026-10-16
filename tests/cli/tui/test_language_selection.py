@@ -308,6 +308,32 @@ def mounted_seeded(tmp_path, fn, locale: str = "en-US"):
     return asyncio.run(_run())
 
 
+def test_selecting_language_opens_list_without_enter(tmp_path):
+    """RQ-LNG-015: picking Change language opens the list automatically."""
+    from ada_sensei.locale.models import LOCALE_OPTIONS
+    from textual.widgets import Select
+
+    async def check(app, pilot):
+        assert app._pending_language is False
+        sel = app.query_one("#action-select", Select)
+        sel.value = "language"
+        await pilot.pause()
+        # No Enter pressed anywhere: the shared list is already open.
+        assert app._pending_language is True
+        widget = app.query_one("#language-list", LanguageList)
+        assert widget.is_open
+        assert [code for code, _ in widget.selection.options] == [
+            code for code, _ in LOCALE_OPTIONS
+        ]
+        text = str(widget.renderable)
+        assert "Select language / Selecciona el idioma" in text
+        assert "Español" in text and "English" in text
+        assert widget.selection.focused_locale == "en-US"  # saved focused
+        return True
+
+    assert mounted_seeded(tmp_path, check, locale="en-US")
+
+
 def test_selector_enter_opens_same_list(tmp_path):
     """RQ-LNG-015: Enter on the focused selector opens LanguageList."""
     from ada_sensei.locale.models import LOCALE_OPTIONS
@@ -319,6 +345,8 @@ def test_selector_enter_opens_same_list(tmp_path):
         assert isinstance(sel, ActionSelector)
         sel.value = "language"
         await pilot.pause()
+        # Auto-opened on selection; Enter on the focused selector keeps it.
+        assert app.query_one("#language-list", LanguageList).is_open
         sel.focus()
         await pilot.pause()
         await pilot.press("enter")

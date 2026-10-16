@@ -298,6 +298,8 @@ class LanguageList(Static):
         self.styles.display = "block"
         self.update(self._render_text())
         with contextlib.suppress(Exception):
+            self.scroll_visible()
+        with contextlib.suppress(Exception):
             self.focus()
 
     def hide(self) -> None:

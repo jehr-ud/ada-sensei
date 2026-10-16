@@ -808,6 +808,11 @@ class AdaSenseiTUI(App):
         self._apply_action_prompt()
         self._refresh_guide()
         self.refresh_footer()
+        if str(event.value) == "language" and self._language_selection is None:
+            # RQ-LNG-015: picking Change language opens the shared list
+            # immediately — no extra Enter needed. The list takes focus.
+            self._start_language_flow()
+            return
         self._focus_input()
 
     @on(ActionSelector.LanguageRequested)

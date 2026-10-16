@@ -79,15 +79,16 @@ Automated tests SHALL verify:
 
 Regression: activating `Change language` from the action selector only updated
 the action description/input area and never opened the language list, because
-the base dropdown consumes Enter for its overlay. The fix SHALL intercept Enter
-while the selector is focused by matching the committed option's stable action
-id (`language`), never its localized label, and open the exact same
-`LanguageList` widget and selection state machine used by first-run welcome
-(same options, cursor, hints, Up/Down/Enter/Esc/q behavior). Opening or
-cancelling from the selector SHALL NOT dispatch ordinary free text to
-TeacherAgent. Acceptance: dedicated regression tests prove selector-Enter
-opening, shared-widget reuse, saved-locale focus, confirm/cancel semantics,
-and no agent dispatch; existing welcome selection still works.
+the base dropdown consumes Enter for its overlay. Selecting the `Change
+language` action SHALL open the exact same `LanguageList` widget and selection
+state machine used by first-run welcome immediately, without requiring an
+extra Enter (same options, cursor, hints, Up/Down/Enter/Esc/q behavior).
+The fix intercepts by matching the committed option's stable action id
+(`language`), never its localized label. Opening or cancelling from the
+selector SHALL NOT dispatch ordinary free text to TeacherAgent. Acceptance:
+dedicated regression tests prove automatic opening on selection, shared-widget
+reuse, saved-locale focus, confirm/cancel semantics, and no agent dispatch;
+existing welcome selection still works.
 
 ## Design
 

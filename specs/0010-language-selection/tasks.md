@@ -46,11 +46,12 @@ of new non-E501 findings. No duplicate subsystem: persistence via
 - [x] Mark tasks complete only when implementation and test evidence exist.
 
 Evidence (RQ-LNG-015): root cause — base `Select` consumes Enter for its
-overlay, so Enter on the focused selector never submitted. `ActionSelector`
-(`cli/tui/widgets.py`) intercepts Enter only when the committed value is the
-stable id `language` and posts `LanguageRequested`; `AdaSenseiTUI` opens the
-shared list (`cli/tui/app.py`). Other values keep native behavior; the
-input-area path is unchanged. Tests: 5 new in
-`tests/cli/tui/test_language_selection.py` (open, stable-id-under-es-labels,
-native-behavior preserved, full keyboard confirm with state preservation,
-no-dispatch spy); suite results below.
+overlay, so Enter on the focused selector never submitted. Selecting the
+`Change language` action now auto-opens the shared list immediately
+(`Select.Changed` → same `_start_language_flow`); additionally `ActionSelector`
+(`cli/tui/widgets.py`) intercepts a later Enter only when the committed value
+is the stable id `language` and posts `LanguageRequested`. Other values keep
+native behavior; the input-area path is unchanged. Tests: 6 selector tests in
+`tests/cli/tui/test_language_selection.py` (auto-open without Enter, Enter
+opens, stable-id-under-es-labels, native-behavior preserved, full keyboard
+confirm with state preservation, no-dispatch spy); suite results below.
