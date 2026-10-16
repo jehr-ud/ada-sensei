@@ -34,6 +34,9 @@ class AgentContext:
     current_stage_id: str | None
     locale: str
     fallback_locale: str = "en-US"
+    #: Localized stage objective for stage-aware responses (spec 0011 §4);
+    #: ``None`` when the stage or catalog is unavailable — never invented.
+    stage_objective: str | None = None
     assistance_level: str = "guiding_question"
     recent_summary: str = ""
     evidence_refs: list[str] = field(default_factory=list)

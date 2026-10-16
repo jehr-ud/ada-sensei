@@ -197,6 +197,20 @@ class ExamineAction:
             self._docs = ExamDocsWriter(self._project_path())
         return self._docs
 
+    def _active_locale(self, student_id: str) -> str:
+        """Active locale snapshot for the attempt (spec 0010, RQ-LNG-013)."""
+        from ..locale.models import FALLBACK_LOCALE
+        from ..locale.service import LocaleService
+        from ..locale.store import LocalePreferenceStore
+
+        try:
+            svc = LocaleService(
+                LocalePreferenceStore(self.services.data_dir)
+            )
+            return svc.get_or_prompt_locale(student_id) or FALLBACK_LOCALE
+        except Exception:  # noqa: BLE001 - snapshot must never break start
+            return FALLBACK_LOCALE
+
     @property
     def docs(self) -> ExamDocsWriter:
         return self._resolve_docs()
@@ -219,6 +233,7 @@ class ExamineAction:
             project_root=self._project_path(),
             exercise_id=inp.exercise_id or self.services.context.current_exercise_id,
             attempt_id=self.services.context.attempt_id or None,
+            locale=self._active_locale(student_id),
         )
         # The session now knows which attempt is live, so `/ask` is attributed to
         # it without the student restating the id (RQ-EXM-001).
@@ -458,6 +473,10 @@ class ExamineAction:
             score_calculation=calculation,
             raw_score_50=calculation.raw_score_50,
             suggested_grade=calculation.suggested_grade,
+            # Snapshot locale wins over the current profile locale so the
+            # report stays consistent when the language changed mid-exam
+            # (spec 0010, RQ-LNG-013).
+            locale=attempt.locale or self._active_locale(attempt.student_id),
         )
 
     # -- resolution -------------------------------------------------------

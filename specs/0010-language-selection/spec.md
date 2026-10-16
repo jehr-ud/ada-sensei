@@ -1,96 +1,95 @@
 # 0010 — Language Selection and Localization
 
 ## Status
-Proposed specification. This spec is the source of truth for selecting and applying the user's language across ADA Sensei.
+Specification update: interactive language selector for the existing CLI/TUI action menu.
 
 ## Purpose
-Allow each student to choose **Spanish** or **English** and keep all student-facing ADA Sensei interactions in the selected language, including onboarding, learning stages, agent responses, assessment feedback, and examination reports.
+Allow a student to change the ADA Sensei interface language directly from the action selector. When the student highlights and activates `Change language`, ADA Sensei SHALL display the supported languages as a navigable list. The student SHALL be able to move the cursor, choose a language, and confirm the choice without typing a locale code.
 
-## Scope
-- Supported locales: `es-CO` (Spanish) and `en-US` (English).
-- First-run language selection before the welcome/onboarding flow.
-- Persist the preference per local student profile.
-- Allow changing language from settings and the welcome screen.
-- Localize stage catalog, rubrics, progression feedback, CLI/TUI labels, agent prompts, and generated reports.
-- Preserve stable machine identifiers and language-neutral enums.
+## Supported locales
+- `es-CO`, displayed as **Español**.
+- `en-US`, displayed as **English**.
 
-Out of scope:
-- Automatic translation of student source code, identifiers, or external project files.
-- Adding other languages in this version.
-- Using the LLM as the sole source of UI translations.
+The visible names are localized/product labels; the locale codes remain stable internal identifiers.
 
-## User stories
-1. As a new student, I can choose Spanish or English before starting.
-2. As a returning student, ADA Sensei uses my saved language without asking again.
-3. I can change language at any time without losing my stage, attempts, evidence, or exam history.
-4. The welcome screen explains ADA Sensei's objective, learning stages, and the options to take a diagnostic or select a starting stage in the selected language.
-5. The same stage, rubric, and progression policy can be rendered in either language without changing IDs or scoring rules.
+## User story
+As a student using the terminal interface, when I select `Change language`, I see the available languages in a selectable list, can move the cursor with the keyboard, and can confirm my choice. The interface then changes language and preserves my learning progress.
 
 ## Requirements
 
 ### RQ-LNG-001 — Supported languages
-The application SHALL support `es-CO` and `en-US`. The visible selector SHALL label them as `Español` and `English`.
+The application SHALL support `es-CO` and `en-US`, displayed as `Español` and `English`.
 
 ### RQ-LNG-002 — First-run selection
-If no language preference exists, the application SHALL display a language selection screen before the welcome flow. The student must explicitly choose a language to continue. A configurable default may be preselected, but it must not be silently treated as the user's choice.
+If no language preference exists, show a language-selection screen before onboarding. The student must explicitly confirm a language to continue.
 
-### RQ-LNG-003 — Persistence
-The selected locale SHALL be stored in the student profile/settings. Restarting ADA Sensei SHALL preserve the choice.
+### RQ-LNG-003 — Persist preference
+Persist the selected locale, source, and update timestamp in the existing student profile/settings. The preference SHALL survive application restart.
 
-### RQ-LNG-004 — Change language
-The student SHALL be able to change the locale from the welcome screen and settings. Changing locale SHALL NOT reset stage progress, mastery records, attempts, exam history, or evidence.
+### RQ-LNG-004 — Change language from action selector
+When the student activates `Change language`, the application SHALL enter a dedicated language-selection state/screen. It SHALL NOT merely highlight the action or return to a generic prompt.
 
-### RQ-LNG-005 — Localization coverage
-All student-facing static text SHALL be available in both supported languages, including:
-- welcome and onboarding;
-- stage titles, objectives, descriptions, learning outcomes, concepts and activities;
-- action selector, input hints, status messages, errors and confirmations;
-- agent explanations, examples, practice prompts and feedback;
-- evaluation criteria, rubric labels, progression outcomes and recommendations;
-- exam prompts, reports and generated PDF labels.
+### RQ-LNG-004b — Selector/welcome parity
+The action-selector flow and the first-run welcome flow SHALL present the same language list: the same supported options from the single locale definition, the same cursor/focus marker, the same visible key hints, and the same confirm/cancel semantics. The welcome flow additionally blocks onboarding until an explicit choice is confirmed; the selector flow returns to the action selector instead.
 
-### RQ-LNG-006 — Configuration files
-The application SHALL load a locale-specific variant of `stages.json`, `stage-rubrics.json`, and `progression-policy.json`, or an equivalent schema that explicitly stores both translations. The active locale MUST be validated against the supported locale list.
+### RQ-LNG-005 — Cursor navigation
+The language list SHALL be keyboard navigable:
+- `Up` / `Down` (or the terminal framework's equivalent) moves the cursor between supported languages.
+- The focused language SHALL be visually distinguishable.
+- `Enter` confirms the focused language.
+- `Esc` / `q` cancels and returns to the action selector without changing the saved locale.
+- If the TUI framework uses different conventions, the interface SHALL show its actual keys visibly.
 
-### RQ-LNG-007 — Stable identifiers
-Changing locale SHALL NOT change `stage_id`, rubric IDs, criterion IDs, challenge IDs, action names, evidence IDs, status enums, score values, weights, or progression thresholds.
+### RQ-LNG-006 — Immediate visible feedback
+After confirmation, persist the locale, refresh the visible interface text (action labels/descriptions, prompts, help, status bar, and messages), and show a confirmation in the newly selected language. The selected language SHALL become active immediately without requiring a restart.
 
-### RQ-LNG-008 — Deterministic fallback
-If a translation is missing, the localization resolver SHALL use the configured fallback locale (`en-US` by default for missing keys) and record a diagnostic. It SHALL NOT silently ask the LLM to invent a translation for critical rubric criteria or scoring rules.
+### RQ-LNG-007 — Preserve learning data
+Changing language SHALL NOT reset or mutate the student's stage, mastery, attempts, learning plan, assessment evidence, evaluation results, or exam history. It SHALL only update locale preference metadata.
 
-### RQ-LNG-009 — Agent instructions
-TeacherAgent SHALL pass the active locale to PlannerAgent, EvaluatorAgent, and TrainerAgent. All user-visible output from all agents SHALL use that locale. Machine-readable keys and enum values SHALL remain language-neutral.
+### RQ-LNG-008 — Localize all student-facing content
+All student-facing static text and agent output SHALL use the selected locale where translations exist, including onboarding, stages, rubrics, action selector, input hints, errors, practice, examples, evaluation feedback, exam prompts, and reports.
 
-### RQ-LNG-010 — Assessment consistency
-Localization SHALL change labels and explanatory text only. It SHALL NOT change scoring algorithms, criterion weights, criticality, evidence requirements, or progression decisions.
+### RQ-LNG-009 — Config and locale validation
+Use the existing locale-aware config/localization loader. Validate the saved or selected locale against supported locale IDs. Do not use translated labels as identifiers.
 
-### RQ-LNG-011 — User-authored content
-The language of student prompts and source code SHALL be preserved. Agents may answer in the selected locale, unless the student explicitly requests another language for a specific answer.
+### RQ-LNG-010 — Stable semantics
+Locale changes SHALL NOT alter stage/rubric/criterion IDs, score values, weights, critical flags, evidence requirements, progression thresholds, or decisions.
 
-### RQ-LNG-012 — Exams and reports
-`exam-init` and `exam-finish` SHALL use the active locale for student-facing messages and reports. The locale used for an exam SHALL be recorded at exam start so the report is consistent even if the profile language later changes.
+### RQ-LNG-011 — Deterministic fallback
+Missing translations SHALL use the documented deterministic fallback and emit diagnostics. Do not ask the LLM to invent critical rubric criteria or scoring rules.
 
-### RQ-LNG-013 — Accessibility and TUI
-The language selector SHALL be keyboard accessible and usable in the CLI/TUI. It SHALL use a short explicit choice (`Español` / `English`) and not depend on device locale availability.
+### RQ-LNG-012 — Agent propagation
+The active locale SHALL be passed through TeacherAgent, PlannerAgent, EvaluatorAgent, and TrainerAgent. Machine-readable fields remain language-neutral.
+
+### RQ-LNG-013 — Exam locale snapshot
+`exam-init` SHALL record the locale used for the attempt; `exam-finish` SHALL use that locale for its report even if the profile locale changes later.
 
 ### RQ-LNG-014 — Tests
 Automated tests SHALL verify:
-- first-run selection is shown when no preference exists;
-- saved locale is loaded on restart;
-- locale can be changed without mutating learning data;
-- all configured stage and rubric IDs remain identical across locales;
-- score and progression decisions are identical for the same evidence in both locales;
-- missing translation fallback is deterministic;
-- exam reports use the locale captured at exam start.
+- The `Change language` action opens the language list.
+- Cursor navigation changes the focused language.
+- Enter saves the selected locale and updates visible text immediately.
+- Escape/cancel preserves the previous locale.
+- The selected locale survives restart.
+- Learning state is unchanged by language selection.
+- Both locales preserve stable IDs and scoring/progression semantics.
+- Exam reports use the locale captured at exam start.
+
+### RQ-LNG-015 — Selector Enter opens the shared language list
+
+Regression: activating `Change language` from the action selector only updated
+the action description/input area and never opened the language list, because
+the base dropdown consumes Enter for its overlay. The fix SHALL intercept Enter
+while the selector is focused by matching the committed option's stable action
+id (`language`), never its localized label, and open the exact same
+`LanguageList` widget and selection state machine used by first-run welcome
+(same options, cursor, hints, Up/Down/Enter/Esc/q behavior). Opening or
+cancelling from the selector SHALL NOT dispatch ordinary free text to
+TeacherAgent. Acceptance: dedicated regression tests prove selector-Enter
+opening, shared-widget reuse, saved-locale focus, confirm/cancel semantics,
+and no agent dispatch; existing welcome selection still works.
 
 ## Design
-
-### Locale values
-Use BCP-47-style locale identifiers:
-- `es-CO`
-- `en-US`
-
-Do not use translated strings as internal identifiers.
 
 ### Preference model
 ```json
@@ -100,67 +99,54 @@ Do not use translated strings as internal identifiers.
   "updated_at": "ISO-8601 timestamp"
 }
 ```
-`locale_source` is metadata and SHALL be one of `student_selection`, `configured_default`, or `migration`.
+`locale_source` SHALL be one of `student_selection`, `configured_default`, or `migration`.
 
-### Resolution
-1. Read the student's saved locale.
-2. If absent, show the selection screen.
-3. Validate the chosen locale against supported locales.
-4. Load the corresponding configuration bundle.
-5. Pass the locale through the TeacherAgent orchestration context.
-6. Render all user-facing text in that locale.
-7. Keep IDs, scoring, and decisions language-neutral.
-
-### Configuration layout
+### Interaction flow
 ```text
-config/
-  i18n/
-    stages.es.json
-    stages.en.json
-    stage-rubrics.es.json
-    stage-rubrics.en.json
-    progression-policy.es.json
-    progression-policy.en.json
+Action selector
+  -> focus "Change language"
+  -> Enter
+  -> Language list:
+       > Español
+         English
+  -> Up/Down to move cursor
+  -> Enter to confirm
+  -> Persist locale
+  -> Refresh localized UI
+  -> Show confirmation in selected language
+  -> Return to action selector (or continue to onboarding if first run)
 ```
-The provided files may use the equivalent naming convention `stages.es.json`, `stages.en.json`, etc. They retain the same structural schema and IDs across locales.
 
-### Welcome flow
-1. If locale is missing, show language selection.
-2. Show the ADA Sensei objective in the selected language.
-3. Show all learning stages in the selected language.
-4. Offer two paths:
-   - `Take initial diagnostic` / `Realizar diagnóstico inicial`
-   - `Choose a starting stage` / `Elegir una etapa inicial`
-5. Selecting a stage does not mark skipped stages as mastered.
+### Cancellation
+Escape/q cancels the flow without writing preference changes. On first run, cancellation SHALL return to the language list or keep onboarding blocked until the student makes an explicit choice; it SHALL not silently assign the configured default as a student choice.
 
-### Agent contract
-Every agent invocation receives:
-```json
-{
-  "locale": "es-CO",
-  "fallback_locale": "en-US"
-}
-```
-Agents must return user-facing text in the requested locale while retaining canonical machine fields such as `READY`, `NOT_READY`, and criterion IDs.
+### Architecture
+Reuse the existing action registry, TUI framework, localization service, locale preference store, and config loader. The UI should invoke a language-selection action/handler; it should not implement persistence or localization logic itself. Avoid a separate hardcoded list in each UI.
 
-## Tasks
-- T001: Add locale preference model and persistence.
-- T002: Add first-run language selector to CLI/TUI.
-- T003: Add settings/welcome language switching.
-- T004: Add locale configuration loader and schema validation.
-- T005: Localize welcome and stage-selection flow.
-- T006: Pass locale through TeacherAgent and all subagent contracts.
-- T007: Localize action prompts, errors, status labels, and help.
-- T008: Localize rubric explanations and progression feedback without changing scoring.
-- T009: Capture locale at `exam-init` and use it in `exam-finish` report.
-- T010: Add parity tests for IDs, weights, gates, and decisions.
-- T011: Add missing-translation diagnostics and fallback tests.
-- T012: Document how to add another locale in the future.
+### Test strategy
+Use the existing TUI interaction test framework or test the language-selection state machine separately. Verify cursor focus, confirmation, cancellation, immediate refresh, persistence, and learning-state invariants.
 
-## Acceptance criteria
-- A new student must choose Spanish or English before seeing onboarding.
-- A returning student sees the saved language.
-- The student can switch language without losing progress.
-- Stage/rubric/policy IDs and scoring behavior are identical across locales.
-- Teacher and all three subagents use the selected language for user-facing content.
-- Exam reports use the language selected when the exam began.
+
+## Regression fix — Reuse the welcome language selector from the action menu
+
+The existing first-run welcome flow already displays the `LanguageList` selector. The `Change language` action MUST open that same interactive selector, not merely change the selected action's input hint or display its description.
+
+### Required behavior
+
+1. When the action selector's current action is `Change language` (stable action id `language`) and the user presses Enter, open the same `LanguageList` UI used during first-run language selection.
+2. The list MUST be visible in the main TUI, with heading `Select language / Selecciona el idioma`, supported options `Español` and `English`, a visible cursor/focus marker, and keyboard hints.
+3. Up/Down moves the language cursor; Enter confirms; Esc/q cancels. Follow the bindings shown by the existing widget.
+4. Initially focus the currently saved locale.
+5. On confirmation, persist the locale, refresh localized UI immediately, and return to the action selector. Preserve student identity, learning progress, selected stage, evaluation history, and exam history.
+6. On cancellation, return to the action selector without changing the saved locale.
+7. Do not dispatch `Change language` as ordinary free text to TeacherAgent or treat the action's description as the language-selection result.
+8. First-run welcome and action-menu entry points MUST use the same widget, locale options registry, and selection state machine. Do not implement a second language selector.
+
+### Acceptance test
+
+With an existing profile and saved locale `en-US`:
+- Select `Change language` in the action selector and press Enter.
+- The language list is visibly rendered, with `English` initially focused.
+- Press Up or Down to change focus and press Enter.
+- The saved locale and visible UI update; the TUI returns to the action selector.
+- Press Esc instead and verify the saved locale remains `en-US`.

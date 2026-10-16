@@ -13,6 +13,8 @@ from ada_sensei.cli.tui.app import AdaSenseiTUI
 from ada_sensei.config import Config
 from ada_sensei.llm.base import LLMClient
 
+from conftest import seed_learning_profile, seed_saved_locale
+
 
 class FakeClient(LLMClient):
     def chat(self, messages, *, model=None, temperature=None):
@@ -81,6 +83,8 @@ def test_selector_evaluate_enter_starts_confirmation_flow(tmp_path):
 
     async def _run():
         async with app.run_test(size=(80, 24)) as pilot:
+            seed_saved_locale(tmp_path, "Ada")
+            seed_learning_profile(tmp_path, "Ada")
             app._resolve_pending_name("Ada")
             await pilot.pause()
             from textual.widgets import Select
@@ -113,6 +117,8 @@ def test_selector_evaluate_enter_no_separate_button(tmp_path):
 
     async def _run():
         async with app.run_test(size=(80, 24)) as pilot:
+            seed_saved_locale(tmp_path, "Ada")
+            seed_learning_profile(tmp_path, "Ada")
             app._resolve_pending_name("Ada")
             await pilot.pause()
             assert len(app.query("#evaluate-btn")) == 0

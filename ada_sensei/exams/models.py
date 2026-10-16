@@ -224,6 +224,10 @@ class ExamAttempt(BaseModel):
     event_ids: list[str] = Field(default_factory=list)
     rubric_ref: str = DEFAULT_EXAM_RUBRIC_REF
     docs_dir: str | None = None
+    #: Locale snapshot captured at exam start (spec 0010, RQ-LNG-013). The
+    #: finish report uses this locale even if the profile locale changes
+    #: later. ``None`` on legacy records → deterministic fallback applies.
+    locale: str | None = None
     #: The only field a completed attempt may still change (RQ-EXM-004).
     administrative_metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -362,6 +366,8 @@ class ExamResult(EvaluationResult):
     suggested_grade: float | None = None
     report_id: str | None = None
     report_path: str | None = None
+    #: Locale snapshot carried from the attempt (spec 0010, RQ-LNG-013).
+    locale: str | None = None
     #: Verbatim label required by RQ-EXM-029.
     grade_disclosure: str = SUGGESTED_GRADE_LABEL
 

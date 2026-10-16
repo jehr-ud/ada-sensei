@@ -10,6 +10,11 @@ from pydantic import BaseModel, field_validator, model_validator
 # Catalog models
 # ---------------------------------------------------------------------------
 
+#: Schema versions accepted for root ``config/`` files (spec 008, RQ-LRN-016).
+#: Unknown versions are rejected with a clear diagnostic instead of being
+#: silently interpreted.
+SUPPORTED_SCHEMA_VERSIONS: tuple[str, ...] = ("1.0.0",)
+
 
 class StageActions(BaseModel):
     learn: list[str] = []
@@ -46,6 +51,16 @@ class StageCatalog(BaseModel):
     stages: list[LearningStage]
     cross_stage_rules: dict[str, Any] = {}
 
+    @field_validator("schema_version")
+    @classmethod
+    def _supported_schema(cls, v: str) -> str:
+        if v not in SUPPORTED_SCHEMA_VERSIONS:
+            raise ValueError(
+                f"unsupported catalog schema_version {v!r}; "
+                f"supported: {list(SUPPORTED_SCHEMA_VERSIONS)}"
+            )
+        return v
+
     @model_validator(mode="after")
     def _validate_catalog(self) -> StageCatalog:
         # No duplicate IDs
@@ -55,6 +70,17 @@ class StageCatalog(BaseModel):
             if sid in seen:
                 raise ValueError(f"duplicate stage id: {sid!r}")
             seen.add(sid)
+        # Stage numbers are unique: ordering is derived from catalog order and
+        # display numbers must not collide.
+        numbers = [s.number for s in self.stages]
+        if len(set(numbers)) != len(numbers):
+            raise ValueError(f"duplicate stage numbers: {numbers!r}")
+        # Default stage must reference an existing stage when set.
+        if self.default_stage_id and self.default_stage_id not in seen:
+            raise ValueError(
+                f"default_stage_id {self.default_stage_id!r} "
+                "does not reference an existing stage"
+            )
         # All prerequisites reference existing stages
         for stage in self.stages:
             for prereq in stage.prerequisites:
@@ -134,6 +160,14 @@ class StageRubric(BaseModel):
             raise ValueError(
                 f"rubric {self.id!r} dimension weights sum to {total:.4f}, expected 1.0"
             )
+        seen: set[str] = set()
+        for dim in self.dimensions:
+            for crit in dim.criteria:
+                if crit.id in seen:
+                    raise ValueError(
+                        f"rubric {self.id!r} has duplicate criterion id: {crit.id!r}"
+                    )
+                seen.add(crit.id)
         return self
 
 
@@ -145,6 +179,16 @@ class RubricCatalog(BaseModel):
     score_scale: dict[str, Any] = {}
     dimension_definitions: list[dict[str, Any]] = []
     rubrics: list[StageRubric]
+
+    @field_validator("schema_version")
+    @classmethod
+    def _supported_schema(cls, v: str) -> str:
+        if v not in SUPPORTED_SCHEMA_VERSIONS:
+            raise ValueError(
+                f"unsupported rubric schema_version {v!r}; "
+                f"supported: {list(SUPPORTED_SCHEMA_VERSIONS)}"
+            )
+        return v
 
     @model_validator(mode="after")
     def _no_duplicate_rubric_ids(self) -> RubricCatalog:
@@ -305,4 +349,5 @@ __all__ = [
     "RubricDimension",
     "StageCatalog",
     "StageRubric",
+    "SUPPORTED_SCHEMA_VERSIONS",
 ]

@@ -1,60 +1,92 @@
-# Design — Learning Path and Mastery
+# Design — Learning Path and Mastery from Root Config
 
 ## Components
 
-- `LearningCatalogLoader`: loads and validates subject catalog JSON.
-- `RubricDefinitionLoader`: loads rubric JSON and validates dimensions/weights.
-- `LearningProfileStore`, `LearningPlanStore`, `MasteryAssessmentStore`.
-- `DiagnosticService`: creates a baseline profile, not a mastery decision.
+- `LearningCatalogLoader`: loads and validates localized stage catalog JSON from root `config/`.
+- `RubricDefinitionLoader`: loads and validates locale-specific rubric JSON.
+- `ProgressionPolicyLoader`: loads and validates the configured policy, using the selected locale path or the repository's documented shared-policy arrangement.
+- `LearningProfileStore`, `LearningPlanStore`, `MasteryAssessmentStore`, and learning-event/progression stores.
+- `DiagnosticService`: establishes a baseline, not a mastery decision.
 - `MasteryAssessmentService`: assembles exit challenge, evidence, and rubric request.
-- `ProgressionPolicyEngine`: deterministic gate evaluation.
+- `ProgressionPolicyEngine`: deterministic gate evaluation using loaded policy values.
 - `LearningPlanner`: selects next stage/activity from prerequisites and evidence.
+- `LocaleResolver`: maps the selected UI locale to the correct config file and localized presentation fields, reusing the existing localization mechanism.
+
+Use existing equivalent components if present; these names describe responsibilities, not a requirement to duplicate classes.
+
+## Configuration layout
+
+Expected files:
+```text
+config/
+  stages.es.json
+  stages.en.json
+  stage-rubrics.es.json
+  stage-rubrics.en.json
+  progression-policy.es.json
+  progression-policy.en.json
+  README.md
+```
+
+Inspect the real files before implementing. If progression policy files differ only in presentation or are semantically identical, the implementation MAY share one language-neutral policy internally, but it must preserve the expected compatibility and document the choice. A locale-specific file must not alter scoring semantics.
+
+## Loading and validation
+
+1. Resolve locale using the existing settings/profile locale (`es-CO` or `en-US`).
+2. Resolve the matching stage catalog and rubric configuration.
+3. Resolve the applicable progression policy.
+4. Parse JSON into typed models.
+5. Validate schema versions, unique IDs, ordering, prerequisite references and acyclic graph, rubric references, rubric dimension weights, score scales, and policy thresholds.
+6. Verify locale parity: stable IDs, stage order, prerequisites, rubric IDs, dimension IDs, criterion IDs, weights, critical flags, thresholds, and policy gates are equivalent across locales.
+7. Fail clearly on invalid required configuration. Do not silently replace it with hardcoded defaults.
+8. Record catalog/rubric/policy identifiers and versions in assessments and decisions.
+
+Do not assume the path is the process working directory. Use the repository's existing config path resolver or a deterministic project-root/config resolver, and test invocation from different working directories.
 
 ## Generic contracts
 
-`LearningStage`: `id`, `order`, `title`, `goal`, `competencies`, `prerequisites`,
-`exit_challenge`, `rubric_id`.
+`LearningStage`: stable `id`, `order`, localized title/goal, competencies, prerequisites, exit challenge, rubric ID.
 
-`MasteryAssessment`: `id`, `student_id`, `project_id`, `stage_id`, `challenge_id`,
-`catalog_version`, `rubric_version`, `policy_version`, `dimension_scores`,
-`criterion_scores`, `evidence_refs`, `limitations`, `created_at`.
+`RubricDefinition`: stable rubric ID/version, dimensions, weights, criteria, critical flags, criterion scale, and configured thresholds.
 
-`ProgressionDecision`: `decision_id`, `student_id`, `from_stage_id`, `to_stage_id`,
-`status` (`READY`, `NOT_READY`, `INSUFFICIENT_EVIDENCE`), `gate_results`,
-`reasons`, `recommended_activity`, `policy_version`, `assessment_id`.
+`ProgressionPolicy`: stable policy ID/version, score scale, gates, retry policy, missing-evidence semantics, assistance policy, and versioned overrides where supported.
 
-Criterion scores are 0–4 or `not_evaluated`; never coerce missing evidence to 0.
-Dimension and overall scores are normalized over evaluated criteria only, but the
-policy's required-evidence gate prevents advancement when a required dimension or
-critical criterion is missing. Implementations must define this normalization
-once and test boundary cases.
+`MasteryAssessment`: ID, student/project/stage IDs, challenge ID, catalog version, rubric version, policy version, dimension and criterion scores, evidence references, limitations, and timestamp.
 
-## Decision algorithm
+`ProgressionDecision`: decision ID, student ID, source/target stage IDs, status, gate results, reasons, recommended activity, policy version, and assessment ID.
 
-1. Validate catalog, rubric, and policy versions.
-2. Collect evidence using the reusable `EvaluationEngine` from `006-evaluate` for
-   project criteria, plus a structured comprehension check for explanation/transfer.
-3. Map evidence to stage criteria; LLM interpretation is explicitly marked and
-   cannot fabricate tool evidence.
-4. Calculate criterion/dimension/overall scores deterministically.
-5. Evaluate each policy gate deterministically.
-6. Persist the assessment and decision before presenting the result.
-7. If ready, offer transition to the next eligible stage; do not change stage until
-   the student confirms if the UI policy requires confirmation.
-8. If not ready, present criterion-level gaps and a targeted practice recommendation.
+Missing criterion evidence is `NOT_EVALUATED`, never coerced to zero. Normalization behavior must be defined once and tested. Required-evidence gates prevent advancement when evidence is incomplete.
 
-## Evidence channels
+## Scoring and decision flow
 
-- project/build/test/static analysis evidence from `006-evaluate`;
-- generated or curated exit challenge outputs;
-- student explanation, prediction, debugging, and code modification;
-- instructor-provided evidence only when catalog policy explicitly supports it.
+1. Load and validate active catalog, rubric, and policy.
+2. Resolve stage by stable ID and rubric by configured reference.
+3. Collect project/build/test/static-analysis evidence using the reusable `006-evaluate` engine where appropriate.
+4. Collect structured comprehension/transfer evidence when required by the loaded policy.
+5. Map evidence to configured criteria; LLM interpretation may assist mapping but cannot fabricate tool evidence.
+6. Calculate scores deterministically using configured weights and scale.
+7. Evaluate all policy gates deterministically.
+8. Persist assessment and decision before presenting results.
+9. If ready, offer transition to next eligible stage; only the authorized progression component commits the stage change.
+10. If not ready or evidence is insufficient, explain criterion-level gaps and recommend targeted practice.
 
-Chat text alone cannot prove construction. Project artifacts alone do not prove
-comprehension; the comprehension check is mandatory by default.
+## Locale behavior
 
-## JSON extensibility
+Locale selects presentation strings and file variants. It does not affect IDs or scoring. If translations are missing, use the documented deterministic fallback and diagnostics. Do not ask an LLM to improvise critical rubric translations.
 
-A new subject adds a catalog and rubrics, not new progression-engine code. JSON
-schema validation checks unique ids, prerequisite references, acyclic graph,
-weights summing to 1.0 per rubric, valid thresholds, and rubric references.
+## Config precedence and lifecycle
+
+The root `config/` directory is the default authoritative source during local development. The loader must use a deterministic root resolver, not rely on the shell's current working directory. If the application packages config resources for deployment, define and test explicit precedence; do not silently let stale packaged copies override root config.
+
+Document whether config is loaded once at startup or refreshed. If reload is supported, validate the new configuration fully before replacing the active in-memory version.
+
+## Tests
+
+- JSON/schema validation and malformed-file errors.
+- Locale parity and stable identifiers.
+- Root path resolution independent of current working directory.
+- Config changes affect stage/rubric/policy behavior without source-code changes.
+- Invalid config never silently falls back to hardcoded business rules.
+- Deterministic scoring, missing evidence, critical gates, and boundary thresholds.
+- Persistence round-trip and version audit.
+- Exam records remain separate from mastery decisions.

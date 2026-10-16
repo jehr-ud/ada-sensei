@@ -380,6 +380,23 @@ class CommandRouter:
         except Exception:  # noqa: BLE001 - GUI must degrade gracefully
             return FALLBACK_LOCALE
 
+    def saved_locale(self) -> str | None:
+        """Persisted locale for the session student, or ``None`` if never chosen.
+
+        Unlike :meth:`current_locale`, this never falls back: first-run flows
+        use it to distinguish "no choice yet" from an explicit selection.
+        """
+        from ..locale.service import LocaleService
+        from ..locale.store import LocalePreferenceStore
+
+        try:
+            store = LocalePreferenceStore(str(self.config.resolved_data_dir))
+            return LocaleService(store).get_or_prompt_locale(
+                self.context.student_id or ""
+            )
+        except Exception:  # noqa: BLE001 - GUI must degrade gracefully
+            return None
+
     def learning_stage(self):
         """Current learning stage resolved from persisted progress (RQ-TUI-036).
 
@@ -393,6 +410,52 @@ class CommandRouter:
             self.context.student_id,
             self.current_locale(),
         )
+
+    def describe_action(self, action_id: str) -> str:
+        """Localized selector guidance for ``action_id`` (spec 0011 §3.1)."""
+        from .action_registry import action_guidance
+
+        return action_guidance(action_id, self.current_locale())
+
+    def suggest_next(
+        self,
+        last_action_id: str | None,
+        last_result: CommandResult | None = None,
+    ) -> Any:
+        """One validated next-action recommendation, or ``None`` (spec 0011 §5).
+
+        Read-only: assembles evidence-grounded context from persisted state
+        and the last outcome; never executes and never mutates progression.
+        """
+        from ..tutoring import assemble_context, recommend_next
+
+        locale = self.current_locale()
+        stage = self.learning_stage()
+        if isinstance(last_result, ErrorResponse):
+            outcome: str | None = "error"
+        elif last_result is None:
+            outcome = None
+        else:
+            outcome = "ok"
+        project_active = bool(self.context.project_id) or (
+            str(getattr(self.config.project, "path", "") or "").strip()
+            not in ("", ".")
+        )
+        exam = self.exam_status()
+        ctx = assemble_context(
+            student_id=self.context.student_id,
+            stage_id=stage.stage_id,
+            stage_number=stage.stage_number,
+            stage_name=stage.stage_name,
+            stage_objective=stage.objective,
+            action_id=last_action_id,
+            locale=locale,
+            project_active=project_active,
+            exam_active=bool(exam is not None and exam.is_active),
+            last_outcome=outcome,
+            last_score=self.last_score(),
+        )
+        return recommend_next(ctx)
 
     def last_score(self) -> float | None:
         """Most recent authoritative evaluation overall score (RQ-TUI-032).
@@ -432,7 +495,7 @@ class CommandRouter:
     # ------------------------------------------------------------------
 
     def _language(self, cmd: LanguageCommand) -> CommandResult:
-        from ..locale.models import SUPPORTED_LOCALES
+        from ..locale.models import LOCALE_LABELS, SUPPORTED_LOCALES
         from ..locale.service import LocaleService
         from ..locale.store import LocalePreferenceStore
 
@@ -448,9 +511,14 @@ class CommandRouter:
 
         try:
             pref = locale_svc.set_locale(student_id, cmd.locale)
-            labels = {"es-CO": "Español", "en-US": "English"}
+            # Confirm in the newly selected language (spec 0011 §6.5).
+            if pref.locale == "es-CO":
+                return MetaResult(
+                    message="Idioma cambiado a Español. "
+                    "Tu progreso no se vio afectado."
+                )
             return MetaResult(
-                message=f"Language changed to {labels.get(pref.locale, pref.locale)}. "
+                message=f"Language changed to {LOCALE_LABELS.get(pref.locale, pref.locale)}. "
                 f"Learning progress is not affected."
             )
         except ValueError:

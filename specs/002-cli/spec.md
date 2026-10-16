@@ -234,8 +234,9 @@ The implementation is complete when:
 ## Onboarding and Student Intent
 
 At first interactive launch, after student identity is established, the TUI SHALL
-show: (a) ADA Sensei's goal, (b) the seven default Android stages from
-`008-learning-path`, and (c) two choices: run an initial diagnostic or choose a
+show: (a) ADA Sensei's goal, (b) all configured stages from the validated
+`008-learning-path` catalog in catalog order, and (c) two choices: run an
+initial diagnostic or choose a
 starting stage. It SHALL also explain the two intents: Study and Examine. The
 student may skip the diagnostic and choose a stage explicitly.
 
@@ -250,3 +251,31 @@ The CLI/TUI SHALL dispatch all student intents through `TeacherAgent` via the
 shared application router. The CLI and TUI remain presentation/routing layers and
 SHALL NOT call Planner/Evaluator/Trainer directly. This applies to direct CLI
 subcommands as well as slash commands and free-text requests.
+
+## Input History Navigation (Up/Down)
+
+The interactive TUI SHALL maintain a session-local history of successfully submitted non-empty user inputs. This history is presentation/session interaction state and SHALL NOT be mixed with authoritative learning records or exam metrics.
+
+When the input area is focused:
+- Pressing **Up** at the first line of the input SHALL recall the previous submitted prompt when history navigation is available.
+- Repeated **Up** presses SHALL navigate to older entries, stopping at the oldest entry.
+- Pressing **Down** while browsing history SHALL navigate toward newer entries.
+- Pressing **Down** past the newest entry SHALL restore the draft that was present when history navigation began and exit history navigation.
+- If the cursor is inside a multiline draft (not at the first line), Up SHALL retain normal text-cursor behavior. Likewise, Down inside a multiline draft SHALL retain normal cursor behavior unless history navigation is already active.
+- A recalled entry SHALL be editable and SHALL NOT execute until the user explicitly presses Enter.
+- History navigation SHALL NOT clear or overwrite the user's in-progress draft; the draft SHALL be restored when the user returns past the newest history item.
+- Empty or whitespace-only submissions SHALL NOT be added to history. Repeated consecutive identical submissions MAY be deduplicated, provided the behavior is consistent and tested.
+- History SHALL be bounded to a configurable or documented maximum to avoid unbounded memory growth.
+- The default scope is the current TUI session. Persisted cross-session history is out of scope unless the repository already has a suitable history service and the implementation reuses it without storing secrets.
+- Slash commands may be included if they were actually submitted by the user, but system-generated messages and assistant responses SHALL NOT be added to input history.
+- History navigation SHALL respect Textual's key handling and must not break Shift+Enter multiline editing, Enter submission, action selection, or global quit/cancel bindings.
+
+### Acceptance scenarios
+
+1. Submit `Explain Compose state`, then focus the empty input and press Up: the input shows `Explain Compose state`, without executing it.
+2. Press Up repeatedly: older submitted inputs are recalled in reverse chronological order.
+3. Press Down: newer inputs are recalled.
+4. Navigate to the newest item and press Down again: the original unsent draft is restored and navigation exits.
+5. Press Up when the caret is not on the first line of a multiline draft and history browsing is inactive: the caret moves normally.
+6. Edit a recalled prompt and press Enter: the edited prompt is submitted through the currently selected action or shared slash-command parser, as applicable.
+7. History navigation does not change the selected action, learning stage, scores, evidence, or exam state.

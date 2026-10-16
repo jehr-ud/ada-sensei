@@ -138,7 +138,12 @@ class CommandParser:
                 instrumented=bool(options.get("instrumented", False)),
             )
         if action == "language":
-            return LanguageCommand(locale=positional[0] if positional else None)
+            from ..locale.selection import parse_language_choice
+
+            raw = positional[0] if positional else None
+            # Accept display labels/numbers as well as codes; unknown input
+            # passes through so the router reports the supported list.
+            return LanguageCommand(locale=parse_language_choice(raw) or raw)
         if action == "learn":
             return LearnCommand(topic=options.get("topic") or (" ".join(positional) or None))
         if action == "diagnose":

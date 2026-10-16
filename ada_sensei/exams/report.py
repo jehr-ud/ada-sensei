@@ -67,6 +67,20 @@ class ExamReportGenerator:
         target.write_bytes(payload)
         return target, report_id
 
+    @staticmethod
+    def _language_line(locale: str | None) -> str:
+        """Report language line from the attempt snapshot (RQ-LNG-013).
+
+        ``Language: Español (es-CO)`` when known, else ``""`` (legacy
+        records without a snapshot render as before).
+        """
+        if not locale:
+            return ""
+        from ..locale.models import LOCALE_LABELS
+
+        label = LOCALE_LABELS.get(locale, locale)
+        return f"Language: {label} ({locale})"
+
     def render_text(self, result: ExamResult) -> str:
         """A plain-text twin of the PDF.
 
@@ -81,6 +95,9 @@ class ExamReportGenerator:
             f"Project: {result.project_id}",
             f"Exam attempt: {result.exam_attempt_id}",
         ]
+        language = self._language_line(result.locale)
+        if language:
+            lines.append(language)
         for heading, body in self._sections(result):
             lines += ["", f"## {heading}", "", body]
         lines += ["", f"_{result.grade_disclosure}_", ""]
@@ -119,6 +136,10 @@ class ExamReportGenerator:
         writer.key_value("Project", result.project_id or "(unknown)")
         writer.key_value("Exam attempt", result.exam_attempt_id or "(unknown)")
         writer.key_value("Report id", report_id)
+        language = self._language_line(result.locale)
+        if language:
+            _, language_value = language.split(": ", 1)
+            writer.key_value("Language", language_value)
         if definition is not None:
             writer.key_value("Statement source", definition.statement_source)
         if result.rubric_ref:

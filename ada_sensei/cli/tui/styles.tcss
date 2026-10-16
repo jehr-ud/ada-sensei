@@ -34,6 +34,21 @@ Screen {
     width: 1fr;
 }
 
+#action-guide {
+    height: 2;
+    min-height: 2;
+    padding: 0 1;
+    color: $text-muted;
+}
+
+#language-list {
+    display: none;
+    height: auto;
+    max-height: 9;
+    border: round $primary;
+    padding: 0 1;
+}
+
 #input {
     width: 1fr;
     height: 7;

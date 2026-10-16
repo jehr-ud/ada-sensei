@@ -18,6 +18,8 @@ from ada_sensei.cli.tui.widgets import SessionFooter
 from ada_sensei.config import Config
 from ada_sensei.llm.base import LLMClient
 
+from conftest import seed_learning_profile, seed_saved_locale
+
 
 class FakeClient(LLMClient):
     def chat(self, messages, *, model=None, temperature=None):
@@ -45,6 +47,8 @@ def mounted(tmp_path, fn, name="Ada"):
         app = make_app(tmp_path)
         async with app.run_test(size=(80, 24)) as pilot:
             if name:
+                seed_saved_locale(tmp_path, name)
+                seed_learning_profile(tmp_path, name)
                 app._resolve_pending_name(name)
             await pilot.pause()
             return await fn(app, pilot)

@@ -33,6 +33,9 @@ class ActionDefinition:
     requires_text: bool = False
     help_es: str = ""
     help_en: str = ""
+    #: What happens after activation (spec 0011 §3.1, one short sentence).
+    outcome_es: str = ""
+    outcome_en: str = ""
 
     def label(self, locale: str | None) -> str:
         if locale == "es-CO":
@@ -53,6 +56,12 @@ class ActionDefinition:
         text = self.help_es if locale == "es-CO" else self.help_en
         return text or self.description(locale)
 
+    def outcome(self, locale: str | None) -> str:
+        """Localized one-sentence outcome: what happens after activation."""
+        if locale == "es-CO":
+            return self.outcome_es or self.outcome_en
+        return self.outcome_en or self.outcome_es
+
 
 _ACTIONS: list[ActionDefinition] = [
     ActionDefinition(
@@ -67,6 +76,8 @@ _ACTIONS: list[ActionDefinition] = [
         requires_text=True,
         help_es="Uso: /ask <pregunta>. Requiere escribir una pregunta.",
         help_en="Usage: /ask <question>. Requires a question.",
+        outcome_es="Recibirás una explicación adaptada a tu etapa.",
+        outcome_en="You will receive an explanation adapted to your stage.",
     ),
     ActionDefinition(
         id="practice",
@@ -79,6 +90,8 @@ _ACTIONS: list[ActionDefinition] = [
         slash="/practice",
         help_es="Uso: /practice [--topic T] [--difficulty D]. El tema es opcional.",
         help_en="Usage: /practice [--topic T] [--difficulty D]. Topic is optional.",
+        outcome_es="Recibirás un ejercicio corto de tu etapa para resolver.",
+        outcome_en="You will receive a short exercise from your stage to solve.",
     ),
     ActionDefinition(
         id="examples",
@@ -92,6 +105,8 @@ _ACTIONS: list[ActionDefinition] = [
         requires_text=True,
         help_es="Uso: /examples <tema>. Requiere un tema.",
         help_en="Usage: /examples <topic>. Requires a topic.",
+        outcome_es="Verás un ejemplo comentado del tema.",
+        outcome_en="You will see a commented example of the topic.",
     ),
     ActionDefinition(
         id="evaluate",
@@ -106,6 +121,8 @@ _ACTIONS: list[ActionDefinition] = [
         requires_project=True,
         help_es="Uso: /evaluate [--yes]. Requiere proyecto activo y confirmación.",
         help_en="Usage: /evaluate [--yes]. Requires active project and confirmation.",
+        outcome_es="El análisis se ejecutará tras tu confirmación y verás el puntaje.",
+        outcome_en="The analysis runs after your confirmation and you will see the score.",
     ),
     ActionDefinition(
         id="exam-init",
@@ -120,6 +137,8 @@ _ACTIONS: list[ActionDefinition] = [
         requires_text=True,
         help_es="Uso: /exam-init <enunciado>. Requiere confirmación.",
         help_en="Usage: /exam-init <statement>. Requires confirmation.",
+        outcome_es="El examen comenzará tras tu confirmación; sigue las instrucciones.",
+        outcome_en="The exam starts after your confirmation; follow the instructions.",
     ),
     ActionDefinition(
         id="exam-finish",
@@ -133,6 +152,8 @@ _ACTIONS: list[ActionDefinition] = [
         requires_confirmation=True,
         help_es="Uso: /exam-finish. Requiere un examen activo y confirmación.",
         help_en="Usage: /exam-finish. Requires an active exam and confirmation.",
+        outcome_es="El examen se calificará tras tu confirmación y verás el informe.",
+        outcome_en="The exam is scored after your confirmation and you will see the report.",
     ),
     ActionDefinition(
         id="learn",
@@ -145,6 +166,8 @@ _ACTIONS: list[ActionDefinition] = [
         slash="/learn",
         help_es="Uso: /learn [tema]. Sin tema usa tu etapa actual.",
         help_en="Usage: /learn [topic]. Without a topic uses your current stage.",
+        outcome_es="Verás los conceptos clave y actividades sugeridas de tu etapa.",
+        outcome_en="You will see the key concepts and suggested activities for your stage.",
     ),
     ActionDefinition(
         id="diagnose",
@@ -157,6 +180,8 @@ _ACTIONS: list[ActionDefinition] = [
         slash="/diagnose",
         help_es="Uso: /diagnose [etapa]. Sin etapa usa tu etapa actual.",
         help_en="Usage: /diagnose [stage]. Without a stage uses your current stage.",
+        outcome_es="Recibirás preguntas breves para detectar fortalezas y vacíos.",
+        outcome_en="You will receive brief questions to spot strengths and gaps.",
     ),
     ActionDefinition(
         id="language",
@@ -169,6 +194,8 @@ _ACTIONS: list[ActionDefinition] = [
         slash="/language",
         help_es="Uso: /language <es-CO|en-US>. No altera tu progreso.",
         help_en="Usage: /language <es-CO|en-US>. Does not alter progress.",
+        outcome_es="Elegirás Español o English; la interfaz se actualizará sin perder tu progreso.",
+        outcome_en="You will choose Español or English; the interface updates without losing progress.",
     ),
     ActionDefinition(
         id="help",
@@ -181,6 +208,8 @@ _ACTIONS: list[ActionDefinition] = [
         slash="/help",
         help_es="Uso: /help. Muestra esta ayuda.",
         help_en="Usage: /help. Shows this help.",
+        outcome_es="Verás la lista de acciones y ejemplos de uso.",
+        outcome_en="You will see the action list and usage examples.",
     ),
 ]
 
@@ -270,8 +299,29 @@ def check_availability(
     return True, ""
 
 
+def action_guidance(action_id: str, locale: str | None) -> str:
+    """Localized selector guidance for ``action_id`` (spec 0011 §3.1).
+
+    One or two short sentences: what the action does, what the student should
+    provide, and what happens after activation — plus how to activate it.
+    Values come from registry metadata only; nothing is hardcoded per caller.
+    """
+    from ..locale.ui_strings import get_ui_string
+
+    action = get_action(action_id)
+    if action is None:
+        return get_ui_string("activation_hint", locale)
+    parts = [action.description(locale)]
+    outcome = action.outcome(locale)
+    if outcome and outcome not in parts[0]:
+        parts.append(outcome)
+    parts.append(get_ui_string("activation_hint", locale))
+    return " ".join(p for p in parts if p)
+
+
 __all__ = [
     "ActionDefinition",
+    "action_guidance",
     "action_ids",
     "build_command",
     "check_availability",

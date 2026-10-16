@@ -11,6 +11,7 @@ from ..learning.stores import (
     LearningProfileStore,
 )
 from ..locale.service import LocaleService
+from ..tutoring import assemble_context, recommend_next
 from ..urns import URN
 from .contracts import (
     AgentContext,
@@ -96,6 +97,7 @@ class TeacherAgent:
         # 2. Load learning profile for stage context
         profile = self._profiles.get(student_id)
         current_stage_id = profile.current_stage_id if profile else None
+        stage_objective = self._stage_objective(current_stage_id, locale)
 
         # 3. Determine intent
         intent = _COMMAND_INTENT_MAP.get(type(command).__name__, "unknown")
@@ -108,6 +110,7 @@ class TeacherAgent:
             current_stage_id=current_stage_id,
             locale=locale,
             action_input=command,
+            stage_objective=stage_objective,
         )
 
         # 5. Execute the action service (once)
@@ -176,6 +179,18 @@ class TeacherAgent:
             action_result, specialist_results, locale
         )
 
+        # 7b. Optional next-action recommendation (spec 0011 §§5, 8).
+        # Deterministic and validated; never executes, never mutates stage.
+        final_response = self._maybe_append_recommendation(
+            final_response,
+            intent=intent,
+            locale=locale,
+            session_ctx=session_ctx,
+            action_result=action_result,
+            action_error=action_error,
+            specialist_results=specialist_results,
+        )
+
         # 8. Persist invocation record
         duration_ms = int((time.monotonic() - t0) * 1000)
         record = AgentInvocationRecord(
@@ -225,6 +240,106 @@ class TeacherAgent:
         )
 
     # -- helpers ----------------------------------------------------------
+
+    @staticmethod
+    def _stage_objective(stage_id: str | None, locale: str) -> str | None:
+        """Stage objective from the locale catalog; ``None`` when unknown."""
+        if not stage_id:
+            return None
+        try:
+            from ..learning.catalog import LearningCatalogLoader
+
+            catalog = LearningCatalogLoader().load_catalog(locale)
+        except Exception:  # noqa: BLE001 - missing context stays unknown
+            return None
+        for stage in catalog.stages:
+            if stage.id == stage_id:
+                return stage.objective or None
+        return None
+
+    @staticmethod
+    def _maybe_append_recommendation(
+        final_response: str,
+        *,
+        intent: str,
+        locale: str,
+        session_ctx: SessionContext,
+        action_result: Any,
+        action_error: str | None,
+        specialist_results: list[SpecialistResult],
+    ) -> str:
+        """Append one validated recommendation when justified (spec 0011)."""
+        from ..cli.commands import ErrorResponse, InternalFailure
+
+        _INTENT_ACTION = {
+            "ask": "ask",
+            "practice": "practice",
+            "examples": "examples",
+            "evaluate": "evaluate",
+            "exam_init": "exam-init",
+            "exam_finish": "exam-finish",
+            "learn": "learn",
+            "diagnose": "diagnose",
+            "settings": "language",
+        }
+        # Only substantive educational interactions qualify; meta/settings
+        # actions and confirmations receive no recommendation.
+        if intent not in (
+            "ask",
+            "practice",
+            "examples",
+            "evaluate",
+            "exam_finish",
+            "learn",
+            "diagnose",
+        ):
+            return final_response
+        if isinstance(action_result, (ErrorResponse, InternalFailure)):
+            outcome: str | None = "error"
+        elif action_error or action_result is None:
+            outcome = "error" if action_error else None
+        else:
+            outcome = "ok"
+        gaps: list[str] = []
+        for r in specialist_results:
+            if r.agent_id == AgentRole.PLANNER and r.status == AgentStatus.OK:
+                pl = r.structured_payload
+                with contextlib.suppress(Exception):
+                    gaps.extend(getattr(pl, "mastery_gaps", []) or [])
+                break
+        profile = None
+        with contextlib.suppress(Exception):
+            from ..learning.status import resolve_learning_stage
+
+            data_dir = getattr(session_ctx, "_data_dir", None)
+            status = resolve_learning_stage(
+                str(data_dir) if data_dir else ".",
+                session_ctx.student_id,
+                locale,
+            )
+            profile = status
+        ctx = assemble_context(
+            student_id=session_ctx.student_id,
+            stage_id=profile.stage_id if profile else None,
+            stage_number=profile.stage_number if profile else None,
+            stage_name=profile.stage_name if profile else None,
+            stage_objective=TeacherAgent._stage_objective(
+                profile.stage_id if profile else None, locale
+            ),
+            action_id=_INTENT_ACTION.get(intent),
+            locale=locale,
+            project_active=bool(session_ctx.project_id),
+            exam_active=bool(session_ctx.exam_attempt_id),
+            last_outcome=outcome,
+            mastery_gaps=tuple(gaps),
+        )
+        recommendation = recommend_next(ctx)
+        if recommendation is None:
+            return final_response
+        block = recommendation.display(locale)
+        if block in final_response:
+            return final_response
+        return f"{final_response}\n\n{block}" if final_response else block
 
     def _execute_action(
         self, command: Command, session_ctx: SessionContext

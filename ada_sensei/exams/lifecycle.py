@@ -69,12 +69,17 @@ class ExamLifecycle:
         project_root: str | Path | None = None,
         attempt_id: str | None = None,
         exercise_id: str | None = None,
+        locale: str | None = None,
     ) -> ExamAttempt:
         """RQ-EXM-003: create the attempt, record EXAM_STARTED, create the docs."""
         if not student_id:
             raise ExamStateError("an exam requires an explicit student_id")
         if not project_id:
             raise ExamStateError("an exam requires an explicit project_id")
+
+        from ..locale.models import SUPPORTED_LOCALES
+
+        snapshot = locale if locale in SUPPORTED_LOCALES else None
 
         attempt = ExamAttempt(
             student_id=student_id,
@@ -87,6 +92,7 @@ class ExamLifecycle:
             allowed_duration_seconds=definition.allowed_duration_seconds,
             allowed_ask_count=definition.allowed_ask_count,
             rubric_ref=definition.rubric_ref,
+            locale=snapshot,
         )
         docs: ExamDocs | None = None
         writer = self._docs_writer() if self._docs_writer is not None else None

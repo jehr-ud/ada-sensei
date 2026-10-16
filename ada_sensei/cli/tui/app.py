@@ -51,9 +51,18 @@ from ..errors import CLIError
 from ..formatter import Formatter
 from ..parser import CommandParser
 from ..router import CommandRouter
+from .history import InputHistory
 from .messages import OutputReady
 from .state import MessageKind, PresentationState, View
-from .widgets import PromptArea, SessionBar, SessionFooter, StatusIndicator
+from .widgets import (
+    ActionGuide,
+    ActionSelector,
+    LanguageList,
+    PromptArea,
+    SessionBar,
+    SessionFooter,
+    StatusIndicator,
+)
 
 HELP_TEXT = (
     "ADA Sensei commands\n\n"
@@ -203,6 +212,21 @@ _USER_VISIBLE_COMMANDS = (
     LanguageCommand,
 )
 
+#: Command type -> stable registry action id (spec 0011 §5: recommendations
+#: use stable ids, never localized labels as executable values).
+_COMMAND_ACTION_IDS = {
+    AskCommand: "ask",
+    PracticeCommand: "practice",
+    ExamplesCommand: "examples",
+    EvaluateCommand: "evaluate",
+    ExamineStartCommand: "exam-init",
+    ExamineFinishCommand: "exam-finish",
+    LearnCommand: "learn",
+    DiagnoseCommand: "diagnose",
+    LanguageCommand: "language",
+    HelpCommand: "help",
+}
+
 #: Commands that run the Gradle evidence scope.
 _EVIDENCE_COMMANDS = (EvaluateCommand, ExamineFinishCommand)
 
@@ -278,6 +302,9 @@ class AdaSenseiTUI(App):
         self.router = router
         self.formatter = formatter or Formatter(router.secrets)
         self.ui_state = PresentationState()
+        #: Session-local submitted-prompt history (RQ-TUI-039). Owned by the
+        #: App and shared with the input widget; never persisted to disk.
+        self.input_history = InputHistory()
         self._active_worker = None
         self._pending_eval: EvaluateCommand | None = None
         self._pending_exam: (
@@ -287,19 +314,34 @@ class AdaSenseiTUI(App):
         self._anim_step = 0
         self._current_kind: MessageKind = MessageKind.SYSTEM
         self._exam_timer: Timer | None = None
+        #: Explicit language-selection flow active (spec 0010).
+        self._pending_language: bool = False
+        #: Cursor state of the open language list; ``None`` when closed.
+        self._language_selection = None
+        #: Whether the open list is the first-run gate before onboarding.
+        self._language_first_run: bool = False
+        #: Continue to onboarding once the first-run locale persists.
+        self._resume_onboarding: bool = False
+        #: First-run onboarding flow active (spec 008, RQ-LRN-004).
+        self._pending_onboarding: bool = False
+        #: Stable registry action id of the last dispatched command, used for
+        #: context-aware recommendations (spec 0011 §5).
+        self._last_action_id: str | None = None
 
     def compose(self) -> ComposeResult:
         yield SessionBar(id="session-bar")
         yield RichLog(id="log", markup=True, wrap=True)
         yield StatusIndicator(id="status-indicator")
         with Horizontal(id="action-row"):
-            yield Select(
+            yield ActionSelector(
                 ACTION_OPTIONS,
                 prompt="action",
                 allow_blank=False,
                 value="ask",
                 id="action-select",
             )
+        yield ActionGuide(id="action-guide")
+        yield LanguageList(id="language-list")
         yield PromptArea("", id="input")
         yield SessionFooter(id="session-footer")
         yield Footer()
@@ -307,7 +349,10 @@ class AdaSenseiTUI(App):
 
     def on_mount(self) -> None:
         self._refresh_selector_labels()
+        self._refresh_guide()
         self.refresh_session_bar()
+        with contextlib.suppress(Exception):
+            self.query_one("#input", PromptArea).input_history = self.input_history
         self._focus_input()
         self.ui_state.awaiting_name = True
         self._set_name_prompt()
@@ -373,6 +418,27 @@ class AdaSenseiTUI(App):
             select = self.query_one("#action-select", Select)
             locale = self._current_locale()
             select.set_options(localized_action_options(locale))
+        self._refresh_guide()
+
+    def _refresh_guide(self) -> None:
+        """Show guidance for the focused action (spec 0011 §3).
+
+        Localized description + expected input + outcome + activation hint,
+        sourced from the registry via the router. Never blank: falls back to
+        the activation hint when the action is unknown.
+        """
+        with contextlib.suppress(Exception):
+            guide = self.query_one("#action-guide", ActionGuide)
+            describe = getattr(self.router, "describe_action", None)
+            if callable(describe):
+                text = describe(self.ui_state.action)
+            else:
+                from ..action_registry import action_guidance
+
+                text = action_guidance(
+                    self.ui_state.action, self._current_locale()
+                )
+            guide.update(text)
 
     def _apply_action_prompt(self) -> None:
         with contextlib.suppress(Exception):
@@ -412,6 +478,7 @@ class AdaSenseiTUI(App):
         )
         self._emit(greeting)
         self._apply_action_prompt()
+        self._maybe_start_onboarding()
 
     def _handle_name_command(self, raw: str) -> None:
         name = raw.removeprefix("/name").strip()
@@ -420,6 +487,149 @@ class AdaSenseiTUI(App):
             return
         self._set_identity(name)
         self._emit(f"Identity updated to {name}.")
+
+    # ------------------------------------------------------------------
+    # First-run onboarding from the validated catalog (spec 008, RQ-LRN-004/005)
+    # ------------------------------------------------------------------
+
+    def _onboarding_services(self):
+        """Return (profile_store, catalog, locale) or ``None`` on config error."""
+        from ...learning.catalog import ConfigLoadError, LearningCatalogLoader
+        from ...learning.stores import LearningProfileStore
+        from ...locale.ui_strings import get_ui_string
+
+        locale = self._current_locale()
+        try:
+            catalog = LearningCatalogLoader().load_catalog(locale)
+        except ConfigLoadError as exc:
+            self._emit(
+                get_ui_string("onboard_config_error", locale).format(detail=exc)
+            )
+            return None
+        store = LearningProfileStore(str(self.router.config.resolved_data_dir))
+        return store, catalog, locale
+
+    def _maybe_start_onboarding(self) -> None:
+        """Show dynamic onboarding when the student has no learning profile.
+
+        Spec 0010 (RQ-LNG-002): when no language preference exists yet, the
+        language list comes first and onboarding resumes after confirmation.
+        """
+        if self._pending_onboarding or self.ui_state.awaiting_name:
+            return
+        student_id = self.router.context.student_id
+        if not student_id:
+            return
+        saved = None
+        getter = getattr(self.router, "saved_locale", None)
+        if callable(getter):
+            with contextlib.suppress(Exception):
+                saved = getter()
+        if saved is None and not self._pending_language:
+            self._start_language_flow(first_run=True)
+            return
+        from ...learning.stores import LearningProfileStore
+
+        try:
+            has_profile = (
+                LearningProfileStore(
+                    str(self.router.config.resolved_data_dir)
+                ).get(student_id)
+                is not None
+            )
+        except Exception:  # noqa: BLE001 - degraded storage skips onboarding
+            return
+        if has_profile:
+            return
+        services = self._onboarding_services()
+        if services is None:
+            return
+        _, catalog, locale = services
+        from ...learning.onboarding import (
+            get_onboarding_content,
+            render_onboarding,
+        )
+
+        self._pending_onboarding = True
+        self._emit(render_onboarding(get_onboarding_content(catalog, locale)))
+        self._focus_input()
+
+    def _resolve_pending_onboarding(self, raw: str) -> None:
+        """Resolve one onboarding reply: diagnose, skip, or a stage choice."""
+        from ...learning.onboarding import (
+            OnboardingError,
+            choose_starting_stage,
+            get_onboarding_content,
+            interpret_choice,
+            render_onboarding,
+            start_with_default,
+            start_with_diagnostic,
+        )
+        from ...locale.ui_strings import get_ui_string
+
+        services = self._onboarding_services()
+        if services is None:
+            return
+        store, catalog, locale = services
+        student_id = self.router.context.student_id or ""
+        kind, payload = interpret_choice(raw)
+        unmet: list[str] = []
+        try:
+            if kind == "diagnose":
+                profile = start_with_diagnostic(
+                    store, catalog, student_id=student_id, locale=locale
+                )
+            elif kind == "skip":
+                profile = start_with_default(
+                    store, catalog, student_id=student_id, locale=locale
+                )
+            else:
+                profile, unmet = choose_starting_stage(
+                    store,
+                    catalog,
+                    student_id=student_id,
+                    locale=locale,
+                    selection=payload,
+                )
+        except OnboardingError:
+            self._emit(get_ui_string("onboard_unknown", locale))
+            self._emit(render_onboarding(get_onboarding_content(catalog, locale)))
+            self._focus_input()
+            return
+        self._pending_onboarding = False
+        if kind == "diagnose":
+            self._emit(
+                get_ui_string("onboard_diagnostic", locale).format(
+                    title=self._stage_title(catalog, profile.current_stage_id)
+                )
+            )
+        else:
+            stage = next(
+                s for s in catalog.stages if s.id == profile.current_stage_id
+            )
+            self._emit(
+                get_ui_string("onboard_started", locale).format(
+                    number=stage.number, title=stage.title
+                )
+            )
+            if kind == "stage" and unmet:
+                self._emit(
+                    get_ui_string("onboard_prereqs", locale).format(
+                        stage=profile.current_stage_id,
+                        prereqs=", ".join(unmet),
+                    )
+                )
+        self.refresh_session_bar()
+        if kind == "diagnose":
+            self._handle_command(DiagnoseCommand(stage_id=None))
+        self._focus_input()
+
+    @staticmethod
+    def _stage_title(catalog, stage_id: str) -> str:
+        for stage in catalog.stages:
+            if stage.id == stage_id:
+                return stage.title
+        return stage_id
 
     # ------------------------------------------------------------------
     # Presentation helpers
@@ -596,14 +806,41 @@ class AdaSenseiTUI(App):
     def on_action_select_changed(self, event: Select.Changed) -> None:
         self.ui_state.action = str(event.value)
         self._apply_action_prompt()
+        self._refresh_guide()
         self.refresh_footer()
         self._focus_input()
 
+    @on(ActionSelector.LanguageRequested)
+    def on_selector_language_requested(
+        self, message: ActionSelector.LanguageRequested
+    ) -> None:
+        """Open the language list from the selector itself (RQ-LNG-015).
+
+        Enter while the selector is focused used to only toggle the dropdown,
+        so the list never opened from here. The widget already matched the
+        stable `language` id; reuse the exact welcome/selector flow. No free
+        text is built or dispatched to TeacherAgent on this path.
+        """
+        if self._language_selection is not None:
+            with contextlib.suppress(Exception):
+                self.query_one("#language-list", LanguageList).focus()
+            return
+        self._start_language_flow()
+
     def action_submit(self) -> None:
+        # While the language list is open, Enter confirms the focused
+        # language instead of dispatching prompt text (RQ-LNG-005).
+        if self._language_selection is not None:
+            self._confirm_focused_language()
+            return
         area = self.query_one("#input", PromptArea)
         line = (area.text or "").strip()
         if area.text:
             area.clear()
+        # Record every non-empty submission for Up/Down recall (RQ-TUI-039).
+        # Blank lines are ignored; assistant/system output is never recorded
+        # because only submitted input passes through here.
+        self.input_history.record(line)
         self._process_line(line)
         self._focus_input()
 
@@ -612,12 +849,18 @@ class AdaSenseiTUI(App):
         self.action_submit()
 
     def _process_line(self, line: str) -> None:
+        # While the language list is open, free text is ignored (the list
+        # owns the keyboard); slash commands still pass through.
+        if self._language_selection is not None and not line.startswith("/"):
+            return
         if not line:
             if self.ui_state.awaiting_name:
                 self._resolve_pending_name("")
                 return
             # Empty free text is only meaningful for actions that accept an
             # empty input (RQ-TUI-030) or for running a no-argument action.
+            # Actions requiring text never leave a blank unexplained prompt:
+            # they explain what the student must provide (spec 0011 REQ-003).
             if self.ui_state.action not in (
                 "practice",
                 "evaluate",
@@ -627,6 +870,16 @@ class AdaSenseiTUI(App):
                 "language",
                 "help",
             ):
+                from ...locale.ui_strings import get_ui_string as _ui
+
+                _prompts = {
+                    "ask": "prereq_question",
+                    "examples": "prereq_topic",
+                    "exam-init": "prereq_statement",
+                }
+                _key = _prompts.get(self.ui_state.action)
+                if _key is not None:
+                    self._emit(_ui(_key, self._current_locale()))
                 return
         if self.ui_state.awaiting_name:
             self._resolve_pending_name(line)
@@ -634,8 +887,12 @@ class AdaSenseiTUI(App):
         if self._pending_exam is not None:
             self._resolve_pending_exam(self._pending_exam, line)
             return
+        if self._pending_onboarding and not line.startswith("/"):
+            self._resolve_pending_onboarding(line)
+            return
         if line.startswith("/name"):
             self._handle_name_command(line)
+            self._maybe_start_onboarding()
             return
         try:
             command = self._command_from_line(line)
@@ -716,13 +973,19 @@ class AdaSenseiTUI(App):
             self._emit("(view cleared)")
             return
         if isinstance(command, LanguageCommand) and command.locale is None:
-            # Show current language without dispatching; explicit locale change
-            # goes through the router so persistence rules stay centralized.
-            self._emit(f"Current language: {self._current_locale()}.")
-            self._refresh_selector_labels()
-            self._apply_action_prompt()
-            self.refresh_footer()
+            # Dedicated language-selection list (spec 0010, RQ-LNG-004).
+            self._start_language_flow()
             return
+        if (
+            isinstance(command, LanguageCommand)
+            and command.locale is not None
+            and self._language_selection is not None
+        ):
+            # An explicit locale code satisfies the open selection too: close
+            # the list and let the normal dispatch persist it. First-run
+            # resumes onboarding once the write succeeds.
+            self._resume_onboarding = self._language_first_run
+            self._close_language_list()
         # Context-aware availability: keep the action discoverable but explain
         # the prerequisite instead of failing silently.
         availability = self._check_availability(command)
@@ -740,18 +1003,7 @@ class AdaSenseiTUI(App):
         """Return a prerequisite explanation when an action cannot run now."""
         from ..action_registry import check_availability
 
-        mapping = {
-            AskCommand: "ask",
-            PracticeCommand: "practice",
-            ExamplesCommand: "examples",
-            EvaluateCommand: "evaluate",
-            ExamineStartCommand: "exam-init",
-            ExamineFinishCommand: "exam-finish",
-            LearnCommand: "learn",
-            DiagnoseCommand: "diagnose",
-            LanguageCommand: "language",
-        }
-        action_id = mapping.get(type(command))
+        action_id = _COMMAND_ACTION_IDS.get(type(command))
         if action_id is None:
             return None
         project = None
@@ -773,9 +1025,9 @@ class AdaSenseiTUI(App):
             exam_active=exam_active,
             locale=self._current_locale(),
         )
-        if available:
-            return None
-        # Empty-text prerequisites for free-text actions.
+        # Empty-text prerequisites for free-text actions (spec 0011 REQ-003):
+        # required input is explained even when the action is otherwise
+        # available, so the student is never left at a blank prompt.
         if isinstance(command, AskCommand) and not command.question.strip():
             from ...locale.ui_strings import get_ui_string
 
@@ -788,7 +1040,100 @@ class AdaSenseiTUI(App):
             from ...locale.ui_strings import get_ui_string
 
             return get_ui_string("prereq_statement", self._current_locale())
+        if available:
+            return None
         return reason or "Action unavailable."
+
+    # ------------------------------------------------------------------
+    # Dedicated language-selection list (spec 0010, RQ-LNG-004/005/006)
+    # ------------------------------------------------------------------
+
+    def _start_language_flow(self, *, first_run: bool = False) -> None:
+        """Open the navigable Español/English list.
+
+        The cursor initially focuses the saved locale when one exists;
+        otherwise the deterministic default is focused — but focusing never
+        counts as a choice: the student must press Enter explicitly.
+        """
+        from ...locale.selection import LanguageSelection
+        from ...locale.ui_strings import get_ui_string
+
+        saved = None
+        getter = getattr(self.router, "saved_locale", None)
+        if callable(getter):
+            with contextlib.suppress(Exception):
+                saved = getter()
+        self._language_selection = LanguageSelection.with_focus(saved)
+        self._language_first_run = first_run
+        self._pending_language = True
+        locale = self._current_locale()
+        self._status(get_ui_string("locale_label", locale))
+        with contextlib.suppress(Exception):
+            language_list = self.query_one("#language-list", LanguageList)
+            language_list.show(
+                self._language_selection,
+                title=get_ui_string("lang_list_title", locale),
+                hints=get_ui_string("lang_list_hints", locale),
+            )
+            # The list owns the keyboard while open (Up/Down/Enter/Esc/q);
+            # focus it after any other refresh so keys reach the widget.
+            language_list.focus()
+
+    def _close_language_list(self) -> None:
+        with contextlib.suppress(Exception):
+            self.query_one("#language-list", LanguageList).hide()
+        self._language_selection = None
+        self._pending_language = False
+        self._language_first_run = False
+
+    def _confirm_focused_language(self) -> None:
+        """Persist the focused locale; refresh; confirm in the new language."""
+        if self._language_selection is None:
+            return
+        if self.ui_state.busy:
+            from ...locale.ui_strings import get_ui_string
+
+            self._emit(get_ui_string("busy_blocked", self._current_locale()))
+            return
+        locale = self._language_selection.confirm()
+        first_run = self._language_first_run
+        self._close_language_list()
+        # Continue to onboarding once the first-run locale persists; the flag
+        # is consumed after the worker confirms the write succeeded.
+        self._resume_onboarding = first_run
+        # Reuse the normal dispatch path so persistence, refresh, and the
+        # localized confirmation stay centralized in the router.
+        self._handle_command(LanguageCommand(locale=locale))
+        self._focus_input()
+
+    def _cancel_language_flow(self) -> None:
+        """Cancel without changing the saved locale (RQ-LNG-005)."""
+        from ...locale.ui_strings import get_ui_string
+
+        if self._language_selection is None:
+            return
+        if self._language_first_run:
+            # First-run onboarding stays blocked until an explicit choice;
+            # keep the list open instead of silently assigning a default.
+            self._emit(get_ui_string("lang_first_run_blocked", self._current_locale()))
+            with contextlib.suppress(Exception):
+                self.query_one("#language-list", LanguageList).focus()
+            return
+        self._close_language_list()
+        self._emit(get_ui_string("lang_cancelled", self._current_locale()))
+        self._status("Ready")
+        self._focus_input()
+
+    @on(LanguageList.Confirmed)
+    def on_language_confirmed(self, message: LanguageList.Confirmed) -> None:
+        if self._language_selection is None:
+            return
+        # The widget already recorded the explicit confirmation.
+        self._confirm_focused_language()
+
+    @on(LanguageList.Cancelled)
+    def on_language_cancelled(self, message: LanguageList.Cancelled) -> None:
+        self._cancel_language_flow()
 
     # ------------------------------------------------------------------
     # Confirmation for Gradle-scope and exam actions
@@ -832,6 +1177,7 @@ class AdaSenseiTUI(App):
     def _run_nonblocking(self, command: Command) -> None:
         status = _RUN_STATUS.get(type(command), "Running")
         self._current_kind = _COMMAND_KINDS.get(type(command), MessageKind.SYSTEM)
+        self._last_action_id = _COMMAND_ACTION_IDS.get(type(command))
         # Cleared before the worker starts so an abort from a previous run
         # cannot be mistaken for one against this command.
         self.ui_state.cancelled = False
@@ -874,6 +1220,9 @@ class AdaSenseiTUI(App):
             self._emit_kind(
                 MessageKind.ERROR, "Error: " + self.formatter.error(result.message)
             )
+            self._emit_recommendation(result)
+            if self._last_action_id == "language":
+                self._resume_onboarding = False
         elif isinstance(result, QuitResult):
             self.exit()
         elif isinstance(result, ClearResult):
@@ -886,6 +1235,7 @@ class AdaSenseiTUI(App):
             self._set_busy(False, "Ready")
             text = self.formatter.result(result)
             self._emit_kind(kind, text if text else "(done)")
+            self._emit_recommendation(result)
         notice = self.router.context_notice()
         if notice:
             self._emit("Note: " + self.formatter.error(notice))
@@ -896,7 +1246,38 @@ class AdaSenseiTUI(App):
         self._apply_action_prompt()
         self.refresh_session_bar()
         self._sync_exam_timer()
+        # First-run language gate: continue to onboarding once the locale
+        # write succeeded (RQ-LNG-002).
+        if self._resume_onboarding and self._last_action_id == "language":
+            self._resume_onboarding = False
+            self._maybe_start_onboarding()
         self._focus_input()
+
+    def _emit_recommendation(self, result: CommandResult) -> None:
+        """Emit one validated next-step recommendation, or a neutral invite.
+
+        Spec 0011 §5: at most one justified recommendation with a stable action
+        id; never auto-executed (the student selects it explicitly), never a
+        progression change. When nothing is justified, invite the student to
+        choose another action instead of inventing one.
+        """
+        from ...locale.ui_strings import get_ui_string
+
+        suggest = getattr(self.router, "suggest_next", None)
+        if not callable(suggest):
+            return
+        try:
+            recommendation = suggest(self._last_action_id, result)
+        except Exception:  # noqa: BLE001 - guidance must never break results
+            return
+        locale = self._current_locale()
+        if recommendation is None:
+            self._emit(get_ui_string("no_next_step", locale))
+            return
+        try:
+            self._emit(recommendation.display(locale))
+        except Exception:  # noqa: BLE001
+            return
 
     def on_output_ready(self, message: OutputReady) -> None:
         self._write_output(message.kind, message.text)

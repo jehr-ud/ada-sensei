@@ -577,3 +577,37 @@ action. `CommandRouter.current_locale()` reads the persisted preference.
 The app refreshes selector options, hints, stage text, and footer labels on
 mount and after any dispatch (language change included) without touching
 learning data. Ids and version values are never translated.
+
+## 26. TUI Input History Navigation (RQ-TUI-039)
+
+### State model
+
+Keep input history in presentation/session state, not in learning-domain persistence. Suggested state:
+- `entries`: bounded list of non-empty submitted input strings, oldest to newest.
+- `navigation_index`: optional index of the currently recalled entry.
+- `draft`: the unsent input captured when history browsing first begins.
+- `max_entries`: documented constant or configuration value.
+
+Use the repository's existing history abstraction if it already fits this behavior; avoid introducing a second unrelated history store. By default, entries live only for the current TUI session. Do not persist prompts to disk unless an existing, appropriate history service is intentionally reused and privacy behavior is documented.
+
+### Keyboard behavior
+
+- **Up**: when history navigation is active, move to an older entry; otherwise, only intercept when the caret is at the first line and history is non-empty. At the oldest entry, remain there.
+- **Down**: when history navigation is active, move to a newer entry. If currently on the newest entry, restore the captured draft and exit history mode. When history mode is inactive, preserve normal cursor movement except at the relevant line boundary.
+- **Enter**: existing submission behavior; submitting a recalled prompt adds the actual submitted text to history and exits history mode.
+- **Shift+Enter**: existing newline behavior; never submit or navigate history.
+- Editing a recalled item should exit or update history navigation deterministically. Prefer exiting navigation on the first edit while preserving the recalled text as the current editable draft; document and test the chosen behavior.
+
+### Multiline compatibility
+
+The Textual `TextArea` is multiline, so global Up/Down bindings must not swallow normal cursor movement. Detect the cursor row and only trigger history navigation at the relevant boundary. If the Textual API makes this unreliable, encapsulate it in a small input widget/helper and test with the actual widget APIs rather than broad global bindings.
+
+Implementation mapping: `InputHistory` (`cli/tui/history.py`, `MAX_HISTORY_ENTRIES = 100`) realizes `entries`/`navigation_index`/`draft`/`max_entries` and is owned by the App (presentation state, session-local, no disk writes). `PromptArea._on_key` intercepts Up/Down only when `cursor_at_first_line`/`browsing` (Up) or while browsing (Down), using the installed Textual 1.0 cursor APIs; any other edit key or paste exits browsing while keeping the text. Submissions are recorded in `action_submit` (stripped, non-empty only, consecutive duplicates deduplicated).
+
+### Submission and privacy
+
+Add only user-submitted, non-whitespace input. Do not record assistant responses, system notices, action labels, or empty submissions. If slash commands are submitted by the user, they may be retained as raw input and recalled as entered. Bound the list (for example, 100 entries) and use one consistent policy for consecutive duplicate entries.
+
+### Tests
+
+Cover empty history, first Up, repeated Up, Down, restoration of the draft, normal cursor movement within multiline text, edit-before-submit, Enter and Shift+Enter, blank input, max-history bound, and no changes to action selection or domain state.

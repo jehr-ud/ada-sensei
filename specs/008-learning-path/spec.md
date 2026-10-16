@@ -1,121 +1,127 @@
-# Learning Path and Mastery Learning Specification
+# Spec 008 — Learning Path and Mastery (Config-Driven)
 
 ## Objective
 
-Define the learning journey, onboarding, stage-specific assessment criteria, and
-mastery-based progression independently of any one subject. The first catalog is
-Android development, defined in `android-learning-catalog.json`.
+Define the learning journey, onboarding, stage-specific assessment criteria, and evidence-based progression independently of a specific subject. Learning stages, stage rubrics, and progression policy SHALL be loaded from the project's root `config/` directory rather than duplicated in application code or maintained as a separate hardcoded catalog.
+
+## Configuration source of truth
+
+The following root configuration files are expected, subject to verification against the repository:
+
+- `config/stages.es.json`
+- `config/stages.en.json`
+- `config/stage-rubrics.es.json`
+- `config/stage-rubrics.en.json`
+- `config/progression-policy.es.json`
+- `config/progression-policy.en.json`
+
+`config/README.md` documents the configuration layout. OpenCode must inspect actual files and update this list if filenames differ.
+
+The localized stage catalogs and rubric files SHALL represent the same learning model. Stable IDs, ordering, prerequisite relationships, rubric references, criterion IDs, weights, criticality, score scales, and progression semantics SHALL be equivalent across locales. Only student-facing presentation fields may differ by locale. The progression policy's machine behavior must not vary by language.
+
+The `config/` directory SHALL be the authoritative source for stages, rubric definitions, and progression policy. The application MAY deserialize configuration into typed runtime models, but SHALL NOT silently replace missing or invalid configuration with duplicated hardcoded business rules.
 
 ## Student intents
 
-- **Study**: learn, practice, ask questions, view examples, and request an exit
-  assessment to determine readiness for the next stage.
-- **Examine**: start and finish a formal exam at any time through `/exam-init` and
-  `/exam-finish`. This intent is independent from the current study stage.
+- **Study:** learn, practice, ask questions, view examples, and request a stage exit assessment to determine readiness for the next stage.
+- **Examine:** start and finish a formal examination independently of the current study stage using the existing exam workflow, such as `/exam-init` and `/exam-finish` if these are the actual registered commands.
 
-A formal exam is not automatically a mastery assessment and never silently
-advances the stage.
+A formal examination SHALL remain separate from mastery assessment and SHALL NOT silently advance the learning stage.
 
 ## First-run onboarding
 
-After identity confirmation and before normal action input, if the student has no
-learning profile, show the goal: “Learn to design, build, explain, test, and
-improve Android applications—not merely copy generated code.” Show all seven
-stages in catalog order. Ask whether the student wants (a) an initial diagnostic
-or (b) to choose a starting stage. The student can explicitly skip diagnosis.
-Store the chosen catalog version, stage, and diagnostic state.
+When the student has no learning profile, ADA Sensei SHALL load the selected-locale stage catalog and show the learning goal, all configured stages in catalog order, and options to run an initial diagnostic or choose a starting stage.
 
-## Default Android stages
+The learning goal and stage labels/descriptions SHALL use the selected locale. The UI SHALL not hardcode a stage count; it SHALL derive the list from the validated catalog.
 
-1. Fundamentos de Kotlin
-2. Estructura de un proyecto Android
-3. Activities y ciclo de vida
-4. Construcción de interfaces con Jetpack Compose
-5. Estado y arquitectura básica
-6. Clean Architecture y calidad de código
-7. Proyectos propios
+The chosen catalog ID/version, stage ID, locale, and diagnostic state SHALL be persisted as appropriate. Selecting a starting stage SHALL NOT mark skipped prerequisites as mastered.
 
-The catalog's prerequisites are a learning graph, not merely display text. Stage
-4 requires Kotlin and project-structure prerequisites; stage 5 requires Compose
-and Activities/lifecycle. Instructors may configure a starting stage, but the
-system SHALL distinguish a chosen starting point from demonstrated mastery of
-skipped stages.
+## Learning catalog and prerequisites
 
-## Assessment dimensions
+The catalog loader SHALL resolve a validated catalog for the selected locale. Stage IDs are stable across locales. Prerequisites are a graph, not display-only text.
 
-Every stage mastery assessment SHALL evaluate all three dimensions:
+The loader SHALL validate at least:
+- Unique catalog and stage IDs.
+- Valid, unique stage ordering where required by the schema.
+- All prerequisite IDs exist.
+- No prerequisite cycles.
+- All referenced rubric IDs exist in the corresponding rubric configuration.
+- Required fields and supported schema versions are present.
+- Locale variants have equivalent stage IDs, order, prerequisites, and rubric references.
 
-1. **Construction**: the learner can implement a working solution and provide
-   observable evidence (source inspection, build/run where feasible, tests, or a
-   working artifact).
-2. **Analysis and design**: the learner can decompose the problem, justify
-   choices, identify trade-offs, and design a solution before or during coding.
-3. **Comprehension**: the learner can explain code/data flow and answer a transfer
-   question, predict behavior, debug, or modify a requirement.
+If a catalog is invalid or missing, the system SHALL report a clear configuration error and SHALL NOT silently infer a default stage or mark stages mastered.
 
-The stage-specific criteria are versioned in `stage-rubrics.json`. The generic
-mastery engine consumes rubric JSON and does not hard-code Kotlin/Android concepts.
+## Rubrics and mastery assessment
 
-## Mastery loop
+Every stage exit assessment SHALL evaluate the configured dimensions and criteria from the selected stage's rubric. The generic mastery engine SHALL consume rubric JSON and SHALL NOT hardcode Android/Kotlin criteria, weights, score thresholds, or critical criteria.
 
-```text
-TEACH -> PRACTICE -> EXIT CHALLENGE -> COLLECT EVIDENCE
-  ^                                  |
-  |                                  v
-REMEDIATION <- NOT READY <- APPLY MASTERY POLICY -> READY -> NEXT STAGE
-```
+The existing default model uses three dimensions:
+1. Construction.
+2. Analysis and design.
+3. Comprehension.
 
-Completion, time spent, number of questions, or self-report alone SHALL NOT
-establish mastery. Every attempt includes a practical challenge, evidence, and a
-comprehension check. Reassessment uses an equivalent but not identical challenge.
+These dimensions and their weights are configuration data, not assumptions to hardcode in scoring code. The current configuration may use construction 0.4, analysis/design 0.3, and comprehension 0.3; the engine SHALL load and validate the configured values.
 
-## Default decision policy
+The assessment SHALL combine project/build/test/static-analysis evidence from the reusable evaluation engine, when available, with a structured comprehension or transfer check when required by the configured policy. LLM interpretation may map evidence to criteria but SHALL NOT fabricate tool evidence.
 
-The policy in `progression-policy.json` is a configurable starting point:
+Missing evidence SHALL remain `NOT_EVALUATED`; it SHALL NOT be coerced to zero or treated as a pass. The configured policy may prevent advancement when required evidence is missing.
 
-- score scale 0–4 for each criterion;
-- weighted overall score >= 3.0/4;
-- each of the three dimension scores >= 2.5/4;
-- each critical criterion >= 2.0/4;
-- evidence required for every dimension;
-- exit challenge and comprehension check required.
+## Config-driven progression policy
 
-All gates must pass. If a dimension has insufficient evidence, decision is
-`NOT_READY` with reason `INSUFFICIENT_EVIDENCE`; it is not treated as a zero score
-or as mastery. A high total score cannot compensate for a critical competency
-below its threshold.
+The progression engine SHALL load thresholds and gates from the selected policy configuration. The currently supplied `mastery-default-v1` policy defines:
+- Score scale 0–4.
+- Minimum overall score 3.0.
+- Minimum score of 2.5 for each dimension.
+- Minimum score of 2.0 for each critical criterion.
+- Evidence required for each dimension.
+- Exit challenge required.
+- Comprehension check required.
+- Missing evidence means `NOT_EVALUATED` and no advancement.
+- Asking questions is not automatically penalized.
+- Assistance events may be recorded and reported.
+- Instructor overrides must be explicit, versioned, and reported.
 
-These are initial policy values, not empirically calibrated cut-offs. Store the
-policy version and expose the reason for every decision. Instructor overrides
-must be explicit and auditable.
+These are defaults from configuration, not constants to embed in the engine. If the config changes, the engine SHALL apply the validated new policy without code changes, provided the schema version remains supported.
 
-## Initial diagnostic
+All gates must pass for advancement. A high overall score SHALL NOT compensate for a failed critical criterion or a missing required evidence gate.
 
-The diagnostic is a baseline, not a pass/fail exam. EvaluatorAgent identifies
-strengths, gaps, and evidence confidence for the catalog competencies. PlannerAgent
-uses it to recommend a starting stage and a personalized learning plan. A student
-may choose another stage; the UI must disclose unmet prerequisites and must not
-record skipped stages as mastered.
+## Initial diagnostic and adaptive practice
 
-## Adaptive practice
+The initial diagnostic SHALL establish a baseline, not declare mastery solely from self-report. It SHALL use the configured catalog and competencies to report evidence-backed strengths, gaps, confidence, and a recommended starting stage.
 
-TeacherAgent uses the latest mastery evidence, recurring errors, current goal,
-and assistance history to select the next activity. TrainerAgent may generate
-explanations, examples, hints, and practice tasks. The student should receive a
-short explanation of why a practice task is recommended. Repeated weakness should
-cause a smaller prerequisite exercise or alternative explanation, not simply a
-harder challenge.
+The Planner SHALL recommend practice using current stage, rubric gaps, recurring errors, and prior evidence. Recommendations SHALL explain their relevance. Repeated weaknesses SHOULD result in smaller prerequisite exercises or alternative explanations rather than merely harder challenges.
 
-## Persistence
+A student MAY select another stage. The system SHALL disclose unmet prerequisites and SHALL NOT mark skipped stages as mastered.
 
-Persist `LearningProfile`, `LearningPlan`, `LearningEvent`, `MasteryAssessment`,
-and `ProgressionDecision` under ADA Sensei's data directory. Keep them separate
-from `ExamAttempt` and `EvaluationResult`. Every result stores catalog, rubric,
-policy, stage, challenge, and evidence references. Never write learning state into
-the student's Android project.
+## Assessment and progression lifecycle
+
+1. Load and validate the catalog, rubric configuration, and progression policy for the active locale.
+2. Resolve the current stage and its rubric by stable IDs.
+3. Collect relevant project evidence and required comprehension evidence.
+4. Map available evidence to configured criteria.
+5. Calculate criterion, dimension, and overall scores deterministically using configured scales and weights.
+6. Evaluate each configured policy gate deterministically.
+7. Persist assessment and progression decision with catalog, rubric, and policy versions.
+8. Present gate outcomes, evidence references, gaps, and a recommended next activity.
+9. If ready, offer transition to the next eligible stage. Apply any required student confirmation and persist the official stage transition only through the authorized progression component.
+10. If not ready or evidence is insufficient, remain in the current stage and provide targeted remediation.
+
+Formal exam records SHALL remain separate from mastery assessments and SHALL NOT automatically change the current stage.
+
+## Localization
+
+Locale selection SHALL affect labels, descriptions, learning goals, challenge presentation, rubric descriptions, and messages. It SHALL NOT affect stable IDs, score calculation, criterion identity, criticality, weights, thresholds, or progression outcomes.
+
+The implementation SHALL use the selected locale's configuration files or an existing equivalent locale-aware loader. Missing locale files or keys SHALL follow the project's documented deterministic fallback and diagnostic behavior. It SHALL NOT invent translations for critical criteria at runtime.
+
+## Persistence and auditability
+
+Persist learning profile, learning plan, learning events, mastery assessments, and progression decisions under ADA Sensei's data directory, not inside the student's Android project.
+
+Persist the catalog ID/version, rubric version, policy ID/version, stage ID, challenge ID, evidence references, and decision rationale required to reproduce and explain the result. Keep these records separate from formal exam attempts and generic project evaluation results.
+
+Student stage selections and instructor policy overrides SHALL be auditable.
 
 ## Non-goals
 
-This specification does not define a cloud LMS, automatic identity verification,
-or automatic mastery inference from chat volume. It does not require all seven
-stages to be completed linearly if an instructor configures a different graph.
+This specification does not define a cloud LMS, automatic identity verification, or automatic mastery inference from question volume. It does not require every configured stage to be completed linearly when the catalog defines a different prerequisite graph.

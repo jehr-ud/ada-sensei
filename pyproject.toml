@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ada-sensei"
-version = "0.1.0"
+version = "0.1.1"
 description = "A tutor-style educational coding agent for Android development with usable-LLM provisioning."
 readme = "README.md"
 requires-python = ">=3.11,<4.0"

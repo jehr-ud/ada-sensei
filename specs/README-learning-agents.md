@@ -2,7 +2,7 @@
 
 This update extends the supplied specs with two specs:
 
-- `008-learning-path`: seven-stage Android learning catalog, first-run onboarding, configurable JSON rubrics, and mastery-learning progression policy.
+- `008-learning-path`: config-driven Android learning catalog, first-run onboarding, configurable JSON rubrics, and mastery-learning progression policy.
 - `009-agent-orchestration`: TeacherAgent plus PlannerAgent, EvaluatorAgent, and TrainerAgent; mandatory typed participation for each student-facing action; reuse of existing actions.
 
 Key design constraints preserved:

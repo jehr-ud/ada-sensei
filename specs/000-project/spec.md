@@ -104,6 +104,6 @@ ADA Sensei SHALL support two explicit student intents:
    advance the study stage unless a separate mastery decision is explicitly
    requested and the configured policy allows it.
 
-Onboarding SHALL explain the product goal and show the seven default Android
-learning stages. A new student can request an initial diagnostic or choose a
+Onboarding SHALL explain the product goal and show all configured stages from
+the validated learning catalog in catalog order. A new student can request an initial diagnostic or choose a
 starting stage. The selected stage and diagnostic outcome are persisted.

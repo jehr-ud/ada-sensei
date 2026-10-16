@@ -194,3 +194,113 @@ def test_all_three_agents_present_in_decision(tmp_path):
     assert AgentRole.PLANNER in agent_ids
     assert AgentRole.EVALUATOR in agent_ids
     assert AgentRole.TRAINER in agent_ids
+
+
+def _ctx_with(student_id="student://alice"):
+    from unittest.mock import MagicMock
+
+    ctx = MagicMock()
+    ctx.student_id = student_id
+    ctx.project_id = None
+    ctx.exam_attempt_id = None
+    return ctx
+
+
+def test_stage_objective_propagated_to_specialists(tmp_path):
+    """Spec 0011 REQ-006: stage + objective reach specialists; unknown stays None."""
+    from datetime import UTC, datetime
+
+    from ada_sensei.learning.models import LearningProfile
+    from ada_sensei.learning.stores import LearningProfileStore
+
+    teacher, planner, evaluator, trainer, mock_result = _make_teacher(tmp_path)
+    now = datetime.now(tz=UTC)
+    LearningProfileStore(str(tmp_path)).save(
+        LearningProfile(
+            student_id="student://alice",
+            catalog_id="android-learning-path",
+            catalog_version="1.2.0",
+            current_stage_id="kotlin-fundamentals",
+            created_at=now,
+            updated_at=now,
+        )
+    )
+
+    from ada_sensei.cli.commands import AskCommand
+
+    with patch.object(teacher, "_execute_action", return_value=(mock_result, None)):
+        teacher.handle(AskCommand(question="what is a val?"), _ctx_with())
+
+    agent_ctx = planner.run.call_args[0][0]
+    assert agent_ctx.current_stage_id == "kotlin-fundamentals"
+    assert agent_ctx.stage_objective  # resolved from the locale catalog
+    assert agent_ctx.locale == "en-US"
+
+
+def test_substantive_interaction_appends_validated_recommendation(tmp_path):
+    """Spec 0011 REQ-008/009: ask yields one stable-id recommendation, no auto-exec."""
+    teacher, planner, evaluator, trainer, mock_result = _make_teacher(tmp_path)
+
+    from ada_sensei.cli.commands import AskCommand
+
+    with patch.object(teacher, "_execute_action", return_value=(mock_result, None)):
+        decision = teacher.handle(AskCommand(question="what is a val?"), _ctx_with())
+
+    assert "practice" in decision.final_response  # stable action id, not just prose
+    assert "Suggested next step" in decision.final_response
+    assert decision.progression_decision_ref is None
+
+
+def test_language_action_receives_no_recommendation(tmp_path):
+    """Meta actions are not substantive interactions: no recommendation appended."""
+    teacher, planner, evaluator, trainer, mock_result = _make_teacher(tmp_path)
+
+    from ada_sensei.cli.commands import LanguageCommand
+
+    with patch.object(teacher, "_execute_action", return_value=(mock_result, None)):
+        decision = teacher.handle(LanguageCommand(locale="es-CO"), _ctx_with())
+
+    assert "Suggested next step" not in decision.final_response
+    assert "Siguiente paso sugerido" not in decision.final_response
+
+
+def test_failed_action_recommends_help(tmp_path):
+    """Spec 0011 §8 priority 1: blocking errors recommend help first."""
+    teacher, planner, evaluator, trainer, mock_result = _make_teacher(tmp_path)
+
+    from ada_sensei.cli.commands import AskCommand
+
+    with patch.object(teacher, "_execute_action", return_value=(None, "boom")):
+        decision = teacher.handle(AskCommand(question="q?"), _ctx_with())
+
+    assert "(help)" in decision.final_response
+
+
+def test_recommendation_never_advances_stage(tmp_path):
+    """Spec 0011 REQ-011: generating a recommendation mutates no stage state."""
+    from datetime import UTC, datetime
+
+    from ada_sensei.learning.models import LearningProfile
+    from ada_sensei.learning.stores import LearningProfileStore
+
+    teacher, planner, evaluator, trainer, mock_result = _make_teacher(tmp_path)
+    now = datetime.now(tz=UTC)
+    store = LearningProfileStore(str(tmp_path))
+    store.save(
+        LearningProfile(
+            student_id="student://alice",
+            catalog_id="android-learning-path",
+            catalog_version="1.2.0",
+            current_stage_id="kotlin-fundamentals",
+            created_at=now,
+            updated_at=now,
+        )
+    )
+
+    from ada_sensei.cli.commands import AskCommand
+
+    with patch.object(teacher, "_execute_action", return_value=(mock_result, None)):
+        decision = teacher.handle(AskCommand(question="q?"), _ctx_with())
+
+    assert store.get("student://alice").current_stage_id == "kotlin-fundamentals"
+    assert decision.progression_decision_ref is None

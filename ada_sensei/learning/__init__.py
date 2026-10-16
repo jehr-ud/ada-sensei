@@ -15,6 +15,17 @@ from .models import (
     StageCatalog,
     StageRubric,
 )
+from .onboarding import (
+    OnboardingContent,
+    OnboardingError,
+    OnboardingStage,
+    choose_starting_stage,
+    get_onboarding_content,
+    interpret_choice,
+    render_onboarding,
+    start_with_default,
+    start_with_diagnostic,
+)
 from .progression import ProgressionPolicyEngine
 from .stores import (
     LearningEventStore,
@@ -34,6 +45,9 @@ __all__ = [
     "LearningProfileStore",
     "MasteryAssessment",
     "MasteryAssessmentStore",
+    "OnboardingContent",
+    "OnboardingError",
+    "OnboardingStage",
     "ProgressionDecision",
     "ProgressionDecisionStore",
     "ProgressionPolicy",
@@ -41,4 +55,10 @@ __all__ = [
     "RubricCatalog",
     "StageCatalog",
     "StageRubric",
+    "choose_starting_stage",
+    "get_onboarding_content",
+    "interpret_choice",
+    "render_onboarding",
+    "start_with_default",
+    "start_with_diagnostic",
 ]

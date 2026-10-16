@@ -18,6 +18,8 @@ from ada_sensei.cli.tui.widgets import PromptArea
 from ada_sensei.config import Config
 from ada_sensei.llm.base import LLMClient
 
+from conftest import seed_learning_profile, seed_saved_locale
+
 
 class FakeClient(LLMClient):
     def chat(self, messages, *, model=None, temperature=None):
@@ -45,6 +47,8 @@ def mounted(tmp_path, fn, name="Ada"):
     async def _run():
         app = make_app(tmp_path)
         async with app.run_test(size=(80, 24)) as pilot:
+            seed_saved_locale(tmp_path, name)
+            seed_learning_profile(tmp_path, name)
             app._resolve_pending_name(name)
             await pilot.pause()
             return await fn(app, pilot)
@@ -116,6 +120,8 @@ def test_enter_executes_selected_action(tmp_path):
         dispatched = []
         app._handle_command = lambda command: dispatched.append(command)
         async with app.run_test(size=(80, 24)) as pilot:
+            seed_saved_locale(tmp_path, "Ada")
+            seed_learning_profile(tmp_path, "Ada")
             app._resolve_pending_name("Ada")
             await pilot.pause()
             area = app.query_one("#input")
@@ -139,6 +145,8 @@ def test_enter_does_not_insert_newline(tmp_path):
         app = make_app(tmp_path)
         app._handle_command = lambda command: None
         async with app.run_test(size=(80, 24)) as pilot:
+            seed_saved_locale(tmp_path, "Ada")
+            seed_learning_profile(tmp_path, "Ada")
             app._resolve_pending_name("Ada")
             await pilot.pause()
             area = app.query_one("#input")
@@ -156,6 +164,8 @@ def test_shift_enter_creates_newline(tmp_path):
     async def _run():
         app = make_app(tmp_path)
         async with app.run_test(size=(80, 24)) as pilot:
+            seed_saved_locale(tmp_path, "Ada")
+            seed_learning_profile(tmp_path, "Ada")
             app._resolve_pending_name("Ada")
             await pilot.pause()
             area = app.query_one("#input")
@@ -176,6 +186,8 @@ def test_shift_enter_does_not_submit(tmp_path):
         dispatched = []
         app._handle_command = lambda command: dispatched.append(command)
         async with app.run_test(size=(80, 24)) as pilot:
+            seed_saved_locale(tmp_path, "Ada")
+            seed_learning_profile(tmp_path, "Ada")
             app._resolve_pending_name("Ada")
             await pilot.pause()
             area = app.query_one("#input")

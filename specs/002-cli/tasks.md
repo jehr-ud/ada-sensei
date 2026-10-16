@@ -305,3 +305,28 @@ The CLI and TUI SHALL be considered implemented only when:
       (focus-restore assertions in `test_input_widget.py`)
 - [x] Verify the interface remains usable at 80x24.
       (pty smoke at 80x24: 9/9 layout/key checks passed)
+
+## Phase 20 — TUI input history navigation (RQ-TUI-039)
+
+- [x] Inspect existing Textual input widget, key bindings, current session/presentation state, and any existing history abstraction.
+- [x] Implement bounded session-local history for non-empty submitted input.
+- [x] Capture the current unsent draft when history navigation begins.
+- [x] Bind Up to previous input only at the first-line boundary, unless history navigation is already active.
+- [x] Bind Down to newer input and restore the draft after the newest entry.
+- [x] Keep recalled prompts editable and require explicit Enter to submit.
+- [x] Preserve ordinary multiline Up/Down cursor movement when not browsing history.
+- [x] Ensure Shift+Enter newline, Enter submission, action selector, and quit/cancel bindings continue working.
+- [x] Add tests for navigation order, boundary behavior, draft restoration, editing, empty input, bounded history, and regression interactions.
+- [x] Run the relevant TUI and full CLI test suites; record actual results.
+- [x] Update traceability and related spec sections without replacing unrelated existing requirements.
+
+Evidence: `InputHistory` helper (`ada_sensei/cli/tui/history.py`, `MAX_HISTORY_ENTRIES = 100`, consecutive-duplicate dedupe) owned by the App and shared with `PromptArea`; Up/Down intercepted in `PromptArea._on_key` only at caret boundaries using Textual 1.0 `cursor_at_first/last_line` + `move_cursor`; first edit exits browsing via key/paste hooks; `storage.HistoryStore` (disk student profiles) deliberately not reused — documented in helper docstring. Recording in `AdaSenseiTUI.action_submit` (stripped non-empty only). Tests: `tests/cli/tui/test_input_history.py` (15 tests: 5 unit + 10 widget); full suite green (see report).
+
+## Definition of done — input history
+
+- [x] Up recalls the previous submitted prompt without executing it.
+- [x] Up/Down navigation order and draft restoration are correct.
+- [x] Multiline editing remains usable.
+- [x] Recalled input is editable and only executes on Enter.
+- [x] No learning/exam domain state is mutated by navigation.
+- [x] Automated tests pass and evidence is recorded.

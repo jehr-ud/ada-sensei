@@ -476,6 +476,7 @@ remaining subordinate to the conversation area.
 | RQ-TUI-029 | `cli/tui/app.py`, `StudentProfile` | `tests/cli/tui/test_welcome.py` |
 | RQ-TUI-030 | action selector + input routing | `tests/cli/tui/test_action_selector.py` |
 | RQ-TUI-030 | multi-line input widget | `tests/cli/tui/test_input_widget.py` |
+| RQ-TUI-039 | input history navigation | `tests/cli/tui/test_input_history.py` |
 | RQ-TUI-035 | action registry + selector | `tests/cli/test_action_registry.py`, `tests/cli/tui/test_gui_selector.py` |
 | RQ-TUI-036 | learning stage header | `tests/learning/test_stage_status.py`, `tests/cli/tui/test_gui_selector.py` |
 | RQ-TUI-037 | version display | `tests/runtime/test_version.py` |
@@ -486,7 +487,8 @@ remaining subordinate to the conversation area.
 
 ### RQ-CLI-030 First-run welcome
 On first interactive launch for a student without a learning profile, the TUI
-SHALL display ADA Sensei's learning goal, all seven default Android stages, and
+SHALL display ADA Sensei's learning goal, all configured stages from the
+validated catalog in catalog order, and
 choices to run a diagnostic or select a starting stage.
 
 ### RQ-CLI-031 Study and Examine intents
@@ -563,3 +565,11 @@ in `es-CO` and `en-US` (`locale/ui_strings.py` + registry labels, deterministic
 `en-US` fallback). Switching locale SHALL refresh all selector and status
 labels without resetting progress, attempts, or evaluation history. Stable
 action ids, stage ids, and version values SHALL remain language-independent.
+
+## RQ-TUI-039 Input prompt history navigation
+
+The TUI SHALL keep a bounded history of non-empty user-submitted inputs for the current session. Pressing Up when the input caret is at the first line SHALL recall the previous submitted input without executing it. Repeated Up navigates to older entries; Down navigates to newer entries. Moving Down beyond the newest entry SHALL restore the unsent draft captured when history browsing began. Recalled prompts SHALL remain editable and SHALL execute only after explicit Enter submission.
+
+Up/Down SHALL preserve normal multiline cursor movement when history navigation is inactive and the caret is not at the relevant boundary (Up at first line; Down at last line). Empty submissions and assistant/system messages SHALL NOT enter history. History navigation SHALL NOT mutate learning or exam domain state.
+
+Automated tests SHALL cover navigation order, draft restoration, edit-before-submit, multiline cursor behavior, empty submissions, bounded history, and interaction with Enter/Shift+Enter and the selected action.
