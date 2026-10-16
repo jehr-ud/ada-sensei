@@ -523,3 +523,57 @@ Shift+Enter is the newline gesture.
 The conversation/output area receives the largest portion of the screen. The action
 selector is compact and always visible. The TextArea receives useful multiline height.
 The footer remains a single compact row, and keyboard guidance remains concise.
+
+## 22. Centralized action registry (RQ-TUI-035)
+
+`cli/action_registry.py` is the single source of truth for student-facing
+actions. Each `ActionDefinition` carries: stable id, `name_es`/`name_en`,
+`desc_es`/`desc_en`, `hint_es`/`hint_en`, slash alias, confirmation/project
+prerequisites, and the typed-command factory (`build_command`). The Textual
+`Select`, the slash parser (`AVAILABLE_ACTIONS`), and help text all derive
+from it, so GUI/CLI/TUI cannot drift. The router remains the only path to the
+application workflows:
+
+```text
+GUI Action Selector
+  → Action Registry (label/hint/availability per locale)
+  → Typed Command (same objects as CLI slash commands)
+  → CommandRouter.dispatch()
+  → TeacherAgent → Planner / Trainer / Evaluator as appropriate
+  → Application Services → Persisted State and Result
+  → GUI refresh (stage/version/footer re-read from authoritative sources)
+```
+
+Duplicate submissions are blocked by the busy guard in `AdaSenseiTUI`;
+cancellation (Ctrl+C) stays available. Unavailable actions stay visible with
+the registry/prerequisite reason (e.g. evaluate without project).
+
+## 23. Learning-stage status (RQ-TUI-036)
+
+`learning/status.py::resolve_learning_stage(data_dir, student_id, locale)`
+loads the persisted `LearningProfile` (`LearningProfileStore`), then the
+locale-specific `StageCatalog` (`LearningCatalogLoader`, `en-US` fallback),
+and returns a frozen `LearningStageStatus` (`active` | `not_started` |
+`unknown`, number, localized name, objective). The TUI (`SessionBar` header +
+`SessionFooter`) renders `status.display(locale)` at startup and after every
+completed worker (evaluation/progression), so only persisted profile updates
+change the display — a pending evaluation never advances it. No mastery is
+inferred; errors degrade to safe messages.
+
+## 24. Application version (RQ-TUI-037)
+
+`ada_sensei/version.py::get_app_version()` prefers installed package metadata
+(`importlib.metadata`) and falls back to `__version__` (mirroring
+`pyproject.toml`). `CommandRouter.app_version()` exposes it; the header shows
+`ADA Sensei vX.Y.Z` and the footer repeats `vX.Y.Z`. No LLM call, no hardcoded
+version in widgets, graceful `unknown` fallback. Catalog/schema versions are
+separate fields and are never displayed as the app version.
+
+## 25. Bilingual GUI strings (RQ-TUI-038, RQ-LNG-005)
+
+`locale/ui_strings.py` holds the GUI chrome strings (`es-CO`/`en-US`,
+deterministic `en-US` fallback); action labels/hints live in the registry per
+action. `CommandRouter.current_locale()` reads the persisted preference.
+The app refreshes selector options, hints, stage text, and footer labels on
+mount and after any dispatch (language change included) without touching
+learning data. Ids and version values are never translated.

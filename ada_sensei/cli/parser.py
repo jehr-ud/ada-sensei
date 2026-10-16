@@ -43,6 +43,14 @@ AVAILABLE_ACTIONS = (
     "diagnose",
 )
 
+#: Canonical student-facing action ids (single source of truth lives in
+#: ``cli/action_registry.py``; this tuple mirrors it for parser speed and is
+#: asserted equal by tests).
+def _registry_action_ids() -> tuple[str, ...]:
+    from .action_registry import action_ids
+
+    return action_ids()
+
 SLASH_COMMANDS = (
     "help",
     "exit",
@@ -302,6 +310,12 @@ class CommandParser:
                 "    e.g. /exam-init docs/exam.md",
                 "  /exam-finish              finish the active exam",
                 "    e.g. /exam-finish",
+                "  /learn [topic]            explain current-stage concepts",
+                "    e.g. /learn state hoisting",
+                "  /diagnose [stage]         run a brief diagnostic",
+                "    e.g. /diagnose kotlin-fundamentals",
+                "  /language <locale>        change language (es-CO | en-US)",
+                "    e.g. /language es-CO",
                 "  /hint /more /solution     advance the assistance level",
                 "  /clear                    clear the presentation view",
                 "",

@@ -15,16 +15,26 @@ from textual.widgets import Static, TextArea
 
 
 class SessionBar(Static):
-    """Header showing session context: student and active project."""
+    """Header showing session context: app version, student, project, stage."""
 
-    def refresh_context(self, student: str | None, project: str | None) -> None:
+    def refresh_context(
+        self,
+        student: str | None,
+        project: str | None,
+        *,
+        version: str | None = None,
+        stage_text: str | None = None,
+    ) -> None:
         bits = []
         if student:
             bits.append(f"student: {student}")
         if project:
             bits.append(f"project: {project}")
+        if stage_text:
+            bits.append(stage_text)
         suffix = "  |  " + "  |  ".join(bits) if bits else ""
-        self.update(f"ADA Sensei{suffix}")
+        prefix = f"ADA Sensei v{version}" if version else "ADA Sensei"
+        self.update(f"{prefix}{suffix}")
 
 
 class SessionFooter(Static):
@@ -77,6 +87,9 @@ class SessionFooter(Static):
         action: str | None,
         status: str | None = None,
         exam=None,
+        stage: str | None = None,
+        version: str | None = None,
+        locale: str | None = None,
     ) -> None:
         parts = [
             f"Student: {self._fmt(student)}",
@@ -84,6 +97,12 @@ class SessionFooter(Static):
             f"AI: {self._fmt(model)}",
             f"Action: {self._fmt(action)}",
         ]
+        if stage:
+            parts.append(stage)
+        if locale:
+            parts.append(f"Lang: {locale}")
+        if version:
+            parts.append(f"v{version}")
         if status:
             parts.append(f"{self._fmt(status)}")
         exam_text = self._exam_text(exam)

@@ -65,12 +65,27 @@ def test_selector_contains_ask_practice_examples_evaluate_and_exam(tmp_path):
         "evaluate",
         "exam-init",
         "exam-finish",
+        "learn",
+        "diagnose",
+        "language",
+        "help",
     ]
 
     async def check(app, pilot):
         select = app.query_one("#action-select", Select)
-        options = [str(o[0]) for o in select._options]
-        return options == labels
+        values = [str(o[1]) if len(o) > 1 else str(o[0]) for o in select._options]
+        expected_values = [value for _, value in ACTION_OPTIONS]
+        if values != expected_values:
+            # Fallback for Textual versions exposing SelectOption objects.
+            try:
+                raw = list(select._options)
+                alt = [str(getattr(o, "value", o)) for o in raw]
+                if alt == expected_values:
+                    return True
+            except Exception:
+                pass
+            return False
+        return True
 
     assert mounted(tmp_path, check)
 

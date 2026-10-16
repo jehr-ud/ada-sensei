@@ -112,7 +112,8 @@ The TUI SHALL prioritize a simple conversational workflow:
 4. Use Shift+Enter when a new line is required.
 5. Observe the result in the conversation area.
 
-The primary action selector SHALL include all principal actions:
+The primary action selector SHALL include all principal actions, sourced from
+the centralized registry (`cli/action_registry.py`):
 
 - `ask`
 - `practice`
@@ -122,13 +123,17 @@ The primary action selector SHALL include all principal actions:
 - `exam-finish`
 - `learn`
 - `diagnose`
+- `language`
+- `help`
 
 `evaluate` is a normal selectable action. It SHALL NOT be represented as a separate
-button outside the action selector.
+button outside the action selector. Unavailable actions SHALL remain visible
+with an explicit prerequisite explanation. Labels follow the active locale;
+stable action ids never change with language.
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ ADA Sensei                                                                    │
+│ ADA Sensei v0.1.0 · Etapa actual: 5 — Estado y arquitectura básica          │
 │ Student: Jorge   Project: app   Exercise: compose-state                      │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
@@ -136,7 +141,7 @@ button outside the action selector.
 │                                                                              │
 │                                                                              │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│ Action: [ ask ▼ ]                                                            │
+│ Action: [ ask ▼ ]  (all 10 registry actions, localized labels)               │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │ Type your question, topic, request, or evaluation input...                   │
 │                                                                              │
@@ -144,10 +149,17 @@ button outside the action selector.
 │                                                                              │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │ Student: Jorge | Score: 85 | AI: qwen2.5-coder:7b | Action: ask | Ready     │
+│ Stage: Etapa actual: 5 — … | Lang: es-CO | v0.1.0                           │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │ Enter Run  Shift+Enter New line  Ctrl+C Cancel  Ctrl+Q Quit  F2 Help         │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
+
+The header SHALL show the installed application version (from build metadata)
+and the current learning stage resolved from persisted progress + catalog. The
+footer SHALL repeat stage, language, and version compactly. Stage/version
+values come from authoritative sources only; the GUI never hardcodes them and
+never advances the stage itself.
 
 The input area SHALL remain an editable multiline Textual `TextArea`. The common
 execution gesture SHALL be **Enter**.
@@ -228,8 +240,11 @@ starting stage. It SHALL also explain the two intents: Study and Examine. The
 student may skip the diagnostic and choose a stage explicitly.
 
 The action selector SHALL expose `ask`, `practice`, `examples`, `evaluate`,
-`exam-init`, `exam-finish`, `learn`, and `diagnose`. Existing actions remain
-reusable and are not replaced by agent-specific commands.
+`exam-init`, `exam-finish`, `learn`, `diagnose`, `language`, and `help`.
+Existing actions remain reusable and are not replaced by agent-specific
+commands. Selecting `language` persists the locale without resetting learning
+data; every action routes through the shared `CommandRouter` to its existing
+workflow.
 
 The CLI/TUI SHALL dispatch all student intents through `TeacherAgent` via the
 shared application router. The CLI and TUI remain presentation/routing layers and

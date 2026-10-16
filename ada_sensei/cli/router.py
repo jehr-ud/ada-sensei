@@ -355,6 +355,45 @@ class CommandRouter:
         implementation (RQ-TUI-032). Never hardcoded; read from config."""
         return self.config.llm.model
 
+    def app_version(self) -> str:
+        """Installed ADA Sensei application version (RQ-TUI-035).
+
+        Sourced from package metadata with a fallback to the centralized
+        ``__version__`` constant; never hardcoded in presentation code and
+        never requires an LLM request.
+        """
+        from ..version import get_app_version
+
+        return get_app_version()
+
+    def current_locale(self) -> str:
+        """Active locale for the session student, defaulting deterministically."""
+        from ..locale.models import FALLBACK_LOCALE
+        from ..locale.service import LocaleService
+        from ..locale.store import LocalePreferenceStore
+
+        try:
+            store = LocalePreferenceStore(str(self.config.resolved_data_dir))
+            svc = LocaleService(store)
+            found = svc.get_or_prompt_locale(self.context.student_id or "")
+            return found or FALLBACK_LOCALE
+        except Exception:  # noqa: BLE001 - GUI must degrade gracefully
+            return FALLBACK_LOCALE
+
+    def learning_stage(self):
+        """Current learning stage resolved from persisted progress (RQ-TUI-036).
+
+        Reads the student's ``LearningProfile`` and the locale-specific stage
+        catalog; never advances the stage and never infers mastery.
+        """
+        from ..learning.status import resolve_learning_stage
+
+        return resolve_learning_stage(
+            str(self.config.resolved_data_dir),
+            self.context.student_id,
+            self.current_locale(),
+        )
+
     def last_score(self) -> float | None:
         """Most recent authoritative evaluation overall score (RQ-TUI-032).
 

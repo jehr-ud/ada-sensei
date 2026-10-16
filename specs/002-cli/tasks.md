@@ -243,6 +243,19 @@
       + `test_router_integration.py`)
 - [x] Update task checkboxes only after evidence exists.
 
+## Phase 19 — GUI action selector completeness, stage header, version, bilingual (RQ-TUI-035/036/037/038)
+
+- [x] Add centralized registry `ada_sensei/cli/action_registry.py` (10 student-facing actions, es/en labels, hints, command factory, availability).
+- [x] Derive TUI selector options/hints from the registry with localized labels (`localized_action_options`, `action_prompt`); extend selector to ask/practice/examples/evaluate/exam-init/exam-finish/learn/diagnose/language/help.
+- [x] Route every selector action through `CommandRouter` to existing workflows; keep CLI/slash commands working from the same registry.
+- [x] Add busy guard against duplicate submissions; keep unavailable actions visible with prerequisite explanations.
+- [x] Add `ada_sensei/learning/status.py` resolving the real stage from persisted profile + catalog (never advancing, graceful not-started/unknown).
+- [x] Add `ada_sensei/version.py` single version source; expose via `CommandRouter.app_version()`; display in header (preferred) + footer.
+- [x] Add `ada_sensei/locale/ui_strings.py` (es-CO/en-US + fallback); refresh selector/status on locale change without resetting progress.
+- [x] Extend `SessionBar` (version + stage) and `SessionFooter` (stage + version + locale, backward compatible).
+- [x] Add tests: `tests/cli/test_action_registry.py`, `tests/learning/test_stage_status.py`, `tests/runtime/test_version.py`, `tests/locale/test_ui_strings.py`, `tests/cli/tui/test_gui_selector.py`; update outdated 6-item selector test.
+- [x] Run TUI/CLI suites + `ruff check . --fix` and record results.
+
 ## Definition of Done
 
 The CLI and TUI SHALL be considered implemented only when:

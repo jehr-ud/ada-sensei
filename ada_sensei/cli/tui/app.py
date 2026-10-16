@@ -23,12 +23,14 @@ from textual.worker import Worker, WorkerState
 
 from ...storage.history import HistoryStore
 from ...storage.last_student import LastStudentStore
+from ..action_registry import get_actions as _registry_actions
 from ..commands import (
     AskCommand,
     ClearCommand,
     ClearResult,
     Command,
     CommandResult,
+    DiagnoseCommand,
     ErrorResponse,
     EvaluateCommand,
     ExamineFinishCommand,
@@ -37,6 +39,8 @@ from ..commands import (
     HelpCommand,
     HintCommand,
     InternalFailure,
+    LanguageCommand,
+    LearnCommand,
     MoreCommand,
     PracticeCommand,
     QuitCommand,
@@ -54,7 +58,8 @@ from .widgets import PromptArea, SessionBar, SessionFooter, StatusIndicator
 HELP_TEXT = (
     "ADA Sensei commands\n\n"
     "Pick an action from the selector above "
-    "(ask / practice / examples / evaluate / exam-init / exam-finish)\n"
+    "(ask / practice / examples / evaluate / exam-init / exam-finish / "
+    "learn / diagnose / language / help)\n"
     "and type freely in the text field; press Enter to run that action.\n"
     "  e.g. action: ask, type: why does LazyColumn not update?, press Enter\n\n"
     "The text field is multi-line: Shift+Enter inserts a new line, Enter runs\n"
@@ -64,6 +69,9 @@ HELP_TEXT = (
     "  /practice, /ask, /examples, /evaluate   run an action\n"
     "  /exam-init <statement>      start an exam (asks for confirmation)\n"
     "  /exam-finish               finish the active exam (asks for confirmation)\n"
+    "  /learn [topic]              explain current-stage concepts\n"
+    "  /diagnose [stage]           run a brief diagnostic\n"
+    "  /language <locale>          change language (es-CO | en-US)\n"
     "  /hint, /more, /solution    advance the assistance level\n"
     "  /clear                     clear the view\n"
     "  /quit                      exit the TUI\n"
@@ -81,7 +89,11 @@ HELP_TEXT = (
     "  /name <name>             update your student identity\n"
 )
 
-#: Action selector options (label, value) — RQ-TUI-030.
+#: Action selector options (label, value) — RQ-TUI-030/032/035.
+#: Derived from the centralized registry (``cli/action_registry.py``); the
+#: module-level default uses stable ids so headless tests and the CLI keep
+#: working, while the running app refreshes labels per locale via
+#: :func:`localized_action_options`.
 ACTION_OPTIONS = [
     ("ask", "ask"),
     ("practice", "practice"),
@@ -89,9 +101,14 @@ ACTION_OPTIONS = [
     ("evaluate", "evaluate"),
     ("exam-init", "exam-init"),
     ("exam-finish", "exam-finish"),
+    ("learn", "learn"),
+    ("diagnose", "diagnose"),
+    ("language", "language"),
+    ("help", "help"),
 ]
 
 #: Placeholder shown in the input depending on the selected action.
+#: English defaults; :func:`action_prompt` resolves the localized hint.
 ACTION_PROMPTS = {
     "ask": "ask… e.g. why does LazyColumn not update?",
     "practice": "enter a topic… e.g. compose-state (optional)",
@@ -99,7 +116,31 @@ ACTION_PROMPTS = {
     "evaluate": "evaluate the current project (Enter to run)",
     "exam-init": "exam statement… e.g. docs/exam.md (Enter to start)",
     "exam-finish": "finish the exam and generate the report (Enter to run)",
+    "learn": "topic… e.g. Compose state (optional)",
+    "diagnose": "stage… e.g. kotlin-fundamentals (optional)",
+    "language": "locale… es-CO or en-US",
+    "help": "show help (Enter to view)",
 }
+
+
+def localized_action_options(locale: str | None) -> list[tuple[str, str]]:
+    """Localized ``(label, value)`` selector options for ``locale``.
+
+    Values (stable action ids) are never translated; only labels follow the
+    selected locale (RQ-LNG-005/007).
+    """
+    options: list[tuple[str, str]] = []
+    for action in _registry_actions():
+        options.append((action.label(locale), action.id))
+    return options
+
+
+def action_prompt(action_id: str, locale: str | None) -> str:
+    """Localized input hint for ``action_id`` with English fallback."""
+    for action in _registry_actions():
+        if action.id == action_id:
+            return action.hint(locale)
+    return ACTION_PROMPTS.get(action_id, "type a text…")
 
 #: Commands that require an explicit confirmation before running.
 CONFIRMING_ACTIONS = ("evaluate", "exam-init", "exam-finish")
@@ -140,6 +181,10 @@ _COMMAND_KINDS = {
     EvaluateCommand: MessageKind.EVALUATION,
     ExamineStartCommand: MessageKind.EXAM,
     ExamineFinishCommand: MessageKind.EXAM,
+    LearnCommand: MessageKind.ASSISTANT,
+    DiagnoseCommand: MessageKind.ASSISTANT,
+    LanguageCommand: MessageKind.SYSTEM,
+    HelpCommand: MessageKind.SYSTEM,
     HintCommand: MessageKind.HINT,
     MoreCommand: MessageKind.HINT,
     SolutionCommand: MessageKind.HINT,
@@ -153,6 +198,9 @@ _USER_VISIBLE_COMMANDS = (
     EvaluateCommand,
     ExamineStartCommand,
     ExamineFinishCommand,
+    LearnCommand,
+    DiagnoseCommand,
+    LanguageCommand,
 )
 
 #: Commands that run the Gradle evidence scope.
@@ -186,6 +234,9 @@ _ABORT_ECHO = {
 _PLACEHOLDER_ECHO = {
     EvaluateCommand: "evaluate the current project",
     ExamineFinishCommand: "finish the exam",
+    LearnCommand: "learn the current stage",
+    DiagnoseCommand: "run a diagnostic",
+    LanguageCommand: "change language",
 }
 
 #: Presentation view shown while waiting for each confirmation.
@@ -255,6 +306,7 @@ class AdaSenseiTUI(App):
         yield Header()
 
     def on_mount(self) -> None:
+        self._refresh_selector_labels()
         self.refresh_session_bar()
         self._focus_input()
         self.ui_state.awaiting_name = True
@@ -302,9 +354,31 @@ class AdaSenseiTUI(App):
         with contextlib.suppress(Exception):
             self.query_one("#input", PromptArea).placeholder = "your name… e.g. Ana"
 
+    def _current_locale(self) -> str:
+        getter = getattr(self.router, "current_locale", None)
+        if callable(getter):
+            with contextlib.suppress(Exception):
+                found = getter()
+                if found:
+                    return str(found)
+        return "en-US"
+
+    def _refresh_selector_labels(self) -> None:
+        """Refresh selector labels for the active locale (RQ-LNG-005).
+
+        Values (stable action ids) are unchanged; only visible labels follow
+        the locale. Progress and attempts are never touched here.
+        """
+        with contextlib.suppress(Exception):
+            select = self.query_one("#action-select", Select)
+            locale = self._current_locale()
+            select.set_options(localized_action_options(locale))
+
     def _apply_action_prompt(self) -> None:
         with contextlib.suppress(Exception):
-            placeholder = ACTION_PROMPTS.get(self.ui_state.action, "type a text…")
+            placeholder = action_prompt(
+                self.ui_state.action, self._current_locale()
+            )
             self.query_one("#input", PromptArea).placeholder = placeholder
 
     def _set_identity(self, name: str) -> bool:
@@ -357,21 +431,39 @@ class AdaSenseiTUI(App):
             bar = self.query_one("#session-bar", SessionBar)
         except Exception:
             return
-        bar.refresh_context(ctx.student_id, ctx.project_id)
+        version = None
+        stage_text = None
+        with contextlib.suppress(Exception):
+            version = self.router.app_version()
+        with contextlib.suppress(Exception):
+            status = self.router.learning_stage()
+            stage_text = status.display(self._current_locale())
+        bar.refresh_context(
+            ctx.student_id, ctx.project_id, version=version, stage_text=stage_text
+        )
         self.refresh_footer()
 
     def refresh_footer(self) -> None:
-        """Render the persistent session footer (RQ-TUI-032).
+        """Render the persistent session footer (RQ-TUI-032/035/036).
 
         Values come from authoritative sources only: the student identity from
         ``SessionContext`` (bound via the name the user provided), the score from
         the most recent evaluation result, the AI model from the configured LLM
-        implementation, and the current action/status from presentation state.
+        implementation, the learning stage from persisted progress + catalog,
+        the app version from build metadata, and the current action/status from
+        presentation state.
         """
         try:
             footer = self.query_one("#session-footer", SessionFooter)
         except Exception:
             return
+        stage_text = None
+        version = None
+        locale = self._current_locale()
+        with contextlib.suppress(Exception):
+            stage_text = self.router.learning_stage().display(locale)
+        with contextlib.suppress(Exception):
+            version = self.router.app_version()
         footer.update_session(
             student=self.ui_state.user_name or self.router.context.student_id,
             score=self.router.last_score(),
@@ -379,6 +471,9 @@ class AdaSenseiTUI(App):
             action=self.ui_state.action,
             status=self._display_status(),
             exam=self._exam_status(),
+            stage=stage_text,
+            version=version,
+            locale=locale,
         )
 
     def _exam_status(self):
@@ -521,12 +616,16 @@ class AdaSenseiTUI(App):
             if self.ui_state.awaiting_name:
                 self._resolve_pending_name("")
                 return
-            # Empty free text is only meaningful for an empty practice topic
-            # (RQ-TUI-030) or for running a no-argument action.
+            # Empty free text is only meaningful for actions that accept an
+            # empty input (RQ-TUI-030) or for running a no-argument action.
             if self.ui_state.action not in (
                 "practice",
                 "evaluate",
                 "exam-finish",
+                "learn",
+                "diagnose",
+                "language",
+                "help",
             ):
                 return
         if self.ui_state.awaiting_name:
@@ -550,14 +649,16 @@ class AdaSenseiTUI(App):
         """Show the submitted request as a distinct user message for actions."""
         if not isinstance(command, _USER_VISIBLE_COMMANDS):
             return
-        shown = line or f"({_PLACEHOLDER_ECHO[type(command)]})"
+        echo = _PLACEHOLDER_ECHO.get(type(command), type(command).__name__)
+        shown = line or f"({echo})"
         self._emit_user(shown)
 
     def _command_from_line(self, line: str) -> Command:
-        """Build a command from submitted text (RQ-TUI-030).
+        """Build a command from submitted text (RQ-TUI-030/032).
 
         Slash-prefixed input is parsed as a slash command; anything else is
-        sent to the currently selected action from the action selector.
+        sent to the currently selected action from the action selector via the
+        shared registry, producing the same typed commands as the CLI.
         """
         if line.startswith("/"):
             return CommandParser.parse_line(line)
@@ -582,9 +683,26 @@ class AdaSenseiTUI(App):
             return ExamineStartCommand(statement=line)
         if action == "exam-finish":
             return ExamineFinishCommand()
+        if action == "learn":
+            return LearnCommand(topic=line or None)
+        if action == "diagnose":
+            return DiagnoseCommand(stage_id=line or None)
+        if action == "language":
+            return LanguageCommand(locale=line or None)
+        if action == "help":
+            return HelpCommand(scope=None)
         raise CLIError(f"no text action selected: {action!r}")
 
     def _handle_command(self, command: Command) -> None:
+        # Prevent duplicate submissions while an action is running (the worker
+        # is exclusive); cancellation remains available via Ctrl+C.
+        if self.ui_state.busy and not isinstance(
+            command, (QuitCommand, HelpCommand, ClearCommand)
+        ):
+            from ...locale.ui_strings import get_ui_string
+
+            self._emit(get_ui_string("busy_blocked", self._current_locale()))
+            return
         if isinstance(command, QuitCommand):
             self.exit()
             return
@@ -597,12 +715,80 @@ class AdaSenseiTUI(App):
             self.ui_state.messages.clear()
             self._emit("(view cleared)")
             return
+        if isinstance(command, LanguageCommand) and command.locale is None:
+            # Show current language without dispatching; explicit locale change
+            # goes through the router so persistence rules stay centralized.
+            self._emit(f"Current language: {self._current_locale()}.")
+            self._refresh_selector_labels()
+            self._apply_action_prompt()
+            self.refresh_footer()
+            return
+        # Context-aware availability: keep the action discoverable but explain
+        # the prerequisite instead of failing silently.
+        availability = self._check_availability(command)
+        if availability is not None:
+            self._emit(availability)
+            return
         if isinstance(
             command, (EvaluateCommand, ExamineStartCommand, ExamineFinishCommand)
         ):
             self._confirm_then_run(command)
             return
         self._run_nonblocking(command)
+
+    def _check_availability(self, command: Command) -> str | None:
+        """Return a prerequisite explanation when an action cannot run now."""
+        from ..action_registry import check_availability
+
+        mapping = {
+            AskCommand: "ask",
+            PracticeCommand: "practice",
+            ExamplesCommand: "examples",
+            EvaluateCommand: "evaluate",
+            ExamineStartCommand: "exam-init",
+            ExamineFinishCommand: "exam-finish",
+            LearnCommand: "learn",
+            DiagnoseCommand: "diagnose",
+            LanguageCommand: "language",
+        }
+        action_id = mapping.get(type(command))
+        if action_id is None:
+            return None
+        project = None
+        with contextlib.suppress(Exception):
+            project = self.router.context.project_id or getattr(
+                self.router.config.project, "path", None
+            )
+        exam_active = False
+        with contextlib.suppress(Exception):
+            status = self._exam_status()
+            exam_active = bool(status is not None and status.is_active)
+        # An explicit project path set via --project counts even before URN.
+        if not project:
+            with contextlib.suppress(Exception):
+                project = str(self.router.config.project.path)
+        available, reason = check_availability(
+            action_id,
+            project_path=project,
+            exam_active=exam_active,
+            locale=self._current_locale(),
+        )
+        if available:
+            return None
+        # Empty-text prerequisites for free-text actions.
+        if isinstance(command, AskCommand) and not command.question.strip():
+            from ...locale.ui_strings import get_ui_string
+
+            return get_ui_string("prereq_question", self._current_locale())
+        if isinstance(command, ExamplesCommand) and not command.topic.strip():
+            from ...locale.ui_strings import get_ui_string
+
+            return get_ui_string("prereq_topic", self._current_locale())
+        if isinstance(command, ExamineStartCommand) and not command.statement.strip():
+            from ...locale.ui_strings import get_ui_string
+
+            return get_ui_string("prereq_statement", self._current_locale())
+        return reason or "Action unavailable."
 
     # ------------------------------------------------------------------
     # Confirmation for Gradle-scope and exam actions
@@ -703,6 +889,11 @@ class AdaSenseiTUI(App):
         notice = self.router.context_notice()
         if notice:
             self._emit("Note: " + self.formatter.error(notice))
+        # Locale may have changed (language action): refresh selector labels
+        # and hints without touching progress/attempts. Stage/version refresh
+        # happens inside refresh_session_bar (persisted sources only).
+        self._refresh_selector_labels()
+        self._apply_action_prompt()
         self.refresh_session_bar()
         self._sync_exam_timer()
         self._focus_input()

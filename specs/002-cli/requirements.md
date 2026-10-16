@@ -476,6 +476,10 @@ remaining subordinate to the conversation area.
 | RQ-TUI-029 | `cli/tui/app.py`, `StudentProfile` | `tests/cli/tui/test_welcome.py` |
 | RQ-TUI-030 | action selector + input routing | `tests/cli/tui/test_action_selector.py` |
 | RQ-TUI-030 | multi-line input widget | `tests/cli/tui/test_input_widget.py` |
+| RQ-TUI-035 | action registry + selector | `tests/cli/test_action_registry.py`, `tests/cli/tui/test_gui_selector.py` |
+| RQ-TUI-036 | learning stage header | `tests/learning/test_stage_status.py`, `tests/cli/tui/test_gui_selector.py` |
+| RQ-TUI-037 | version display | `tests/runtime/test_version.py` |
+| RQ-TUI-038 | bilingual selector/status | `tests/locale/test_ui_strings.py`, `tests/cli/tui/test_gui_selector.py` |
 
 
 ## Learning Onboarding and Intent
@@ -492,8 +496,70 @@ learning, practice, and mastery progression; Examine uses `/exam-init` and
 
 ### RQ-CLI-032 Reusable action selector
 The action selector SHALL include ask, practice, examples, evaluate, exam-init,
-exam-finish, learn, and diagnose, dispatching through the shared router.
+exam-finish, learn, diagnose, language, and help, dispatching through the
+shared router. Language changes SHALL NOT reset progress; help SHALL render the
+shared help text.
 
 ### RQ-CLI-033 Teacher entry point
 All student-facing actions SHALL be dispatched through TeacherAgent; the CLI/TUI
 SHALL NOT orchestrate specialist agents itself.
+
+## RQ-TUI-035 Graphical action selector completeness and routing
+
+The TUI action selector SHALL expose every registered student-facing action
+from the centralized registry (`cli/action_registry.py`): ask, practice,
+examples, evaluate, exam-init, exam-finish, learn, diagnose, language, help.
+Each definition SHALL carry a stable id, Spanish/English names, descriptions,
+input hints, and the typed-command factory. The selector SHALL:
+
+- display the localized label for the active locale (`es-CO`/`en-US`);
+- route each selection to its existing workflow via the shared
+  `CommandRouter` (Practice→Planner/Trainer, Ask→teaching workflow,
+  Examples→example generation, Evaluate→evidence+evaluation engine,
+  Learn→planning workflow, Language→persisted locale, Exam→exam workflow);
+- keep CLI commands and TUI slash commands working through the same registry;
+- register no action twice;
+- block duplicate submissions while an action is running (busy guard) while
+  keeping cancellation available;
+- keep unavailable actions discoverable with an explicit prerequisite
+  explanation (e.g. evaluate without an active project, exam-finish without an
+  active exam) instead of silently hiding them;
+- show loading, success, and error states consistently without placing
+  business logic in UI components.
+
+## RQ-TUI-036 Current learning stage header
+
+The main interface SHALL persistently display the student's actual current
+learning stage, resolved read-only from the persisted `LearningProfile` and
+the locale-specific stage catalog (`learning/status.py`), as
+`Etapa actual: <n> — <nombre>` / `Current stage: <n> — <name>`, plus the
+stage objective where space permits. The display SHALL:
+
+- load at startup and refresh after learning/evaluation workflows and after a
+  persisted progression decision;
+- follow the selected locale for the stage name;
+- show `Ruta de aprendizaje no iniciada` / `Learning path not started` when no
+  profile exists, and a safe unavailable message for invalid stage references
+  or configuration errors;
+- never advance the stage on refresh and never infer mastery from activity
+  counts;
+- not display a new stage for a pending (unpersisted) evaluation.
+
+## RQ-TUI-037 Application version display
+
+The main interface SHALL persistently but unobtrusively display the installed
+ADA Sensei application version (header preferred), sourced from the single
+authoritative source (`ada_sensei/version.py`: installed package metadata with
+`__version__` fallback matching `pyproject.toml`). Version retrieval SHALL NOT
+require an LLM request; missing metadata SHALL degrade gracefully without
+crashing; the application version SHALL NOT be confused with catalog/schema
+versions.
+
+## RQ-TUI-038 Bilingual selector and status header
+
+Action names, descriptions, hints, selector help, stage status, progression
+status, loading/error/empty states, and accessibility labels SHALL be localized
+in `es-CO` and `en-US` (`locale/ui_strings.py` + registry labels, deterministic
+`en-US` fallback). Switching locale SHALL refresh all selector and status
+labels without resetting progress, attempts, or evaluation history. Stable
+action ids, stage ids, and version values SHALL remain language-independent.
