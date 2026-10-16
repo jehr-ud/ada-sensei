@@ -118,6 +118,10 @@ The primary action selector SHALL include all principal actions:
 - `practice`
 - `examples`
 - `evaluate`
+- `exam-init`
+- `exam-finish`
+- `learn`
+- `diagnose`
 
 `evaluate` is a normal selectable action. It SHALL NOT be represented as a separate
 button outside the action selector.
@@ -213,3 +217,21 @@ The implementation is complete when:
 6. evaluation confirmation and evidence rules are intact in both modes;
 7. automated tests cover all SHALL requirements;
 8. no business/domain logic resides in the CLI formatter or TUI widgets.
+
+
+## Onboarding and Student Intent
+
+At first interactive launch, after student identity is established, the TUI SHALL
+show: (a) ADA Sensei's goal, (b) the seven default Android stages from
+`008-learning-path`, and (c) two choices: run an initial diagnostic or choose a
+starting stage. It SHALL also explain the two intents: Study and Examine. The
+student may skip the diagnostic and choose a stage explicitly.
+
+The action selector SHALL expose `ask`, `practice`, `examples`, `evaluate`,
+`exam-init`, `exam-finish`, `learn`, and `diagnose`. Existing actions remain
+reusable and are not replaced by agent-specific commands.
+
+The CLI/TUI SHALL dispatch all student intents through `TeacherAgent` via the
+shared application router. The CLI and TUI remain presentation/routing layers and
+SHALL NOT call Planner/Evaluator/Trainer directly. This applies to direct CLI
+subcommands as well as slash commands and free-text requests.

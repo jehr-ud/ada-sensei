@@ -476,3 +476,24 @@ remaining subordinate to the conversation area.
 | RQ-TUI-029 | `cli/tui/app.py`, `StudentProfile` | `tests/cli/tui/test_welcome.py` |
 | RQ-TUI-030 | action selector + input routing | `tests/cli/tui/test_action_selector.py` |
 | RQ-TUI-030 | multi-line input widget | `tests/cli/tui/test_input_widget.py` |
+
+
+## Learning Onboarding and Intent
+
+### RQ-CLI-030 First-run welcome
+On first interactive launch for a student without a learning profile, the TUI
+SHALL display ADA Sensei's learning goal, all seven default Android stages, and
+choices to run a diagnostic or select a starting stage.
+
+### RQ-CLI-031 Study and Examine intents
+The interface SHALL distinguish Study intent from Examine intent. Study supports
+learning, practice, and mastery progression; Examine uses `/exam-init` and
+`/exam-finish` and may be started at any learning stage.
+
+### RQ-CLI-032 Reusable action selector
+The action selector SHALL include ask, practice, examples, evaluate, exam-init,
+exam-finish, learn, and diagnose, dispatching through the shared router.
+
+### RQ-CLI-033 Teacher entry point
+All student-facing actions SHALL be dispatched through TeacherAgent; the CLI/TUI
+SHALL NOT orchestrate specialist agents itself.

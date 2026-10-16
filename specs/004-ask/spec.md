@@ -49,3 +49,7 @@ Ask SHALL not modify the student's project (RQ-ASK-007); context building uses
 The agent inspects state handling (MainViewModel.kt:24) with evidence and
 explains the cause before offering the fix.
 ```
+
+## Agent Orchestration Contract
+
+Ask actions SHALL be invoked through `TeacherAgent` under `009-agent-orchestration`. TrainerAgent provides the pedagogical answer, PlannerAgent relates it to the current goal and records relevant learning events, and EvaluatorAgent may flag a misconception or return `not_applicable`. An answer alone does not establish mastery.

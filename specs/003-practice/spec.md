@@ -82,3 +82,7 @@ Requirements:
   - R4: Keep UI state in a ViewModel.
 Difficulty: Intermediate
 ```
+
+## Agent Orchestration Contract
+
+Practice actions SHALL be invoked through `TeacherAgent` under `009-agent-orchestration`. PlannerAgent contributes the learning objective and current gaps, EvaluatorAgent supplies observable success criteria or a diagnostic annotation, and TrainerAgent generates/adapts the exercise. Existing practice generation and persistence remain authoritative; do not duplicate them.

@@ -14,12 +14,15 @@ from .commands import (
     AskCommand,
     ClearCommand,
     Command,
+    DiagnoseCommand,
     EvaluateCommand,
     ExamineFinishCommand,
     ExamineStartCommand,
     ExamplesCommand,
     HelpCommand,
     HintCommand,
+    LanguageCommand,
+    LearnCommand,
     MoreCommand,
     PracticeCommand,
     ProjectCommand,
@@ -35,6 +38,9 @@ AVAILABLE_ACTIONS = (
     "evaluate",
     "exam-init",
     "exam-finish",
+    "language",
+    "learn",
+    "diagnose",
 )
 
 SLASH_COMMANDS = (
@@ -123,6 +129,12 @@ class CommandParser:
                 yes=bool(options.get("yes", False)),
                 instrumented=bool(options.get("instrumented", False)),
             )
+        if action == "language":
+            return LanguageCommand(locale=positional[0] if positional else None)
+        if action == "learn":
+            return LearnCommand(topic=options.get("topic") or (" ".join(positional) or None))
+        if action == "diagnose":
+            return DiagnoseCommand(stage_id=positional[0] if positional else None)
         raise CLIError(f"unknown action: {action!r}")
 
     @classmethod
@@ -182,6 +194,15 @@ class CommandParser:
             if token in ("/exam-finish", "/finish-exam"):
                 options, positional = cls._parse_flags(rest[1:])
                 return cls._action_command("exam-finish", options, positional)
+            if token in ("/language", "/lang"):
+                options, positional = cls._parse_flags(rest[1:])
+                return cls._action_command("language", options, positional)
+            if token == "/learn":
+                options, positional = cls._parse_flags(rest[1:])
+                return cls._action_command("learn", options, positional)
+            if token == "/diagnose":
+                options, positional = cls._parse_flags(rest[1:])
+                return cls._action_command("diagnose", options, positional)
             if token == "/ask":
                 return AskCommand(question=" ".join(rest[1:]))
             raise CLIError(f"unknown slash command: {token} (try /help)")

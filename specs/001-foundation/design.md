@@ -244,3 +244,17 @@ failure → reported as limitation, never success
 - The provisioning outcome is recorded so it does not repeat on every invocation.
 - Model pull uses the default model `qwen2.5-coder:7b` unless configured
   otherwise.
+
+## Learning and Agent Domain Contracts (cross-spec references)
+
+The foundation model package SHALL support versioned, serializable contracts
+used by `008-learning-path` and `009-agent-orchestration`: `LearningStage`,
+`LearningGoal`, `Competency`, `LearningPlan`, `MasteryAssessment`,
+`ProgressionDecision`, `AgentInvocation`, and `AgentOutput`. Detailed ownership and
+fields are defined in those specs; foundation provides shared identity, validation,
+serialization, timestamps, and persistence primitives rather than duplicating
+their business rules.
+
+Student learning state is stored separately from the active CLI session and exam
+records. Learning-stage records SHALL include catalog/version ids so a future
+JSON catalog update does not silently reinterpret historical results.

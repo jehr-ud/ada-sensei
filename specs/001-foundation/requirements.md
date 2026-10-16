@@ -210,3 +210,18 @@ The package SHALL be installable directly from its GitHub repository through
 | RQ-FND-029 | `ada_sensei.config` / `ada_sensei.llm.ollama` | `tests/llm/test_ollama.py::test_default_model` |
 | RQ-FND-030 | `ada_sensei.setup.provision` | `tests/setup/test_provision.py::test_auto_install` / `test_failure_as_limitation` |
 | RQ-FND-031 | `pyproject.toml` | `tests/runtime/test_metadata.py::test_github_install` |
+
+## Learning and Agent Support
+
+### RQ-FND-032 Versioned learning records
+The system SHALL serialize learning-related records with schema versions and
+retain the catalog and rubric versions used to produce a mastery decision.
+
+### RQ-FND-033 Agent output contracts
+The system SHALL validate agent outputs against typed schemas before orchestration
+uses them; invalid output SHALL follow the existing maximum-three-attempt structured
+output policy and SHALL never mutate persisted learning state directly.
+
+### RQ-FND-034 Learning persistence isolation
+Learning progress, mastery assessments, and exam attempts SHALL be stored as
+separate record types and SHALL not overwrite student project files.

@@ -75,3 +75,7 @@ knowledge/
 ```
 
 Curated examples may coexist with generated examples.
+
+## Agent Orchestration Contract
+
+Examples actions SHALL be invoked through `TeacherAgent` under `009-agent-orchestration`. TrainerAgent produces stage-appropriate examples, PlannerAgent identifies the competency target, and EvaluatorAgent returns a relevant diagnostic note or `not_applicable`. Examples alone do not establish mastery.

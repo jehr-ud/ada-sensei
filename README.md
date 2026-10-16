@@ -7,12 +7,17 @@ rather than a code generator.
 
 ## Features
 
-- `/practice` — generate exercises adapted to the student's history.
+- `/practice` — generate adaptive exercises based on current stage and learning gaps.
 - `/ask` — contextual Q&A with progressive assistance (`/hint`, `/more`, `/solution`).
-- `/examples` — concise, teachable Android examples.
-- `/evaluate` — evidence-based evaluation (build, unit tests, Lint, detekt)
-  under a fixed rubric (40% functional / 20% tests / 15% quality / 15%
-  architecture / 10% Android practices).
+- `/examples` — teachable Android examples tailored to the current stage.
+- `/evaluate` — evidence-based project evaluation (build, unit tests, Android Lint, Detekt).
+- `/exam-init` / `/exam-finish` — exam workflow with timed attempts and detailed reports.
+- `/learn` — review stage concepts and learning objectives.
+- `/diagnose` — run a diagnostic to identify strengths and gaps.
+- `/language` / `/lang` — view or change interface language (`es-CO` or `en-US`).
+- Bilingual support (Spanish/English) for UI, stages, rubrics, and reports.
+- Autonomous agent orchestration (Teacher + Planner + Evaluator + Trainer).
+- Dynamic Basic Android Application project generation tailored to the learner.
 
 ## Prerequisites
 
@@ -21,12 +26,47 @@ rather than a code generator.
 - JDK 17+ (required only for `/evaluate`)
 - An Android project using the Gradle wrapper (`./gradlew`) for `/evaluate`
 
-## Dev installation
+## Installation (Development / Editable)
+
+For local development (recommended if you're working on the codebase):
 
 ```bash
+# Clone the repository
+git clone https://github.com/jehr-ud/ada-sensei.git
+cd ada-sensei
+
+# Create and activate virtual environment
+python3.11 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install in editable mode with dev dependencies
+pip install -e ".[dev]"
+```
+
+### Reinstalling / Updating in dev mode
+
+If you've made changes to dependencies or want to ensure everything is up to date:
+
+```bash
+cd ada-sensei
+source .venv/bin/activate
+pip install -e ".[dev]"  # Reinstalls in editable mode
+```
+
+To reinstall from scratch:
+
+```bash
+cd ada-sensei
+rm -rf .venv
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
+```
+
+**Note:** Reinstalling the virtual environment (`rm -rf .venv`) does not delete user data. ADA Sensei stores user data in `~/.local/share/ada-sensei/` and configuration in `~/.config/ada-sensei/`. To completely reset (including user progress, language preference, and history), delete those directories:
+
+```bash
+rm -rf ~/.local/share/ada-sensei ~/.config/ada-sensei
 ```
 
 
@@ -51,18 +91,7 @@ Verify the command is available:
 ada-sensei /help
 ```
 
-## Running from source (local development)
-
-Clone the repository and install it in editable mode inside a virtual
-environment:
-
-```bash
-git clone https://github.com/jehr-ud/ada-sensei.git
-cd ada-sensei
-python3.11 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-```
+## Usage (Development)
 
 Verify the CLI is available and launch the interactive session:
 

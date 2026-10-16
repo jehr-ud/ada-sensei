@@ -228,6 +228,32 @@ class InternalFailure:
     message: str
 
 
+@dataclass
+class LanguageCommand:
+    """Display or change the interface language (spec 0010).
+
+    ``locale`` is None to show the current locale, or a locale string
+    (``es-CO`` or ``en-US``) to change it.
+    """
+
+    locale: str | None = None
+
+
+@dataclass
+class LearnCommand:
+    """Request to learn / review the current stage concepts (spec 008)."""
+
+    topic: str | None = None
+
+
+@dataclass
+class DiagnoseCommand:
+    """Request an initial or in-stage diagnostic (spec 008)."""
+
+    stage_id: str | None = None
+
+
+
 CommandResult = (
     PracticeResult
     | AskResult
@@ -265,4 +291,7 @@ Command = (
     | HelpCommand
     | ClearCommand
     | QuitCommand
+    | LanguageCommand
+    | LearnCommand
+    | DiagnoseCommand
 )

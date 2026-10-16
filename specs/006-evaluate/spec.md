@@ -287,3 +287,18 @@ Evaluation results are stored outside the student project.
 
 `007-examine` owns its own exam lifecycle, exam rubric definition, exam metrics,
 and exam report generation.
+
+
+## Mastery Evaluation Reuse
+
+The reusable engine MAY be invoked by `008-learning-path` to evaluate stage exit
+challenges. The caller supplies a versioned rubric definition and a set of stage
+competencies/requirements; the engine returns evidence and criterion scores.
+`006-evaluate` SHALL NOT decide whether the student advances a learning stage;
+that decision belongs to `PlannerAgent` using the `ProgressionPolicy` in
+`008-learning-path`. The `evaluate-default:v1` rubric remains unchanged.
+
+
+## Agent Orchestration Contract
+
+Every `/evaluate` request SHALL be orchestrated by `TeacherAgent` and include PlannerAgent, EvaluatorAgent, and TrainerAgent participation as specified by `009-agent-orchestration`. EvaluatorAgent owns evidence interpretation; PlannerAgent records evidence but does not advance the stage unless this is explicitly a mastery assessment; TrainerAgent explains findings and remediation. The existing default evaluation rubric and confirmation rules remain unchanged.

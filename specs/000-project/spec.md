@@ -25,12 +25,17 @@ The system SHOULD favor guidance, explanation, hints, evidence-based feedback, a
 
 ## 4. Primary Actions
 
-The initial product SHALL provide:
+The product SHALL provide the reusable actions:
 
-- `/practice`
 - `/ask`
+- `/practice`
 - `/examples`
 - `/evaluate`
+- `/exam-init`
+- `/exam-finish`
+
+These actions remain callable directly, but normal student interaction is
+orchestrated by the Teacher agent under `009-agent-orchestration`.
 
 ## 5. Spec-Driven Development
 
@@ -54,11 +59,16 @@ Specs are numbered so that a lower number has no dependency on a higher number:
 003-practice      exercise generation and persistence
 004-ask           contextual Q&A
 005-examples      teachable examples
-006-evaluate      evidence-based evaluation
+006-evaluate      reusable evidence-based evaluation engine
+007-examine       exam lifecycle and reporting
+008-learning-path learning stages, mastery criteria, progression
+009-agent-orchestration Teacher + Planner/Evaluator/Trainer orchestration
 ```
 
-`001-foundation` owns all cross-cutting concerns (ADR-006). Action specifications
-SHALL reference foundation models and services instead of redefining them.
+`001-foundation` owns cross-cutting technical concerns (ADR-006). `008-learning-path`
+owns learning stages, mastery policy, and stage-specific criteria. `009-agent-orchestration`
+owns agent roles, hand-offs, and orchestration. Action specifications SHALL reference
+these contracts instead of redefining them.
 
 ## 6. Initial Constraints
 
@@ -81,3 +91,19 @@ The MVP SHALL:
 - Full Android emulator orchestration (unit tests are collected by default;
   instrumented tests are reserved for a future explicit `--instrumented` option,
   and the system does not drive an emulator).
+
+## Learning Intent and Student Modes
+
+ADA Sensei SHALL support two explicit student intents:
+
+1. **Study**: learn the current stage, practice adaptively, request examples or
+   explanations, and request a mastery evaluation to determine readiness for the
+   next stage.
+2. **Examine**: start and finish a formal assessment at any point in the learning
+   path using `/exam-init` and `/exam-finish`. Exam results do not automatically
+   advance the study stage unless a separate mastery decision is explicitly
+   requested and the configured policy allows it.
+
+Onboarding SHALL explain the product goal and show the seven default Android
+learning stages. A new student can request an initial diagnostic or choose a
+starting stage. The selected stage and diagnostic outcome are persisted.

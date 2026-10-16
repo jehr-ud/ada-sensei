@@ -204,3 +204,12 @@ without modifying the default `/evaluate` behavior.
 | RQ-EVA-034 | EvaluationAgent / structured parser | `tests/actions/evaluate/test_structured_output.py::test_three_attempt_limit` |
 | RQ-EVA-035 | Evidence validator | `tests/actions/evaluate/test_structured_output.py::test_unsupported_claim_rejected` |
 | RQ-EVA-036 | EvaluationEngine | `tests/actions/evaluate/test_engine.py::test_external_workflow_reuse` |
+
+
+### RQ-EVA-037 Caller-supplied mastery rubric
+The reusable EvaluationEngine SHALL accept a versioned caller-supplied rubric and
+requirements without mutating `evaluate-default:v1`.
+
+### RQ-EVA-038 No progression ownership
+The evaluation engine SHALL return evidence and scores but SHALL NOT itself
+advance a learning stage or override a `ProgressionDecision`.

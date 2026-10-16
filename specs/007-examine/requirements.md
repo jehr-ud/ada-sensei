@@ -128,3 +128,14 @@ Duration and `/ask` counts SHALL be based on application events/persisted state 
 | RQ-EXM-029 | `ExamReportGenerator` | `tests/exams/test_report.py::test_suggested_grade_disclosure` |
 | RQ-EXM-030 | `ArchitectureAnalyzer` | `tests/exams/test_exams_architecture.py::test_no_unsupported_claims` |
 | RQ-EXM-031 | `ExamEventBridge` | `tests/exams/test_ask_tracking.py::test_counts_ignore_llm_text` |
+
+
+## Orchestration and Progression Isolation
+
+### RQ-EXM-030 Teacher orchestration
+The `/exam-init` and `/exam-finish` intents SHALL enter through TeacherAgent and
+use the shared agent orchestration contracts.
+
+### RQ-EXM-031 Exam/progression isolation
+Exam completion SHALL NOT silently change the student's current learning stage.
+Exam results and mastery assessments SHALL be separately persisted.

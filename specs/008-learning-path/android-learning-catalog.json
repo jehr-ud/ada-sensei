@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "catalog_id": "android-development",
+  "version": "1.0.0",
+  "domain": "software-development",
+  "subject": "Android application development",
+  "default_stage_id": "kotlin-fundamentals",
+  "progression_policy_id": "mastery-default-v1",
+  "stages": [
+    {
+      "id": "kotlin-fundamentals",
+      "order": 1,
+      "title": "Fundamentos de Kotlin",
+      "goal": "Escribir y explicar programas Kotlin pequeños y correctos.",
+      "competencies": [
+        "variables_types_operators",
+        "conditionals_loops",
+        "functions_parameters_returns",
+        "classes_objects_constructors",
+        "collections_null_safety"
+      ],
+      "prerequisites": [],
+      "exit_challenge": "Implementar un pequeño gestor de estudiantes que calcule promedios y clasifique resultados.",
+      "rubric_id": "stage-kotlin-fundamentals-v1"
+    },
+    {
+      "id": "android-project-structure",
+      "order": 2,
+      "title": "Estructura de un proyecto Android",
+      "goal": "Reconocer, construir y ejecutar un proyecto Android y explicar sus archivos principales.",
+      "competencies": [
+        "project_modules_folders",
+        "manifest_role",
+        "gradle_dependencies_build",
+        "main_activity_entry",
+        "run_debug_project"
+      ],
+      "prerequisites": [
+        "kotlin-fundamentals"
+      ],
+      "exit_challenge": "Crear o inspeccionar una aplicación, localizar sus archivos principales y explicar cómo se construye y ejecuta.",
+      "rubric_id": "stage-android-project-structure-v1"
+    },
+    {
+      "id": "activities-lifecycle",
+      "order": 3,
+      "title": "Activities y ciclo de vida",
+      "goal": "Construir una aplicación de varias pantallas y explicar el ciclo de vida básico.",
+      "competencies": [
+        "activity_role",
+        "activity_lifecycle",
+        "explicit_intents_navigation",
+        "state_recreation",
+        "debug_lifecycle"
+      ],
+      "prerequisites": [
+        "android-project-structure"
+      ],
+      "exit_challenge": "Implementar navegación entre dos Activities y explicar eventos relevantes del ciclo de vida.",
+      "rubric_id": "stage-activities-lifecycle-v1"
+    },
+    {
+      "id": "jetpack-compose-ui",
+      "order": 4,
+      "title": "Construcción de interfaces con Jetpack Compose",
+      "goal": "Construir interfaces declarativas e interactivas con Compose.",
+      "competencies": [
+        "composable_functions",
+        "text_button_textfield_image",
+        "column_row_layout",
+        "events_callbacks",
+        "compose_state_basics"
+      ],
+      "prerequisites": [
+        "kotlin-fundamentals",
+        "android-project-structure"
+      ],
+      "exit_challenge": "Construir una interfaz Compose con campos, acciones, validación visible y actualización de UI.",
+      "rubric_id": "stage-jetpack-compose-ui-v1"
+    },
+    {
+      "id": "state-basic-architecture",
+      "order": 5,
+      "title": "Estado y arquitectura básica",
+      "goal": "Separar estado, presentación y lógica básica usando patrones apropiados.",
+      "competencies": [
+        "state_hoisting",
+        "ui_state",
+        "viewmodel_basics",
+        "separation_ui_logic",
+        "error_loading_states"
+      ],
+      "prerequisites": [
+        "jetpack-compose-ui",
+        "activities-lifecycle"
+      ],
+      "exit_challenge": "Implementar una pantalla con ViewModel, estado observable, eventos y estados de carga/error.",
+      "rubric_id": "stage-state-basic-architecture-v1"
+    },
+    {
+      "id": "clean-architecture-quality",
+      "order": 6,
+      "title": "Clean Architecture y calidad de código",
+      "goal": "Diseñar límites claros, código mantenible y pruebas útiles.",
+      "competencies": [
+        "layer_boundaries_dependencies",
+        "domain_data_presentation",
+        "repository_abstraction",
+        "unit_testing",
+        "readability_refactoring"
+      ],
+      "prerequisites": [
+        "state-basic-architecture"
+      ],
+      "exit_challenge": "Refactorizar una funcionalidad en capas razonables y demostrarla con pruebas unitarias.",
+      "rubric_id": "stage-clean-architecture-quality-v1"
+    },
+    {
+      "id": "own-projects",
+      "order": 7,
+      "title": "Proyectos propios",
+      "goal": "Definir, diseñar, implementar y validar un proyecto Android propio.",
+      "competencies": [
+        "problem_definition_requirements",
+        "architecture_design",
+        "incremental_implementation",
+        "testing_validation",
+        "reflection_iteration"
+      ],
+      "prerequisites": [
+        "clean-architecture-quality"
+      ],
+      "exit_challenge": "Proponer e implementar un incremento funcional de un proyecto propio, con requisitos, decisiones de diseño y evidencia de validación.",
+      "rubric_id": "stage-own-projects-v1"
+    }
+  ]
+}

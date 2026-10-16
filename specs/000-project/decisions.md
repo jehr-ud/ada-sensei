@@ -135,3 +135,27 @@ post-install hooks, automatic provisioning of the Ollama server and the default
 model (RQ-FND-030) runs on first use of an LLM-dependent action, or through an
 optional one-command installer script. Provisioning failures are reported as
 limitations, never as success.
+
+
+## ADR-021 — Teacher-Led Multi-Agent Orchestration
+
+Every student-facing action SHALL be coordinated by a principal `TeacherAgent`
+and invoke the three specialist subagents `PlannerAgent`, `EvaluatorAgent`, and
+`TrainerAgent`. Specialists return typed, bounded outputs; the Teacher resolves
+conflicts, chooses the next pedagogical step, and presents one coherent response.
+The agents do not independently mutate shared state; persistence is performed by
+application services after validated decisions.
+
+## ADR-022 — Configurable Mastery Learning Across Domains
+
+Learning stages, competencies, assessment dimensions, progression gates, and
+rubrics SHALL be data-driven and versioned in JSON. Android is the first domain;
+future subjects SHALL be able to supply a different catalog without changing the
+mastery engine. Each stage is evaluated across construction, analysis/design, and
+comprehension, with configurable critical competencies and minimum thresholds.
+
+## ADR-023 — Separate Study Progression from Exams
+
+A mastery evaluation is a progression decision, not the same thing as a formal
+exam. Exams may be initiated at any stage and use `/exam-init` and `/exam-finish`;
+exam outcomes are stored separately and do not silently change the current stage.

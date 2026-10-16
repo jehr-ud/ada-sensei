@@ -573,3 +573,22 @@ state, not from model-generated text.
 - hidden surveillance;
 - automatic institutional grade submission;
 - connectedAndroidTest execution before the future instrumented-test feature.
+
+
+## Separation from Study Progression and Agent Orchestration
+
+`/exam-init` and `/exam-finish` SHALL be invoked through `TeacherAgent`, which
+coordinates the three specialist agents under `009-agent-orchestration`. The
+EvaluatorAgent owns diagnostic interpretation and calls this spec's exam workflow
+through application services; it does not bypass the shared router contracts.
+
+An exam may begin at any stage and is not a stage exit assessment by default.
+Exam results SHALL be stored separately from `MasteryAssessment` and SHALL NOT
+automatically promote or demote the student's learning stage. The PlannerAgent may
+consider exam evidence only when an explicit mastery assessment is requested and
+when the relevant catalog policy permits reuse of that evidence.
+
+
+## Agent Orchestration Contract
+
+Every `/exam-init` and `/exam-finish` request SHALL be orchestrated by `TeacherAgent` and include PlannerAgent, EvaluatorAgent, and TrainerAgent participation as specified by `009-agent-orchestration`. The actual exam side effect runs once through the existing exam action service; agent participation must not start or finish the exam twice.

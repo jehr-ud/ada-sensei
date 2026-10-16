@@ -4,12 +4,15 @@ import pytest
 from ada_sensei.cli.commands import (
     AskCommand,
     ClearCommand,
+    DiagnoseCommand,
     EvaluateCommand,
     ExamineFinishCommand,
     ExamineStartCommand,
     ExamplesCommand,
     HelpCommand,
     HintCommand,
+    LanguageCommand,
+    LearnCommand,
     MoreCommand,
     PracticeCommand,
     ProjectCommand,
@@ -55,7 +58,8 @@ def test_known_actions():
         cmd = CommandParser.parse_argv([action])
         assert isinstance(cmd, (PracticeCommand, AskCommand, ExamplesCommand,
                                 EvaluateCommand, ExamineStartCommand,
-                                ExamineFinishCommand))
+                                ExamineFinishCommand, LanguageCommand,
+                                LearnCommand, DiagnoseCommand))
 
 
 def test_exam_init_parses():
