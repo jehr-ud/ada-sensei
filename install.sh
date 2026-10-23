@@ -68,25 +68,41 @@ EOF
 
 chmod +x "$LAUNCHER"
 
-# 6. Add the command directory to PATH when possible
-case ":${PATH}:" in
-    *":$BIN_DIR:"*) ;;
-    *)
-        SHELL_NAME="$(basename "${SHELL:-bash}")"
-        case "$SHELL_NAME" in
-            zsh)  PROFILE="$HOME/.zshrc" ;;
-            bash) PROFILE="$HOME/.bashrc" ;;
-            *)    PROFILE="" ;;
-        esac
-
-        if [ -n "$PROFILE" ]; then
-            touch "$PROFILE"
-            if ! grep -Fq 'export PATH="$HOME/.local/bin:$PATH"' "$PROFILE"; then
-                printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$PROFILE"
-            fi
-        fi
-        ;;
+# 6. Add the command directory to PATH with priority
+SHELL_NAME="$(basename "${SHELL:-bash}")"
+case "$SHELL_NAME" in
+    zsh)  PROFILE="$HOME/.zshrc" ;;
+    bash) PROFILE="$HOME/.bashrc" ;;
+    *)    PROFILE="" ;;
 esac
+
+if [ -n "$PROFILE" ]; then
+    touch "$PROFILE"
+    if ! grep -Fq 'export PATH="$HOME/.local/bin:$PATH"' "$PROFILE"; then
+        printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$PROFILE"
+    fi
+fi
+
+# 7. Warn about other ada-sensei commands that would shadow this install
+SHADOW=""
+IFS=: read -r -a PATH_DIRS <<< "$PATH"
+for DIR in "${PATH_DIRS[@]}"; do
+    if [ "$DIR" = "$BIN_DIR" ]; then
+        break
+    fi
+    if [ -x "$DIR/ada-sensei" ]; then
+        SHADOW="$DIR/ada-sensei"
+        break
+    fi
+done
+
+if [ -n "$SHADOW" ]; then
+    echo ""
+    echo "Warning: another ada-sensei command found before $BIN_DIR:" >&2
+    echo "  $SHADOW" >&2
+    echo "It may be an outdated installation and cause runtime errors." >&2
+    echo "Remove it or put $BIN_DIR first in your PATH." >&2
+fi
 
 echo ""
 echo "Ada-Sensei installation completed."
