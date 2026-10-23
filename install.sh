@@ -3,35 +3,95 @@ set -euo pipefail
 
 REPO_URL="${ADA_SENSEI_REPO_URL:-https://github.com/jehr-ud/ada-sensei.git}"
 BRANCH="${ADA_SENSEI_BRANCH:-main}"
-VENV_DIR="${ADA_SENSEI_VENV:-.venv}"
-NEW_VENV=false
+
+INSTALL_DIR="${ADA_SENSEI_HOME:-$HOME/.local/share/ada-sensei}"
+VENV_DIR="$INSTALL_DIR/venv"
+BIN_DIR="$HOME/.local/bin"
+LAUNCHER="$BIN_DIR/ada-sensei"
+
+echo "Installing Ada-Sensei..."
+
+# 1. Check dependencies
+if ! command -v git >/dev/null 2>&1; then
+    echo "Error: Git is required." >&2
+    exit 1
+fi
 
 if command -v python3 >/dev/null 2>&1; then
-  PYTHON=python3
-elif command -v python >/dev/null 2>&1; then
-  PYTHON=python
+    PYTHON=python3
 else
-  echo "error: Python 3.11+ is required" >&2
-  exit 1
+    echo "Error: Python 3.11+ is required." >&2
+    exit 1
 fi
 
-if [ ! -d "$VENV_DIR" ]; then
-  "$PYTHON" -m venv "$VENV_DIR"
-  NEW_VENV=true
+"$PYTHON" -c '
+import sys
+if sys.version_info < (3, 11):
+    raise SystemExit("Error: Python 3.11 or newer is required.")
+'
+
+# 2. Create a permanent virtual environment
+mkdir -p "$INSTALL_DIR" "$BIN_DIR"
+
+if [ ! -x "$VENV_DIR/bin/python" ]; then
+    "$PYTHON" -m venv "$VENV_DIR"
 fi
 
-if [ "$NEW_VENV" = true ] || ! "$VENV_DIR/bin/pip" show ada-sensei >/dev/null 2>&1; then
-  "$VENV_DIR/bin/pip" install --upgrade pip
-  "$VENV_DIR/bin/pip" install "git+${REPO_URL}@${BRANCH}"
-fi
+# 3. Install or update Ada-Sensei
+"$VENV_DIR/bin/python" -m pip install --upgrade pip
 
-echo "ADA Sensei installed. Verifying default LLM provisioning..."
-"$VENV_DIR/bin/python" -c "
-from ada_sensei.config import ConfigLoader
-from ada_sensei.setup.provision import DefaultModelProvisioner
-result = DefaultModelProvisioner(ConfigLoader().load()).provision_if_needed()
-print('OK' if result.ok else 'FAILED: ' + (result.error or 'unknown'))
-exit(0 if result.ok else 1)
-"
+"$VENV_DIR/bin/python" -m pip install --upgrade \
+    "git+${REPO_URL}@${BRANCH}"
 
-echo "Done. Run: $VENV_DIR/bin/ada-sensei --help"
+# 4. Verify the installed package resources
+"$VENV_DIR/bin/python" - <<'PY'
+from pathlib import Path
+import ada_sensei
+
+package_dir = Path(ada_sensei.__file__).parent
+styles = package_dir / "cli" / "tui" / "styles.tcss"
+
+if not styles.is_file():
+    raise SystemExit(
+        f"Installation error: missing UI stylesheet: {styles}\n"
+        "Check the project's Python package configuration."
+    )
+
+print("UI resources verified.")
+PY
+
+# 5. Create a global command
+cat > "$LAUNCHER" <<EOF
+#!/usr/bin/env bash
+exec "$VENV_DIR/bin/ada-sensei" "\$@"
+EOF
+
+chmod +x "$LAUNCHER"
+
+# 6. Add the command directory to PATH when possible
+case ":${PATH}:" in
+    *":$BIN_DIR:"*) ;;
+    *)
+        SHELL_NAME="$(basename "${SHELL:-bash}")"
+        case "$SHELL_NAME" in
+            zsh)  PROFILE="$HOME/.zshrc" ;;
+            bash) PROFILE="$HOME/.bashrc" ;;
+            *)    PROFILE="" ;;
+        esac
+
+        if [ -n "$PROFILE" ]; then
+            touch "$PROFILE"
+            if ! grep -Fq 'export PATH="$HOME/.local/bin:$PATH"' "$PROFILE"; then
+                printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$PROFILE"
+            fi
+        fi
+        ;;
+esac
+
+echo ""
+echo "Ada-Sensei installation completed."
+echo "Command: $LAUNCHER"
+echo "Restart your terminal or run:"
+echo '  export PATH="$HOME/.local/bin:$PATH"'
+echo ""
+echo "Then run: ada-sensei"
