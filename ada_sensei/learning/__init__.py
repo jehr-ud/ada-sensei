@@ -26,6 +26,12 @@ from .onboarding import (
     start_with_default,
     start_with_diagnostic,
 )
+from .plan import (
+    LearningPlan,
+    PlanStage,
+    build_learning_plan,
+    render_learning_plan,
+)
 from .progression import ProgressionPolicyEngine
 from .stores import (
     LearningEventStore,
@@ -41,6 +47,7 @@ __all__ = [
     "LearningCatalogLoader",
     "LearningEvent",
     "LearningEventStore",
+    "LearningPlan",
     "LearningProfile",
     "LearningProfileStore",
     "MasteryAssessment",
@@ -48,16 +55,17 @@ __all__ = [
     "OnboardingContent",
     "OnboardingError",
     "OnboardingStage",
+    "PlanStage",
     "ProgressionDecision",
     "ProgressionDecisionStore",
     "ProgressionPolicy",
     "ProgressionPolicyEngine",
     "RubricCatalog",
-    "StageCatalog",
     "StageRubric",
     "choose_starting_stage",
     "get_onboarding_content",
     "interpret_choice",
+    "render_learning_plan",
     "render_onboarding",
     "start_with_default",
     "start_with_diagnostic",

@@ -528,7 +528,22 @@ class CommandRouter:
             )
 
     def _learn(self, cmd: LearnCommand) -> CommandResult:
-        # Route through AskAction with a synthetic learn question
+        # No topic: deterministic learning plan from catalog + profile
+        # (spec 008, RQ-LRN-025). No LLM needed, nothing persisted.
+        if not (cmd.topic or "").strip():
+            from ..learning.catalog import LearningCatalogLoader
+            from ..learning.plan import build_learning_plan, render_learning_plan
+            from ..learning.stores import LearningProfileStore
+
+            locale = self.current_locale()
+            data_dir = str(self.config.resolved_data_dir)
+            catalog = LearningCatalogLoader().load_catalog(locale)
+            profile = LearningProfileStore(data_dir).get(
+                self.context.student_id or ""
+            )
+            plan = build_learning_plan(catalog, profile, locale)
+            return MetaResult(message=render_learning_plan(plan))
+        # Explicit topic: teaching flow through the existing AskAction.
         topic = cmd.topic or "the current stage"
         question = f"Explain the key concepts of {topic} at my current learning stage."
         from ..actions.ask import AskAction

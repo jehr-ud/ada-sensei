@@ -53,6 +53,11 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
         "onboard_started": "Starting stage set to {number} — {title}.",
         "onboard_diagnostic": "Starting with an initial diagnostic at {title}.",
         "onboard_config_error": "Learning configuration error: {detail}",
+        "plan_header": "Learning plan",
+        "plan_current": "current",
+        "plan_objective": "Objective:",
+        "plan_outcomes": "Stage outcomes:",
+        "plan_next": "Suggested next activities:",
     },
     "es-CO": {
         "selector_title": "Acción",
@@ -93,6 +98,11 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
         "onboard_started": "Etapa inicial: {number} — {title}.",
         "onboard_diagnostic": "Comenzando con un diagnóstico inicial en {title}.",
         "onboard_config_error": "Error de configuración de aprendizaje: {detail}",
+        "plan_header": "Plan de aprendizaje",
+        "plan_current": "actual",
+        "plan_objective": "Objetivo:",
+        "plan_outcomes": "Resultados de la etapa:",
+        "plan_next": "Próximas actividades sugeridas:",
     },
 }
 
