@@ -481,6 +481,7 @@ remaining subordinate to the conversation area.
 | RQ-TUI-036 | learning stage header | `tests/learning/test_stage_status.py`, `tests/cli/tui/test_gui_selector.py` |
 | RQ-TUI-037 | version display | `tests/runtime/test_version.py` |
 | RQ-TUI-038 | bilingual selector/status | `tests/locale/test_ui_strings.py`, `tests/cli/tui/test_gui_selector.py` |
+| RQ-TUI-040 | confirmation controls | `tests/cli/tui/test_exam_confirmation.py`, `tests/cli/tui/test_evaluate_confirmation.py` |
 
 
 ## Learning Onboarding and Intent
@@ -573,3 +574,12 @@ The TUI SHALL keep a bounded history of non-empty user-submitted inputs for the 
 Up/Down SHALL preserve normal multiline cursor movement when history navigation is inactive and the caret is not at the relevant boundary (Up at first line; Down at last line). Empty submissions and assistant/system messages SHALL NOT enter history. History navigation SHALL NOT mutate learning or exam domain state.
 
 Automated tests SHALL cover navigation order, draft restoration, edit-before-submit, multiline cursor behavior, empty submissions, bounded history, and interaction with Enter/Shift+Enter and the selected action.
+
+## RQ-TUI-040 Confirmation controls
+
+When the TUI requests confirmation for a consequential action (evaluate,
+exam start, exam finish), it SHALL show localized Confirm and Cancel controls
+in addition to accepting typed `yes`/`no`. Confirm SHALL run the pending
+command and Cancel SHALL abort it without executing the action. The controls
+SHALL be hidden when no confirmation is pending and SHALL NOT imply that an
+action ran when the user has not confirmed.

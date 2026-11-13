@@ -106,6 +106,9 @@ class CLIApp:
 
         rest, project = cls._extract_globals(argv)
         if project:
+            # Actions read the configured project path, so the global flag must
+            # update it as well as the session context.
+            router.config.project.path = project
             router.context.set_project(project)
 
         try:

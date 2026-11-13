@@ -15,6 +15,10 @@
 
 - [x] Implement exam resolution from instructor source.
 - [x] Implement explicit exam start confirmation.
+- [x] Add localized TUI Confirm/Cancel controls for exam start.
+- [x] Block exam start when the project is not evaluable and list every reason.
+- [x] Add readiness tests for missing project, non-Android project, and missing toolchain.
+- [x] Add tests proving Confirm runs the pending command and Cancel creates no exam.
 - [x] Create `ExamAttempt` with separate identities.
 - [x] Record `EXAM_STARTED`.
 - [x] Create `docs/ada-sensei/exams/<exam_id>/`.

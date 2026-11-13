@@ -135,8 +135,16 @@ _ACTIONS: list[ActionDefinition] = [
         slash="/exam-init",
         requires_confirmation=True,
         requires_text=True,
-        help_es="Uso: /exam-init <enunciado>. Requiere confirmación.",
-        help_en="Usage: /exam-init <statement>. Requires confirmation.",
+        help_es=(
+            "Uso: /exam-init <ruta>. Acepta Markdown (.md/.txt), JSON o PDF "
+            "con título y requisitos funcionales; opcionalmente "
+            "'Allowed duration' y 'Allowed /ask count'. Requiere confirmación."
+        ),
+        help_en=(
+            "Usage: /exam-init <path>. Accepts Markdown (.md/.txt), JSON, or "
+            "PDF with a title and functional requirements; optionally "
+            "'Allowed duration' and 'Allowed /ask count'. Requires confirmation."
+        ),
         outcome_es="El examen comenzará tras tu confirmación; sigue las instrucciones.",
         outcome_en="The exam starts after your confirmation; follow the instructions.",
     ),

@@ -106,10 +106,13 @@ def test_selector_is_persistent_and_visible(tmp_path):
 
 def test_no_separate_evaluate_button(tmp_path):
     # RQ-TUI-030/033/034: evaluate is a selector option, not a separate button.
+    # The only buttons are the shared Confirm/Cancel controls, hidden until a
+    # consequential action asks for confirmation.
     async def check(app, pilot):
-        from textual.widgets import Button
-
-        return len(app.query("#evaluate-btn")) == 0 and len(app.query(Button)) == 0
+        return (
+            len(app.query("#evaluate-btn")) == 0
+            and app.query_one("#confirm-bar").display is False
+        )
 
     assert mounted(tmp_path, check)
 

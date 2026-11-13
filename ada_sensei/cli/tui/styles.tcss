@@ -49,6 +49,16 @@ Screen {
     padding: 0 1;
 }
 
+#confirm-bar {
+    display: none;
+    height: 3;
+    padding: 0 1;
+}
+
+#confirm-bar Button {
+    margin-right: 1;
+}
+
 #input {
     width: 1fr;
     height: 7;

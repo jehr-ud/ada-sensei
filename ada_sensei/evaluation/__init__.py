@@ -40,6 +40,7 @@ from .models import (
     ProjectContext,
     ScoreBreakdown,
 )
+from .preflight import ProjectIssue, ProjectPreflight, ProjectReadiness
 from .rubric import (
     EVALUATE_RUBRIC,
     SEVERITIES,
@@ -72,6 +73,9 @@ __all__ = [
     "GroundedInterpretation",
     "NO_EXERCISE_LIMITATION",
     "ProjectContext",
+    "ProjectIssue",
+    "ProjectPreflight",
+    "ProjectReadiness",
     "RequirementMatch",
     "RequirementMatcher",
     "RubricDefinition",

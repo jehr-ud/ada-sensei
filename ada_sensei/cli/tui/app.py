@@ -18,9 +18,10 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.timer import Timer
-from textual.widgets import Footer, Header, RichLog, Select
+from textual.widgets import Button, Footer, Header, RichLog, Select
 from textual.worker import Worker, WorkerState
 
+from ...locale.ui_strings import get_ui_string
 from ...storage.history import HistoryStore
 from ...storage.last_student import LastStudentStore
 from ..action_registry import get_actions as _registry_actions
@@ -247,11 +248,25 @@ _CONFIRM_PROMPT = {
     ),
 }
 
+#: Localized confirmation guidance key per command.
+_CONFIRM_STRING_KEYS = {
+    EvaluateCommand: "evaluate_confirm",
+    ExamineStartCommand: "exam_start_confirm",
+    ExamineFinishCommand: "exam_finish_confirm",
+}
+
 #: Confirmation aborted message per command.
 _ABORT_ECHO = {
     EvaluateCommand: "Evaluation aborted before running any Gradle task.",
     ExamineStartCommand: "Exam start aborted; no attempt was created.",
     ExamineFinishCommand: "Exam finish aborted; the attempt is still active.",
+}
+
+#: Localized abort message key per command.
+_ABORT_STRING_KEYS = {
+    EvaluateCommand: "evaluate_aborted",
+    ExamineStartCommand: "exam_start_aborted",
+    ExamineFinishCommand: "exam_finish_aborted",
 }
 
 #: Echo used as the user message when a no-argument action is submitted empty.
@@ -342,6 +357,9 @@ class AdaSenseiTUI(App):
             )
         yield ActionGuide(id="action-guide")
         yield LanguageList(id="language-list")
+        with Horizontal(id="confirm-bar"):
+            yield Button("Confirm", id="confirm-yes", variant="success")
+            yield Button("Cancel", id="confirm-no", variant="error")
         yield PromptArea("", id="input")
         yield SessionFooter(id="session-footer")
         yield Footer()
@@ -1153,24 +1171,67 @@ class AdaSenseiTUI(App):
         carries an explicit ``yes``.
         """
         if getattr(command, "confirmed", False):
+            self._set_confirmation_visible(False)
             self._run_nonblocking(command)
             return
         self._pending_exam = command
         self.ui_state.view = _CONFIRM_VIEW.get(type(command), View.EVALUATE)
         self._pending_eval = command if isinstance(command, EvaluateCommand) else None
-        self._status("Waiting for confirmation")
-        self._emit(_CONFIRM_PROMPT[type(command)])
+        self._status(get_ui_string("waiting_confirmation", self._current_locale()))
+        self._emit(self._confirm_prompt(command))
+        self._set_confirmation_visible(True)
+
+    def _set_confirmation_visible(self, visible: bool) -> None:
+        """Show/hide the shared Confirm/Cancel buttons and localize labels."""
+        locale = self._current_locale()
+        with contextlib.suppress(Exception):
+            bar = self.query_one("#confirm-bar")
+            bar.display = visible
+            if visible:
+                self.query_one("#confirm-yes", Button).label = get_ui_string(
+                    "confirm_yes", locale
+                )
+                self.query_one("#confirm-no", Button).label = get_ui_string(
+                    "confirm_no", locale
+                )
+
+    def _confirm_prompt(self, command: Command) -> str:
+        """Localized confirmation guidance for ``command``.
+
+        Exam start/finish prompts explain what the action will do, how to
+        configure the exam, and exactly how to confirm or cancel.
+        """
+        key = _CONFIRM_STRING_KEYS.get(type(command))
+        if key is not None:
+            return get_ui_string(key, self._current_locale())
+        return _CONFIRM_PROMPT[type(command)]
 
     def _resolve_pending_exam(self, pending: Command, answer: str) -> None:
         self._pending_exam = None
         self._pending_eval = None
         self.ui_state.view = View.CHAT
+        self._set_confirmation_visible(False)
         if answer.strip().lower() in {"y", "yes"}:
             self._run_nonblocking(pending)
         else:
-            self._status("Ready")
-            self._emit(_ABORT_ECHO[type(pending)])
+            locale = self._current_locale()
+            self._status(get_ui_string("ready", locale))
+            self._emit(
+                get_ui_string(_ABORT_STRING_KEYS[type(pending)], locale)
+                if type(pending) in _ABORT_STRING_KEYS
+                else _ABORT_ECHO[type(pending)]
+            )
             self._focus_input()
+
+    @on(Button.Pressed, "#confirm-yes")
+    def _confirm_pressed(self) -> None:
+        if self._pending_exam is not None:
+            self._resolve_pending_exam(self._pending_exam, "yes")
+
+    @on(Button.Pressed, "#confirm-no")
+    def _cancel_pressed(self) -> None:
+        if self._pending_exam is not None:
+            self._resolve_pending_exam(self._pending_exam, "no")
 
     #: Backward-compatible alias for the evaluate-only flow.
     _resolve_pending_eval = _resolve_pending_exam
@@ -1209,7 +1270,22 @@ class AdaSenseiTUI(App):
         self._on_worker_done(event.worker)
 
     def _dispatch_worker(self, command: Command) -> CommandResult:
+        if isinstance(command, ExamineStartCommand):
+            readiness = self.router.check_project_readiness()
+            if not readiness.ready:
+                return ErrorResponse(message=self._readiness_message(readiness))
         return self.router.dispatch(command)
+
+    def _readiness_message(self, readiness) -> str:
+        """Localized explanation of every blocking project-readiness issue."""
+        locale = self._current_locale()
+        lines = [get_ui_string("preflight_failed", locale)]
+        for issue in readiness.issues:
+            text = get_ui_string(f"preflight_{issue.code}", locale)
+            if issue.detail and "{detail}" in text:
+                text = text.format(detail=issue.detail)
+            lines.append(f"- {text}")
+        return "\n".join(lines)
 
     def _on_worker_done(self, worker: Worker) -> None:
         error = worker.error

@@ -319,6 +319,18 @@ class CommandRouter:
             )
         )
 
+    def check_project_readiness(self):
+        """Check whether the configured project can be evaluated.
+
+        Read-only: no Gradle task runs and the project is never modified. The
+        TUI calls this after the student confirms exam start and before the
+        attempt is created, so a missing Gradle/Android setup is reported as a
+        blocking reason instead of a degraded evaluation later.
+        """
+        from ..evaluation.preflight import ProjectPreflight
+
+        return ProjectPreflight(env=self.env).check(self.config.project.path)
+
     def exam_status(self) -> ExamStatus | None:
         """Authoritative exam status for the TUI, or ``None`` when idle.
 
@@ -468,6 +480,11 @@ class CommandRouter:
     def _project(self, cmd: ProjectCommand) -> CommandResult:
         if cmd.path:
             path = str(Path(cmd.path).expanduser().resolve())
+            # Keep the session and the action-facing project in sync: actions
+            # (evaluate/exam) read ``config.project.path``, so a /project that
+            # only updated the session context would still evaluate the old
+            # path or the current directory.
+            self.config.project.path = path
             self.context.set_project(path)
             return ProjectResult(path=path, project_id=self.context.project_id)
         path = str(self.config.project.path)

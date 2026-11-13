@@ -110,7 +110,8 @@ def test_selector_evaluate_enter_starts_confirmation_flow(tmp_path):
 
 def test_selector_evaluate_enter_no_separate_button(tmp_path):
     # evaluate is reached through the same selector used by every other action;
-    # there is no Evaluate button anywhere in the UI.
+    # there is no Evaluate button anywhere in the UI. The only buttons are the
+    # shared Confirm/Cancel controls, shown only while confirming.
     import asyncio
 
     app = Fixtures.make_app(tmp_path)
@@ -122,9 +123,7 @@ def test_selector_evaluate_enter_no_separate_button(tmp_path):
             app._resolve_pending_name("Ada")
             await pilot.pause()
             assert len(app.query("#evaluate-btn")) == 0
-            from textual.widgets import Button
-
-            assert len(app.query(Button)) == 0
+            assert app.query_one("#confirm-bar").display is False
             return True
 
     assert asyncio.run(_run())

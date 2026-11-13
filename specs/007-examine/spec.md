@@ -160,19 +160,32 @@ exam-init
 
 or the equivalent direct CLI command (`/exam-init` in the TUI).
 
-Starting an exam requires confirmation.
+Starting an exam requires confirmation. The TUI SHALL show explicit Confirm
+and Cancel controls in addition to accepting typed `yes`/`no`.
+
+After confirmation, the system SHALL verify that the current project is
+evaluable before creating any exam state. The readiness check MUST confirm:
+
+- a configured project path that exists and is a directory;
+- an Android manifest and a Gradle build file;
+- Gradle, JDK 17+, and the Android SDK.
+
+If the project is not ready, the system SHALL keep the exam inactive, create
+no attempt/timer/docs, and report each blocking reason in the active locale.
+The readiness check MUST NOT execute Gradle or modify the project.
 
 At start:
 
 1. resolve `student_id`;
 2. resolve `project_id`;
 3. resolve `exam_id`;
-4. create a new `exam_attempt_id`;
-5. record `started_at`;
-6. initialize `ask_count = 0`;
-7. initialize event history;
-8. create the exam docs directory;
-9. show the exam rules and allowed assistance policy.
+4. verify project readiness (no attempt is created on failure);
+5. create a new `exam_attempt_id`;
+6. record `started_at`;
+7. initialize `ask_count = 0`;
+8. initialize event history;
+9. create the exam docs directory;
+10. show the exam rules and allowed assistance policy.
 
 Student identity MUST come from explicit `--student <student_id>` or the
 established session identity mechanism. It MUST NOT be inferred from the prompt.

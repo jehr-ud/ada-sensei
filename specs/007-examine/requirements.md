@@ -93,6 +93,22 @@ The system SHALL distinguish observed, student-documented, and inferred architec
 ## RQ-EXM-031 — Process integrity
 Duration and `/ask` counts SHALL be based on application events/persisted state and not LLM-generated content.
 
+## RQ-EXM-032 — Project readiness before exam start
+After confirmation and before creating an `ExamAttempt`, the system SHALL verify
+that the current project can be evaluated: the configured project path exists
+and is a directory, the project contains an Android manifest and a Gradle build
+file, and Gradle, JDK 17+, and the Android SDK are discoverable.
+
+If any check fails, the system SHALL NOT create the attempt, the exam timer,
+or the exam docs directory, and SHALL show every blocking reason in the active
+locale. The readiness check SHALL NOT run Gradle or modify the project.
+
+## RQ-EXM-033 — Start confirmation controls
+The TUI SHALL present explicit Confirm and Cancel controls when exam start
+confirmation is requested, in the active locale, in addition to the existing
+typed `yes`/`no` and Enter/Escape responses. Cancel SHALL resolve the pending
+action without creating an attempt.
+
 ## Traceability
 
 | Requirement | Primary component | Test |
@@ -128,6 +144,8 @@ Duration and `/ask` counts SHALL be based on application events/persisted state 
 | RQ-EXM-029 | `ExamReportGenerator` | `tests/exams/test_report.py::test_suggested_grade_disclosure` |
 | RQ-EXM-030 | `ArchitectureAnalyzer` | `tests/exams/test_exams_architecture.py::test_no_unsupported_claims` |
 | RQ-EXM-031 | `ExamEventBridge` | `tests/exams/test_ask_tracking.py::test_counts_ignore_llm_text` |
+| RQ-EXM-032 | `ProjectPreflight` | `tests/evaluation/test_preflight.py`, `tests/cli/tui/test_exam_confirmation.py::test_start_is_blocked_when_project_cannot_be_evaluated` |
+| RQ-EXM-033 | TUI confirm controls | `tests/cli/tui/test_exam_confirmation.py::test_confirm_button_runs_the_pending_command`, `tests/cli/tui/test_exam_confirmation.py::test_cancel_button_aborts_the_pending_command` |
 
 
 ## Orchestration and Progression Isolation
