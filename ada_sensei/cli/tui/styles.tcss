@@ -49,14 +49,12 @@ Screen {
     padding: 0 1;
 }
 
-#confirm-bar {
+#exam-preparation-list {
     display: none;
-    height: 3;
+    height: auto;
+    max-height: 14;
+    border: round $primary;
     padding: 0 1;
-}
-
-#confirm-bar Button {
-    margin-right: 1;
 }
 
 #input {

@@ -112,6 +112,13 @@ class ProjectCommand:
 
 
 @dataclass
+class InstructionsCommand:
+    """Request to set / display the Markdown exam instructions."""
+
+    path: str | None = None
+
+
+@dataclass
 class HintCommand:
     """Request to reveal the next hint (delegated to the action layer)."""
 
@@ -179,6 +186,19 @@ class ProjectResult:
 
     path: str | None
     project_id: str | None
+
+    def present(self) -> str:
+        return f"Project configured: {self.path or 'not configured'}"
+
+
+@dataclass
+class InstructionsResult:
+    """Result of configuring the instructor's exam statement."""
+
+    path: str | None
+
+    def present(self) -> str:
+        return f"Exam instructions: {self.path or 'not configured'}"
 
 
 @dataclass
@@ -253,7 +273,6 @@ class DiagnoseCommand:
     stage_id: str | None = None
 
 
-
 CommandResult = (
     PracticeResult
     | AskResult
@@ -264,6 +283,7 @@ CommandResult = (
     | ExamStartResult
     | ExamFinishResult
     | ProjectResult
+    | InstructionsResult
     | AssistanceResult
     | HelpResult
     | ClearResult
@@ -285,6 +305,7 @@ Command = (
     | ExamineStartCommand
     | ExamineFinishCommand
     | ProjectCommand
+    | InstructionsCommand
     | HintCommand
     | MoreCommand
     | SolutionCommand

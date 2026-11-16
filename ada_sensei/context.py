@@ -18,6 +18,10 @@ SESSION_ID_ANON = "anonymous"
 class SessionState(BaseModel):
     student_id: str | None = None
     project_id: str | None = None
+    # Paths are session configuration, distinct from the immutable project id
+    # snapshot kept on an ExamAttempt.
+    project_path: str | None = None
+    instructions_path: str | None = None
     attempt_id: str | None = None
     #: Set while an exam is running so ``/ask`` and ``Finish Exam`` can find the
     #: attempt without the student restating its id (RQ-EXM-001, RQ-EXM-004).
@@ -48,6 +52,14 @@ class SessionContext:
     @property
     def project_id(self) -> str | None:
         return self.state.project_id
+
+    @property
+    def project_path(self) -> str | None:
+        return self.state.project_path
+
+    @property
+    def instructions_path(self) -> str | None:
+        return self.state.instructions_path
 
     @property
     def attempt_id(self) -> str:
@@ -114,9 +126,16 @@ class SessionContext:
     def set_project(self, path: str | Path | None) -> None:
         if path is None:
             self.state.project_id = None
+            self.state.project_path = None
             return
         resolved = str(Path(path).expanduser().resolve())
+        self.state.project_path = resolved
         self.state.project_id = URN.project_id_from_path(resolved)
+
+    def set_instructions(self, path: str | Path | None) -> None:
+        self.state.instructions_path = (
+            str(Path(path).expanduser().resolve()) if path is not None else None
+        )
 
     def set_exercise(self, exercise_id: str) -> None:
         self.state.current_exercise_id = exercise_id

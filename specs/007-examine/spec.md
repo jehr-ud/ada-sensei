@@ -1,607 +1,303 @@
-# Examine Action Specification
+# Especificación — 007 Examine: flujo de inicio y sesión de examen
 
-## Objective
+## Objetivo
 
-`exam-init` is a supervised exam-assessment workflow for an Android project. It
-reuses the deterministic evidence collection and scoring infrastructure from
-`006-evaluate`, but adds an exam lifecycle, exam-specific process evidence, and
-a detailed PDF assessment report.
+Refactorizar la experiencia de `exam-init` para que el estudiante pueda preparar,
+validar e iniciar un examen desde el TUI sin controles grandes que oculten el
+enunciado ni dependan de botones de confirmación. El flujo debe ser guiado,
+accesible por teclado, bilingüe y coherente con el selector de idioma existente.
 
-The resulting grade is a **suggested grade from 1.0 to 5.0**, with a raw
-assessment score from 0 to 50. The system MUST expose both values:
+El examen se define mediante un archivo de instrucciones del docente (Markdown
+como formato recomendado) y se ejecuta sobre un proyecto Android configurado
+explícitamente. No se crea ningún intento ni comienza el tiempo hasta que ambas
+rutas hayan sido configuradas y validadas y el estudiante seleccione **Empezar
+examen**.
 
-- `raw_score`: integer 0–50
-- `suggested_grade`: decimal 1.0–5.0
+## Alcance
 
-The suggested grade is derived deterministically from the raw score:
+Incluye:
 
-`grade = round(1.0 + (raw_score / 50.0) * 4.0, 1)`
+- comandos `/project <ruta>` y `/instructions <ruta>`;
+- selección de `Iniciar examen` desde el selector de acciones;
+- pantalla/panel de preparación con instrucciones claras y estado de requisitos;
+- reemplazo de botones grandes Confirmar/Cancelar por una lista compacta de
+  opciones navegable con Arriba/Abajo/Enter/Esc, siguiendo el patrón visual y
+  de interacción del selector de idioma;
+- preflight obligatorio del proyecto y validación de las instrucciones;
+- inicio explícito del examen;
+- temporizador visible durante el examen;
+- traducciones `es-CO` y `en-US`.
 
-The exam engine MUST NOT silently replace missing evidence with assumptions.
+No cambia el motor de evaluación, la rúbrica, el modelo `ExamDefinition`, la
+recolección de evidencias, el cálculo de notas, la generación del PDF ni las
+reglas de integridad ya definidas en este spec.
 
-## Relationship with `006-evaluate`
-
-`exam-init` SHALL reuse the `006-evaluate` evaluation engine boundary:
-
-- `EvaluationEngine`
-- `EvidenceContext`
-- `AndroidProjectAnalyzer`
-- `GradleTool`
-- `TestTool`
-- `StaticAnalysisTool`
-- `RequirementMatcher`
-- `RubricEngine`
-- `RubricDefinition`
-- structured LLM evaluation pipeline
-- `ResultStore`
-- `AttemptStore`
-- `HistoryStore`
-
-Per ADR-022, `exam-init` orchestrates `EvaluationEngine` directly; it SHALL NOT call
-`EvaluateAction`. Per ADR-023, rubric mechanics come from the shared `RubricEngine`
-while the exam supplies its own versioned `RubricDefinition` (`exam-default:v1`).
-`exam-init` SHALL NOT read, mutate, or substitute `evaluate-default:v1`.
-
-`exam-init` / `exam-finish` is an orchestration layer and an exam-specific rubric configuration,
-not a second implementation of project evaluation.
-
-The normal `evaluate` action remains available for ordinary exercise/project
-evaluation. `exam-init` / `exam-finish` adds exam lifecycle and process evidence.
-
-## Exam lifecycle
+## Flujo principal
 
 ```text
-START EXAM
-    ↓
-Resolve ExamDefinition
-    ↓
-Validate Android project
-    ↓
-Create ExamAttempt
-    ↓
-Create docs/ada-sensei/
-    ↓
-Record start timestamp
-    ↓
-Student works
-    ├── /ask usage is counted
-    ├── project changes are made by student
-    └── exam documentation may be supplied
-    ↓
-FINISH EXAM
-    ↓
-Record end timestamp
-    ↓
-Collect project evidence
-    ↓
-Collect exam documentation evidence
-    ↓
-Run Evaluate evidence pipeline
-    ↓
-Calculate deterministic rubric
-    ↓
-Generate detailed PDF
-    ↓
-Persist ExamResult
-    ↓
-Mark attempt completed
+Selector de acciones
+  └─ Iniciar examen
+       ↓
+Panel de preparación (no hay intento activo)
+  ├─ Mostrar ruta del proyecto: configurada / pendiente / inválida
+  ├─ Mostrar archivo de instrucciones: configurado / pendiente / inválido
+  ├─ Mostrar resultado de preflight del proyecto
+  ├─ Mostrar instrucciones para configurar:
+  │    /project <ruta-del-proyecto>
+  │    /instructions <ruta-del-enunciado.md>
+  └─ Opciones compactas:
+       > Empezar examen
+         Volver
+       ↓ Enter
+       Validar todo de nuevo
+       ├─ Hay errores → permanecer en preparación y mostrar todos los errores
+       └─ Todo válido
+            ↓
+          Resolver ExamDefinition
+            ↓
+          Crear ExamAttempt y documentación
+            ↓
+          Iniciar cronómetro y mostrar sesión activa
 ```
 
-## Exam definition and documentation
-
-An exam MUST have an authoritative exam definition. Supported sources:
-
-1. Markdown/text specification supplied by the instructor;
-2. a structured exam specification;
-3. an instructor-provided PDF statement.
-
-The source is evidence/context for the exam requirements. If a PDF is supplied,
-the original file SHALL be preserved and the extracted/normalized requirements
-MUST be reviewable.
-
-The student may document the implementation using:
-
-- `docs/` Markdown/spec files;
-- diagrams or text documentation;
-- an instructor-defined documentation template;
-- other files explicitly accepted by the exam definition.
-
-The system MUST distinguish:
-
-- `exam_statement` — instructor-provided requirements;
-- `student_documentation` — student's explanation/design evidence;
-- `project_evidence` — evidence collected from the Android project;
-- `process_evidence` — duration and `/ask` usage.
-
-The LLM may interpret documentation, but documentation alone cannot assert that
-functionality works when objective project evidence contradicts it.
-
-## Project docs directory
-
-When an exam starts, ADA Sensei SHALL create:
-
-```text
-docs/
-└── ada-sensei/
-    └── exams/
-        └── <exam_id>/
-            ├── exam-context.md
-            ├── exam-rubric.md
-            └── README.md
-```
-
-These files explain the active exam context, rubric, and expected documentation
-format. They MUST NOT contain the final grade.
-
-After the exam finishes, ADA Sensei SHALL add:
-
-```text
-docs/
-└── ada-sensei/
-    └── exams/
-        └── <exam_id>/
-            ├── exam-context.md
-            ├── exam-rubric.md
-            ├── README.md
-            ├── architecture.md
-            └── evaluation-summary.md
-```
-
-The final PDF SHALL be written to the ADA Sensei data/output location, not into
-the student's source tree, unless the user explicitly requests a project copy.
-
-## Start exam
-
-The action SHALL support:
-
-```text
-exam-init
-```
-
-or the equivalent direct CLI command (`/exam-init` in the TUI).
-
-Starting an exam requires confirmation. The TUI SHALL show explicit Confirm
-and Cancel controls in addition to accepting typed `yes`/`no`.
-
-After confirmation, the system SHALL verify that the current project is
-evaluable before creating any exam state. The readiness check MUST confirm:
-
-- a configured project path that exists and is a directory;
-- an Android manifest and a Gradle build file;
-- Gradle, JDK 17+, and the Android SDK.
-
-If the project is not ready, the system SHALL keep the exam inactive, create
-no attempt/timer/docs, and report each blocking reason in the active locale.
-The readiness check MUST NOT execute Gradle or modify the project.
-
-At start:
-
-1. resolve `student_id`;
-2. resolve `project_id`;
-3. resolve `exam_id`;
-4. verify project readiness (no attempt is created on failure);
-5. create a new `exam_attempt_id`;
-6. record `started_at`;
-7. initialize `ask_count = 0`;
-8. initialize event history;
-9. create the exam docs directory;
-10. show the exam rules and allowed assistance policy.
-
-Student identity MUST come from explicit `--student <student_id>` or the
-established session identity mechanism. It MUST NOT be inferred from the prompt.
-
-## Exam identity
-
-The system MUST keep these identifiers separate:
-
-- `student_id`
-- `project_id`
-- `exam_id`
-- `exercise_id` (optional)
-- `attempt_id`
-- `exam_attempt_id`
-
-`exam_attempt_id` identifies one execution of one exam by one student.
-
-## Ask tracking
-
-Every successful invocation of the `ask` action during an active exam MUST
-increment:
-
-`exam_attempt.ask_count`
-
-The system SHALL also persist an event:
-
-```text
-AskEvent
-- timestamp
-- action = ask
-- question_id
-- duration_ms
-```
-
-Failed/cancelled requests SHALL be recorded separately but MUST NOT count as a
-successful answered `/ask` unless the exam definition explicitly says otherwise.
-
-The count MUST be based on application events, not terminal text parsing.
-
-## Duration tracking
-
-The system SHALL record:
-
-- `started_at`
-- `finished_at`
-- `duration_seconds`
-
-If the exam defines a maximum duration, the system SHALL also record:
-
-- `allowed_duration_seconds`
-- `overtime_seconds`
-
-The timer starts when the exam is started and ends when the student selects
-Finish Exam and confirmation completes.
-
-The system MUST NOT rely on terminal timestamps or LLM claims for duration.
-
-## Exam finish
-
-The student explicitly selects:
-
-```text
-exam-finish
-```
-
-or `/exam-finish` in the TUI.
-
-The system SHALL:
-
-1. request confirmation;
-2. stop the exam timer;
-3. prevent further `/ask` usage for that exam attempt;
-4. collect final project evidence;
-5. collect student documentation;
-6. run the evaluation pipeline;
-7. generate the final assessment;
-8. persist the result.
-
-After finishing, the attempt is immutable except for administrative metadata.
-
-## Evaluation scope
-
-Exam evaluation SHALL reuse the default evaluation evidence:
-
-1. project inspection;
-2. build/compile;
-3. unit tests;
-4. Android Lint;
-5. Detekt.
-
-`connectedAndroidTest` SHALL NOT run by default.
-
-If an exam explicitly enables instrumented tests, the current system MUST still
-reject them until the future instrumented-test capability is implemented.
-
-Gradle execution SHALL use the existing confirmation policy from `006-evaluate`.
-
-## Exam rubric
-
-The initial exam rubric is the versioned `RubricDefinition` `exam-default:v1`:
-
-| Dimension | Weight |
-|---|---:|
-| Functional requirements | 40% |
-| Tests | 15% |
-| Code quality | 15% |
-| Clean architecture | 15% |
-| Android practices | 5% |
-| Exam process | 10% |
-
-Exam process is subdivided:
-
-| Criterion | Weight inside exam process |
-|---|---:|
-| Duration | 50% |
-| `/ask` usage | 50% |
-
-Therefore:
-
-- duration contributes 5% of the total;
-- `/ask` usage contributes 5% of the total.
-
-The weights MUST sum to 100%.
-
-## Functional requirements
-
-Functional requirements are derived from the authoritative exam definition.
-
-Each functional requirement SHALL have:
-
-- stable requirement id;
-- description;
-- evidence expectations;
-- optional weight.
-
-Functional subweights MUST sum to 1.0.
-
-The functional dimension contributes 40% of the total exam score.
-
-The LLM may explain whether evidence supports a requirement, but the final
-functional score is recomputed deterministically from evidence and the rubric.
-
-## Tests
-
-The tests dimension uses:
-
-- executed unit-test results;
-- test reports;
-- test existence;
-- requirement/test mapping where available.
-
-If tests cannot execute, the dimension is `not_evaluated` rather than silently
-passing.
-
-## Code quality
-
-Evidence includes:
-
+## Comportamiento esperado del TUI
+
+### Panel de preparación
+
+Al seleccionar `Iniciar examen`, el TUI debe mostrar un panel de preparación
+compacto. No debe presentar botones rectangulares grandes ni controles que
+ocupen una fila completa. Debe reutilizar el patrón de selector del idioma:
+opciones de texto en una lista, cursor `>` para indicar selección y ayuda de
+teclado al pie.
+
+El panel debe conservar visible el área de salida y no desplazar ni ocultar el
+texto que el usuario ya escribió. No debe exigir que el estudiante pegue el
+enunciado completo en el área de texto.
+
+Contenido mínimo, localizado:
+
+- Título: `Preparar examen` / `Prepare exam`.
+- Explicación breve: antes de comenzar, configura el proyecto Android y el
+  archivo Markdown con las instrucciones del docente.
+- Proyecto: ruta actual o `No configurado`; mostrar si existe y si pasa el
+  preflight.
+- Instrucciones: ruta actual o `No configuradas`; mostrar si el archivo existe,
+  es legible y se puede resolver como `ExamDefinition`.
+- Estado general: `Listo para comenzar` o `Faltan requisitos`.
+- Ayuda:
+  - `/project <ruta>` — configurar el directorio raíz del proyecto Android.
+  - `/instructions <ruta>` — configurar el archivo de instrucciones del examen.
+- Opciones:
+  - `Empezar examen`
+  - `Volver`
+
+Las opciones deben comportarse como una lista seleccionable equivalente a
+`LanguageList`: Arriba/Abajo cambia la selección, Enter ejecuta la opción,
+Escape vuelve al selector principal. La selección inicial será `Empezar examen`.
+Si los requisitos no están completos, esa opción se muestra deshabilitada o,
+si la biblioteca TUI no permite deshabilitar elementos, se puede seleccionar
+pero debe explicar los bloqueos sin ejecutar ninguna acción.
+
+### No iniciar automáticamente
+
+Abrir el panel de preparación no inicia el examen. No se crea intento, evento
+`EXAM_STARTED`, carpeta de documentación ni cronómetro al seleccionar la acción
+en el selector. Solamente la selección explícita de `Empezar examen`, después de
+validar los requisitos, puede iniciar el examen.
+
+### Validación al empezar
+
+Al seleccionar `Empezar examen`, ejecutar nuevamente todas las validaciones
+para evitar usar resultados obsoletos:
+
+1. Existe una identidad de estudiante configurada.
+2. `/project` apunta a una ruta existente y es un directorio.
+3. El directorio corresponde a un proyecto Android: contiene manifest y archivo
+   de build Gradle reconocibles por los detectores existentes.
+4. Gradle/Gradle Wrapper, JDK 17+ y Android SDK están disponibles conforme al
+   `ProjectPreflight` existente.
+5. `/instructions` apunta a un archivo regular, existente y legible.
+6. El `ExamDefinitionLoader` puede cargar el archivo y producir una definición
+   válida, incluyendo validaciones de ids y pesos funcionales.
+7. No existe otro examen activo en la sesión.
+
+El preflight debe ser de solo lectura: no ejecutar Gradle, no compilar, no
+modificar el proyecto. La validación no debe crear `ExamAttempt`, timer ni
+documentación. Si falla, presentar todos los errores conocidos, mantener el
+panel abierto y permitir corregir rutas mediante los comandos.
+
+Si todo es válido, pedir confirmación únicamente mediante la opción
+`Empezar examen` ya seleccionada. No volver a presentar un segundo diálogo con
+botones Confirmar/Cancelar.
+
+## Comandos de configuración
+
+### `/project <ruta>`
+
+Configura la raíz del proyecto que se examinará.
+
+- Acepta ruta absoluta o relativa.
+- Las rutas relativas se resuelven respecto al directorio de trabajo actual del
+  proceso, no respecto a la carpeta de instalación de ADA Sensei.
+- Normaliza `~` y la ruta resultante.
+- Guarda la ruta en el contexto/configuración de sesión existente.
+- No debe cambiar el directorio actual del proceso.
+- Debe mostrar la ruta resuelta y un estado preliminar (directorio existente,
+  estructura Android detectada o pendiente de preflight).
+- No crea ni inicia un examen.
+- Sin argumento, puede mostrar la ruta actualmente configurada si el contrato
+  CLI existente permite comandos informativos; no inventar una ruta por defecto.
+
+### `/instructions <ruta>`
+
+Configura el archivo de instrucciones del docente.
+
+- Acepta ruta absoluta o relativa; las relativas se resuelven desde el directorio
+  de trabajo actual del proceso.
+- Formato requerido para esta iteración: `.md` (Markdown).
+- Valida que sea archivo regular, legible y con contenido no vacío.
+- La carga definitiva se realiza con `ExamDefinitionLoader`; no duplicar ni
+  reimplementar el parser.
+- Conserva `statement_source`, `original_statement` y
+  `original_source_path` según el modelo `ExamDefinition`.
+- No copia ni modifica el archivo del docente.
+- No inicia examen.
+- Sin argumento, puede mostrar la ruta configurada si el contrato CLI lo admite.
+
+Los dos comandos son configuración de contexto. No sustituyen ni duplican
+`ExamDefinitionLoader`, `ProjectPreflight`, `ExamLifecycle` o `ExamineAction`.
+
+## Examen activo y temporizador
+
+Después de iniciar correctamente:
+
+- mostrar un indicador persistente y compacto en el encabezado o barra de
+  estado del TUI;
+- mostrar tiempo transcurrido en formato `HH:MM:SS`;
+- si `allowed_duration_seconds` existe, mostrar también tiempo restante y
+  estado de vencimiento; por ejemplo `Restante 00:42:15`;
+- si no hay límite de duración, mostrar tiempo transcurrido y no inventar un
+  countdown;
+- mostrar el contador de consultas exitosas `/ask` respecto al límite, si está
+  definido: `Consultas 1/4`; si no hay límite, `Consultas 1`;
+- actualizar la presentación periódicamente sin bloquear la entrada, el
+  selector ni los workers;
+- al terminar el examen, retirar el indicador activo y conservar la duración
+  final en el resultado/resumen.
+
+El temporizador visual es una proyección de `started_at` y de la hora actual.
+La fuente de verdad persistida continúa siendo `started_at`/`finished_at` y la
+duración calculada por el dominio. No persistir ticks ni usar el contador visual
+como evidencia. Al reanudar una sesión, recalcular el tiempo desde el timestamp
+persistido; no reiniciar el reloj.
+
+Si se alcanza el límite de duración, mostrar claramente `Tiempo agotado` /
+`Time limit reached`. No finalizar ni modificar el proyecto silenciosamente.
+La política de finalización automática no se introduce en esta refactorización:
+el estudiante debe usar `Finalizar examen`; la duración real y el overtime se
+calculan al finalizar.
+
+## Finalización
+
+`Finalizar examen` conserva el flujo de finalización y confirmación de dominio
+existente. La interfaz puede adoptar el mismo selector compacto de opciones
+`Finalizar examen` / `Continuar`, sin botones grandes, pero no debe cambiar la
+semántica de `ExamFinishInput.confirmed`, el cierre de eventos `/ask` ni la
+recolección de evidencias.
+
+### Progreso de finalización
+
+La finalización ejecuta varias etapas lentas (hasta cuatro invocaciones de
+Gradle con timeout configurable, interpretación del modelo y generación del
+informe). Para que el estudiante no perciba que la operación se colgó, el TUI
+emite mensajes de avance localizados, uno por etapa real del pipeline:
+
+- inspección del proyecto;
+- build de Gradle;
+- pruebas unitarias;
+- Android Lint;
 - Detekt;
-- source structure;
-- duplication/complexity where deterministic tooling exposes it;
-- error handling;
-- readability;
-- maintainability.
-
-Lint/Detekt findings are evidence, not automatic one-to-one deductions.
-
-## Clean architecture
-
-The architecture dimension evaluates:
-
-- separation of presentation/domain/data responsibilities;
-- dependency direction;
-- appropriate abstraction boundaries;
-- state management;
-- testability;
-- avoidance of inappropriate coupling.
-
-Evidence sources include project structure, source inspection, dependency
-configuration, and explicitly provided student architecture documentation.
-
-The LLM may interpret architectural evidence but SHALL NOT invent components or
-relationships not present in the project.
-
-## Android practices
-
-Evidence includes Android Lint plus project inspection for:
-
-- lifecycle-aware behavior;
-- Compose practices;
-- resource usage;
-- Android API usage;
-- configuration-sensitive behavior;
-- other practices represented by deterministic evidence.
-
-## Exam process scoring
-
-### Duration
-
-If the exam specifies an allowed duration, duration is scored deterministically
-using the following initial bands:
-
-- within 100% of allowed time: 4
-- >100% and <=110%: 3
-- >110% and <=125%: 2
-- >125% and <=150%: 1
-- >150%: 0
-
-If no duration limit is defined, duration is reported but the duration criterion is
-`not_evaluated` and excluded from the denominator.
-
-### `/ask` usage
-
-The exam definition SHOULD specify an allowed ask count.
-
-Initial bands:
-
-- <= 50% of allowed asks: 4
-- >50% and <=100%: 3
-- >100% and <=150%: 2
-- >150% and <=200%: 1
-- >200%: 0
-
-The exam definition may override these bands.
-
-If no ask limit is defined, ask usage is reported but the criterion is
-`not_evaluated` and excluded from the denominator.
-
-Ask usage measures use of the tutor, not correctness. It MUST NOT be used to
-claim academic dishonesty or intent.
-
-## Deterministic scoring
-
-Each evaluated criterion receives a 0–4 integer score.
-
-The exam raw score is:
-
-```text
-raw_score_50 =
-    50 ×
-    Σ(weight_dimension × dimension_score / 4)
-    / Σ(weight_dimension for evaluated dimensions)
-```
-
-The raw score SHALL be rounded to the nearest integer in [0, 50].
-
-The suggested grade is:
-
-```text
-suggested_grade =
-    round(1.0 + (raw_score_50 / 50.0) * 4.0, 1)
-```
-
-Therefore:
-
-- 0 → 1.0
-- 25 → 3.0
-- 50 → 5.0
-
-The report MUST display both values.
-
-Missing evidence never becomes success. Dimensions or criteria without evidence
-are marked `not_evaluated` and excluded from the denominator.
-
-## Suggested grade status
-
-The result MUST be explicitly labeled:
-
-> Suggested grade — generated by ADA Sensei
-
-It is an assessment aid for the instructor, not an authoritative institutional
-grade.
-
-The PDF MUST show the evidence and calculation behind the suggested grade.
-
-## Architecture explanation
-
-The final evaluation SHALL contain an architecture section describing the
-current Android project's actual architecture.
-
-It should identify, where present:
-
-- modules;
-- packages;
-- UI layer;
-- domain layer;
-- data layer;
-- repositories;
-- ViewModels;
-- dependency injection;
-- navigation;
-- persistence;
-- network/API boundaries;
-- testing structure.
-
-It MUST distinguish:
-
-- observed architecture;
-- student-documented architecture;
-- inferred interpretation.
-
-The LLM MUST NOT present unsupported architecture as fact.
-
-## PDF report
-
-The generated PDF SHALL contain:
-
-1. exam identification;
-2. student;
-3. project;
-4. exam attempt id;
-5. start/end timestamps;
-6. duration;
-7. ask count;
-8. allowed ask count when defined;
-9. rubric;
-10. functional requirements and evidence;
-11. test results;
-12. code-quality findings;
-13. architecture explanation;
-14. Android-practice findings;
-15. exam-process metrics;
-16. strengths;
-17. weaknesses;
-18. recommendations;
-19. detailed evidence;
-20. raw score 0–50;
-21. suggested grade 1.0–5.0;
-22. limitations/not-evaluated criteria;
-23. methodology and calculation.
-
-The PDF MUST NOT contain unsupported claims.
-
-## Structured LLM output
-
-The LLM output SHALL be schema validated using the shared structured-output
-pipeline:
-
-LLM
-→ parser
-→ schema validation
-→ retry
-→ final failure
-
-Maximum 3 total attempts.
-
-Malformed or incomplete output MUST NOT be silently accepted.
-
-## Persistence
-
-The result SHALL be persisted with:
-
-- `student_id`
-- `project_id`
-- `exam_id`
-- `exam_attempt_id`
-- optional `exercise_id`
-- `attempt_id`
-- timestamps
-- ask count
-- duration
-- rubric version
-- raw score
-- suggested grade
-- evidence references
-- report path/id
-
-After successful completion:
-
-```text
-ExamResult
-    ↓
-ResultStore
-    ↓
-AttemptStore.mark_completed()
-    ↓
-HistoryStore.append_exam_result()
-```
-
-Persistence failures MUST be explicit.
-
-## Security and integrity
-
-ADA Sensei MUST NOT modify student source files as part of evaluation.
-
-Generated exam documentation and report metadata must be clearly identified as
-ADA Sensei generated content.
-
-The exam timer and ask count MUST come from application events and persisted
-state, not from model-generated text.
-
-## Out of scope
-
-- automatic plagiarism detection;
-- automatic cheating accusations;
-- emotion/behavior inference;
-- webcam/screen monitoring;
-- hidden surveillance;
-- automatic institutional grade submission;
-- connectedAndroidTest execution before the future instrumented-test feature.
-
-
-## Separation from Study Progression and Agent Orchestration
-
-`/exam-init` and `/exam-finish` SHALL be invoked through `TeacherAgent`, which
-coordinates the three specialist agents under `009-agent-orchestration`. The
-EvaluatorAgent owns diagnostic interpretation and calls this spec's exam workflow
-through application services; it does not bypass the shared router contracts.
-
-An exam may begin at any stage and is not a stage exit assessment by default.
-Exam results SHALL be stored separately from `MasteryAssessment` and SHALL NOT
-automatically promote or demote the student's learning stage. The PlannerAgent may
-consider exam evidence only when an explicit mastery assessment is requested and
-when the relevant catalog policy permits reuse of that evidence.
-
-
-## Agent Orchestration Contract
-
-Every `/exam-init` and `/exam-finish` request SHALL be orchestrated by `TeacherAgent` and include PlannerAgent, EvaluatorAgent, and TrainerAgent participation as specified by `009-agent-orchestration`. The actual exam side effect runs once through the existing exam action service; agent participation must not start or finish the exam twice.
+- interpretación del modelo;
+- generación del informe PDF.
+
+Los mensajes se originan en la etapa que realmente se está ejecutando (callback
+del pipeline de evidencias), nunca en un temporizador simulado, y no alteran el
+resultado, la puntuación ni el orden de ejecución. La etapa actual también puede
+reflejarse en el indicador de estado.
+
+### Entrega del informe
+
+El informe PDF se escribe dentro del proyecto examinado, en el subárbol propio
+`docs/ada-sensei/exams/<exam-slug>/report.pdf`, junto a la documentación
+generada del examen (RQ-EXM-024). No se escribe en el directorio de datos de
+ADA Sensei. La escritura respeta la integridad del proyecto: solo ocurre dentro
+de `docs/ada-sensei/`.
+
+Tras generarlo, el TUI lo abre con el visor del sistema de forma best-effort,
+controlado por el ajuste `tools.open_report` (por defecto activado). Si no hay
+visor disponible, la apertura falla en silencio y el resultado no cambia. El
+CLI no interactivo no abre el PDF: solo imprime la ruta.
+
+## Persistencia y seguridad
+
+- Persistir las rutas de proyecto e instrucciones en el contexto/configuración
+  existente con el alcance de sesión ya definido; no crear un almacén paralelo
+  sin necesidad.
+- Persistir la definición resuelta al iniciar, de modo que finalizar no dependa
+  de volver a leer el archivo original.
+- No guardar el contenido del proyecto ni copiar el enunciado al proyecto.
+- No modificar fuentes del estudiante ni el archivo de instrucciones. La única
+  escritura en el proyecto es la documentación y el informe generados bajo
+  `docs/ada-sensei/` (RQ-EXM-009, RQ-EXM-024).
+- Si la ruta cambia durante un examen activo, no cambiar el `project_root` del
+  intento actual. El intento conserva el `project_id` y el proyecto resueltos
+  al inicio. Un cambio de ruta solo afecta al siguiente examen.
+- Los errores de rutas deben mostrarse sin trazas internas ni secretos.
+
+## Internacionalización
+
+Todas las cadenas nuevas deben existir en `es-CO` y `en-US`, con fallback
+determinista `en-US`. El idioma se obtiene del servicio de locale existente.
+No duplicar selector ni catálogo de idiomas.
+
+## Fuera de alcance
+
+- Crear un selector gráfico de carpetas/archivos.
+- Cambiar la rúbrica o ponderaciones.
+- Cambiar la lógica de puntuación o evaluación.
+- Implementar exámenes sin proyecto Android.
+- Ejecutar pruebas instrumentadas `connectedAndroidTest`.
+- Forzar cierre automático al vencer el tiempo.
+- Cambiar la arquitectura de agentes o enrutar acciones a nuevos agentes.
+
+## Criterios de aceptación
+
+1. Seleccionar `Iniciar examen` abre el panel de preparación, no un panel con
+   botones grandes Confirmar/Cancelar.
+2. El panel se parece en interacción al selector de idioma: lista compacta,
+   cursor `>`, Arriba/Abajo/Enter/Escape.
+3. El panel explica con claridad cómo configurar `/project <ruta>` y
+   `/instructions <ruta>`.
+4. No se puede iniciar si falta cualquiera de las dos rutas.
+5. No se puede iniciar con ruta de proyecto inexistente, archivo no Android,
+   herramientas requeridas ausentes o archivo de instrucciones inválido.
+6. Todos los errores detectados se muestran en el idioma activo; el panel sigue
+   disponible para corregir la configuración.
+7. Abrir el panel, validar o cancelar no crea intento, timer, eventos ni docs.
+8. `Empezar examen` crea exactamente un intento y registra el inicio una sola
+   vez.
+9. El panel de examen activo muestra tiempo transcurrido; muestra tiempo
+   restante solo cuando existe límite.
+10. El temporizador no bloquea el TUI y al reanudar usa el timestamp persistido.
+11. El contador `/ask` continúa derivándose de eventos de aplicación y no de
+    texto de terminal.
+12. `/exam-finish` sigue generando el resultado/PDF con las reglas existentes;
+    el PDF se escribe en `docs/ada-sensei/exams/<exam-slug>/report.pdf` del
+    proyecto.
+13. Durante la finalización se muestran mensajes de avance por etapa.
+14. Con `tools.open_report` activado, el TUI abre el PDF generado; si la
+    apertura falla, el resultado no se ve afectado.
+15. Las acciones CLI directas siguen funcionando y validan precondiciones antes
+    de crear estado. No se permite que `--yes` omita `ProjectPreflight`.
+16. Las pruebas existentes de `006-evaluate`, el motor de examen, persistencia,
+    idioma y selector TUI continúan pasando.

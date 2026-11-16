@@ -1,357 +1,239 @@
-# Design — Examine Action
+# Diseño — 007 Examine: preparación y temporizador TUI
 
-## Architectural position
+## Principios
 
-`exam-init` / `exam-finish` is an orchestration layer over `006-evaluate`.
+1. Reutilizar la infraestructura existente: `ExamineAction`, `ExamDefinitionLoader`,
+   `ProjectPreflight`, `ExamLifecycle`, `ExamStore`, `ExamEventBridge`,
+   `LocaleService`, `ActionRegistry` y el router.
+2. La interfaz presenta estado; no implementa reglas de dominio ni scoring.
+3. Validar dos veces: al mostrar el estado de preparación y justo antes de iniciar.
+4. Ninguna validación crea un intento ni modifica el proyecto.
+5. La selección de idioma es la referencia de interacción visual/teclado; no
+   duplicar su catálogo ni su lógica de locale.
 
-```text
-                          ┌──────────────────┐
-                          │   ExamineAction  │
-                          └────────┬─────────┘
-                                   │
-              ┌────────────────────┼────────────────────┐
-              │                    │                    │
-        ExamLifecycle        ExamEvaluation        ExamRubric
-              │                    │                    │
-       start/finish      006-evaluate engine       process metrics
-       ask counter       (same instance of         duration/ask
-       duration          EvaluationEngine)
-              │                    │                    │
-              └────────────────────┼────────────────────┘
-                                   ▼
-                            ExamScoring
-                                   │
-                     ┌─────────────┴─────────────┐
-                     ▼                           ▼
-              RubricEngine +             EvaluationAgent
-              exam-default:v1                    │
-                     └─────────────┬─────────────┘
-                                   ▼
-                              ExamResult
-                                   │
-                     ┌─────────────┼─────────────┐
-                     ▼             ▼             ▼
-                 ResultStore   HistoryStore     PDF
+## Componentes propuestos
+
+Los nombres son propuestas de diseño. Antes de crearlos, inspeccionar los
+componentes equivalentes existentes y extenderlos en lugar de duplicarlos.
+
+### `ExamPreparationService` (application/action layer)
+
+Responsabilidades:
+
+- leer las rutas configuradas del `SessionContext`/configuración existente;
+- validar archivo de instrucciones mediante `ExamDefinitionLoader`;
+- ejecutar `ProjectPreflight` para el proyecto configurado;
+- comprobar identidad y ausencia de examen activo;
+- devolver un resultado inmutable de validación sin crear estado.
+
+Modelo sugerido:
+
+```python
+class ExamPreparationStatus(BaseModel):
+    student_ready: bool
+    project_path: str | None
+    project_ready: bool
+    project_blockers: list[str]
+    instructions_path: str | None
+    instructions_ready: bool
+    instruction_blockers: list[str]
+    active_exam: bool
+    ready_to_start: bool
 ```
 
+No almacenar un `ExamDefinition` mutable como fuente de verdad entre el
+preflight y el inicio. Al confirmar, volver a cargar la definición y validar
+otra vez.
 
-## Core models
+### `ExamPreparationScreen` (TUI)
 
-### ExamDefinition
+- Presenta título, texto explicativo, rutas, estados y lista compacta.
+- Reutiliza el patrón/controles de `LanguageList` y `LanguageSelection`.
+- No contiene botones `Confirmar` / `Cancelar` de gran tamaño.
+- Mantiene foco de teclado y permite volver al selector.
+- Si el estado no está listo, explica bloqueos y no despacha `exam-init`.
 
-```text
-exam_id
-title
-version
-statement_source
-requirements[]
-allowed_duration_seconds?
-allowed_ask_count?
-rubric_ref          # defaults to "exam-default:v1"
-documentation_rules
-```
-
-### ExamRequirement
+Boceto español:
 
 ```text
-requirement_id
-description
-dimension
-weight
-evidence_expectations[]
+┌ Preparar examen ───────────────────────────────────────────┐
+│ Antes de comenzar configura el proyecto y el enunciado.    │
+│                                                            │
+│ Proyecto       ✓ /Users/.../DominoConquista                │
+│ Instrucciones  ✓ /Users/.../examen.md                      │
+│ Preflight      ✓ Proyecto Android y herramientas listas    │
+│                                                            │
+│ Configura con:                                              │
+│   /project <ruta-del-proyecto>                              │
+│   /instructions <ruta-del-enunciado.md>                     │
+│                                                            │
+│ > Empezar examen                                            │
+│   Volver                                                    │
+│                                                            │
+│ ↑/↓ Mover · Enter Seleccionar · Esc Volver                 │
+└────────────────────────────────────────────────────────────┘
 ```
 
-### ExamAttempt
+Estados pendientes o inválidos deben ser visibles, por ejemplo:
 
 ```text
-exam_attempt_id
-student_id
-project_id
-exam_id
-exercise_id?
-attempt_id
-started_at
-finished_at?
-duration_seconds?
-allowed_duration_seconds?
-overtime_seconds?
-ask_count
-status
-event_ids[]
+Proyecto       ✗ No configurado
+Instrucciones  ✗ No configuradas
+Preflight      — Pendiente
+Estado         Faltan requisitos
 ```
 
-### ExamEvent
+El layout debe adaptarse a terminales pequeñas: texto con wrap, lista compacta,
+sin alturas fijas excesivas. No reducir el área de conversación más de lo
+necesario.
+
+### Comandos `/project` y `/instructions`
+
+Registrar ambos en el parser/command registry central. No añadir un parser
+paralelo exclusivo para el TUI.
+
+- `/project <ruta>` actualiza `SessionContext.project_path` o el campo canónico
+  ya existente; revisar configuración actual antes de decidir el campo.
+- `/instructions <ruta>` actualiza el campo canónico de statement/instructions
+  del examen en el contexto existente. Si no existe, agregarlo al modelo de
+  contexto de manera versionada y con persistencia compatible.
+- Los comandos deben funcionar en TUI y CLI si el contrato compartido lo permite.
+- Los mensajes de ayuda del selector y `/help` deben documentarlos.
+- Los comandos no deben cambiar cwd.
+- Los errores de ruta se devuelven como mensajes localizados y accionables.
+
+Resolver rutas mediante `Path.expanduser()` y `Path.resolve()` (con política
+explícita para rutas inexistentes); las relativas se anclan al cwd capturado al
+recibir el comando. No resolver rutas relativas contra el directorio de
+instalación ni contra `data_dir`.
+
+### Inicio
+
+El flujo de inicio usa un único servicio de aplicación que:
+
+1. obtiene una instantánea de rutas;
+2. comprueba identidad y examen activo;
+3. ejecuta `ProjectPreflight`;
+4. carga `ExamDefinition` desde la ruta Markdown;
+5. valida definición;
+6. solo entonces invoca `ExamineAction.start` / `ExamLifecycle.start`.
+
+Evitar separar preflight de dispatch en un callback TUI que permita un cambio de
+estado entre ambas operaciones. La validación final y creación del intento
+deben ocurrir en una misma operación de aplicación, con protección contra doble
+Enter/doble dispatch. `ExamineAction.start` debe reforzar precondiciones en el
+límite de aplicación; no confiar exclusivamente en el TUI.
+
+El modelo `ExamDefinition` sigue siendo autoritativo y conserva:
+
+- `statement_format = markdown`;
+- `statement_source` como ruta;
+- `original_statement` verbatim;
+- `original_source_path`;
+- `requirements`;
+- límites de tiempo/consultas;
+- `rubric_ref` y `documentation_rules`;
+- `limitations`.
+
+No cambiar el algoritmo de normalización ni la regla de pesos funcionales.
+
+### Temporizador
+
+El dominio ya persiste `started_at` y `finished_at`; no añadir ticks a `ExamEvent`.
+
+Componente visual sugerido `ExamStatusBar`:
 
 ```text
-event_id
-exam_attempt_id
-type
-timestamp
-metadata
+EXAMEN ACTIVO | Transcurrido 00:12:34 | Restante 00:47:26 | /ask 1/4
 ```
 
-Event types initially:
+Sin límite:
 
 ```text
-EXAM_STARTED
-ASK_STARTED
-ASK_COMPLETED
-ASK_FAILED
-ASK_CANCELLED
-EXAM_FINISH_REQUESTED
-EXAM_FINISHED
-EVALUATION_STARTED
-EVALUATION_COMPLETED
+EXAMEN ACTIVO | Transcurrido 00:12:34 | /ask 1
 ```
 
-### ExamResult
+Cálculo de presentación:
+
+```python
+elapsed = max(0, now_utc - attempt.started_at).total_seconds()
+remaining = max(0, allowed_duration_seconds - elapsed)
+```
+
+Usar el reloj/servicio de tiempo inyectable existente para pruebas. La UI puede
+usar el mecanismo periódico de Textual (`set_interval` o equivalente del
+proyecto), solo para refrescar la etiqueta. No crear threads/timers propios si
+el framework ya provee scheduler. El callback debe ser ligero y no hacer I/O,
+LLM ni acceso bloqueante al store.
+
+El timestamp persistido sigue siendo la fuente autoritativa. Al iniciar la UI
+con un intento activo, leer el intento y reconstruir la etiqueta desde
+`started_at`. Cuando se finaliza, detener la actualización y refrescar el footer.
+
+El ask count se obtiene del intento/event log o del snapshot de estado que ya
+mantenga el servicio; no consultar el store cada segundo. Actualizar el contador
+cuando llegue un evento de ask completado.
+
+## Flujo de estados
 
 ```text
-exam_attempt_id
-rubric_version
-dimensions[]
-functional_requirements[]
-process_metrics
-architecture_report
-strengths[]
-weaknesses[]
-recommendations[]
-evidence[]
-limitations[]
-raw_score_50
-suggested_grade
-report_id/path
+IDLE
+  └─ select exam-init → PREPARING
+       ├─ escape → IDLE
+       ├─ configure project/instructions → PREPARING (refresh status)
+       └─ start
+            ├─ validation failed → PREPARING (show blockers)
+            └─ validation passed → ACTIVE
+                 ├─ ask completed → ACTIVE (refresh ask count)
+                 ├─ time limit reached → ACTIVE_EXPIRED (warning only)
+                 └─ exam-finish → FINISHING → COMPLETED
 ```
 
-## Exam lifecycle state machine
+`ACTIVE_EXPIRED` no es un estado de dominio nuevo necesariamente; puede ser una
+condición derivada para la presentación. El examen sigue activo hasta la acción
+de finalización.
 
-```text
-CREATED
-  ↓
-ACTIVE
-  ├── ASK_STARTED → ASK_COMPLETED
-  ├── ASK_STARTED → ASK_FAILED
-  ├── ASK_STARTED → ASK_CANCELLED
-  │
-  └── FINISH_REQUESTED
-          ↓ confirmation
-      EVALUATING
-          ↓
-      COMPLETED
-```
+## Finalización: progreso y entrega del informe
 
-A completed attempt cannot accept new ask events.
+`ExamineAction.finish` orquesta etapas lentas. Para no dejarlas silenciosas, se
+pasa un callback de progreso opcional desde el TUI (vía `Router.progress`) hasta
+`EvidenceCollector`, que lo invoca antes de cada etapa real (`inspection`,
+`build`, `unit_tests`, `lint`, `detekt`). `ExamineAction` emite además avance
+para la interpretación del modelo y la generación del informe. El callback
+recibe un identificador de etapa; la localización se resuelve con
+`get_ui_string` usando el locale del intento. El TUI convierte cada mensaje en
+un `OutputReady` (seguro entre hilos).
 
-## `/ask` integration
+El informe se escribe con `ExamReportGenerator.generate(path=...)` apuntando a
+`ExamDocs.path(REPORT_NAME)` dentro de `docs/ada-sensei/exams/<exam-slug>/`; el
+generador no cambia su contrato. La apertura posterior usa
+`ada_sensei.tools.opener.open_path` (best-effort, multiplataforma) y solo ocurre
+en el TUI, condicionada por `tools.open_report`.
 
-Do not modify AskAction's pedagogical behavior.
+## Persistencia y compatibilidad
 
-Instead, emit an application event when AskAction starts/completes.
+- Preferir campos existentes de configuración/contexto. No duplicar `project.path`.
+- Añadir `instructions_path` solo si no hay campo canónico apropiado.
+- Versionar cambios de contexto persistido y mantener lectura de registros
+  anteriores.
+- No alterar esquemas históricos de `ExamAttempt` salvo que la inspección
+  demuestre que se necesita un dato que hoy no se conserva.
+- `ExamAttempt.project_id`, `exam_id`, `started_at`, locale y límites siguen
+  siendo snapshot del inicio.
+- La definición se persiste al inicio; finish no vuelve a leer el archivo.
 
-```text
-AskAction
-   ↓
-ExamSessionTracker.record_ask_event(...)
-```
+## Pruebas
 
-This keeps the exam counter independent from the TUI and direct CLI.
-
-## Documentation
-
-At exam start:
-
-```text
-docs/
-└── ada-sensei/
-    └── exams/
-        └── <exam_id>/
-            ├── README.md
-            ├── exam-context.md
-            └── exam-rubric.md
-```
-
-`exam-context.md` contains the normalized instructor exam requirements.
-
-Student-authored documentation should remain distinguishable, for example:
-
-```text
-docs/
-├── exam/
-│   ├── requirements.md
-│   ├── architecture.md
-│   └── submission.md
-└── ada-sensei/
-    └── exams/
-        └── <exam_id>/
-            ...
-```
-
-The system must not overwrite student-authored files.
-
-## PDF generation
-
-Use a dedicated `ExamReportGenerator`.
-
-Input:
-
-```text
-ExamResult
-```
-
-Output:
-
-```text
-PDF
-```
-
-Recommended report structure:
-
-1. Cover
-2. Exam metadata
-3. Executive assessment
-4. Rubric and calculation
-5. Functional requirements
-6. Test evidence
-7. Code quality
-8. Clean architecture
-9. Android practices
-10. Exam process
-11. Architecture map
-12. Strengths
-13. Weaknesses
-14. Recommendations
-15. Detailed evidence
-16. Limitations
-17. Suggested grade
-
-## Rubric engine
-
-Reuse the deterministic `RubricEngine` from `006-evaluate` and supply the exam's
-own versioned `RubricDefinition` (`exam-default:v1`). Per ADR-023 the exam SHALL
-NOT instantiate or mutate `evaluate-default:v1`.
-
-```text
-functional_requirements  0.40
-tests                    0.15
-code_quality             0.15
-clean_architecture      0.15
-android_practices        0.05
-exam_process             0.10
-```
-
-`exam_process`:
-
-```text
-duration   0.50
-ask_usage  0.50
-```
-
-Thus:
-
-```text
-duration   = 0.05 global
-ask_usage  = 0.05 global
-```
-
-The rubric supports `not_evaluated` criteria and renormalizes the denominator
-exactly as `006-evaluate`.
-
-## Duration scorer
-
-If `allowed_duration_seconds` is present:
-
-```text
-ratio = actual_duration / allowed_duration
-
-ratio <= 1.00  → 4
-ratio <= 1.10  → 3
-ratio <= 1.25  → 2
-ratio <= 1.50  → 1
-otherwise      → 0
-```
-
-If no allowed duration exists:
-
-```text
-criterion = NOT_EVALUATED
-```
-
-## Ask usage scorer
-
-If `allowed_ask_count` is present:
-
-```text
-ratio = ask_count / allowed_ask_count
-
-ratio <= 0.50  → 4
-ratio <= 1.00  → 3
-ratio <= 1.50  → 2
-ratio <= 2.00  → 1
-otherwise      → 0
-```
-
-If no ask limit exists:
-
-```text
-criterion = NOT_EVALUATED
-```
-
-These defaults should be versioned in the exam rubric and can be overridden by
-an instructor-defined rubric.
-
-## Evidence policy
-
-The LLM receives:
-
-- exam requirements;
-- matched evidence;
-- student documentation;
-- architecture evidence;
-- process metrics;
-- rubric instructions.
-
-The LLM returns structured qualitative interpretation only.
-
-The deterministic rubric computes:
-
-- dimension scores;
-- raw 0–50 score;
-- suggested 1.0–5.0 grade.
-
-The LLM cannot override these values.
-
-## PDF integrity
-
-The PDF must include a calculation table so an instructor can reconstruct the
-suggested grade.
-
-Example:
-
-```text
-Dimension                 Weight   Score  Contribution
-Functional requirements    40%      3.5       35.0
-Tests                      15%      3.0       11.25
-Code quality               15%      3.5       13.125
-Clean architecture        15%      3.0       11.25
-Android practices           5%      4.0        5.0
-Exam process               10%      3.0        7.5
--------------------------------------------------------
-Raw score                              83.125 / 100
-Converted                                  41.6 / 50
-Suggested grade                              4.3 / 5.0
-```
-
-The exact values in generated reports come from the actual rubric calculation;
-this table is illustrative only.
-
-## Security/integrity
-
-No source modifications are permitted.
-
-Generated files are limited to:
-
-- `docs/ada-sensei/...` documentation;
-- temporary Gradle/build artifacts;
-- ADA Sensei data/output storage.
-
-The exam attempt log is authoritative for duration and ask count.
+- Unitarias de resolución de rutas, parser y validadores.
+- TUI tests con el widget real: navegación teclado, focus, resize, selección,
+  estados inválidos, panel sin botones grandes y cancelación.
+- Integración de `/project`, `/instructions`, `exam-init`, `/ask`, `exam-finish`.
+- Pruebas de reloj inyectado: sin límite, countdown, cero, overtime y resume.
+- Doble Enter no crea dos intentos.
+- CLI `--yes` no omite preflight.
+- El PDF se escribe bajo `docs/ada-sensei/exams/<exam-slug>/report.pdf` y la
+  ruta se expone en el resultado.
+- Mensajes de progreso por etapa, sin efecto en el resultado.
+- Apertura best-effort con toggle `tools.open_report`, sin fallo propagado.
+- Regresión completa de scoring, eventos, PDF, persistencia, locale y
+  `006-evaluate`.

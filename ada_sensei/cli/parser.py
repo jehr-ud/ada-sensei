@@ -21,6 +21,7 @@ from .commands import (
     ExamplesCommand,
     HelpCommand,
     HintCommand,
+    InstructionsCommand,
     LanguageCommand,
     LearnCommand,
     MoreCommand,
@@ -43,6 +44,7 @@ AVAILABLE_ACTIONS = (
     "diagnose",
 )
 
+
 #: Canonical student-facing action ids (single source of truth lives in
 #: ``cli/action_registry.py``; this tuple mirrors it for parser speed and is
 #: asserted equal by tests).
@@ -51,11 +53,13 @@ def _registry_action_ids() -> tuple[str, ...]:
 
     return action_ids()
 
+
 SLASH_COMMANDS = (
     "help",
     "exit",
     "quit",
     "project",
+    "instructions",
     "hint",
     "more",
     "solution",
@@ -145,7 +149,9 @@ class CommandParser:
             # passes through so the router reports the supported list.
             return LanguageCommand(locale=parse_language_choice(raw) or raw)
         if action == "learn":
-            return LearnCommand(topic=options.get("topic") or (" ".join(positional) or None))
+            return LearnCommand(
+                topic=options.get("topic") or (" ".join(positional) or None)
+            )
         if action == "diagnose":
             return DiagnoseCommand(stage_id=positional[0] if positional else None)
         raise CLIError(f"unknown action: {action!r}")
@@ -188,6 +194,8 @@ class CommandParser:
                 return QuitCommand()
             if token == "/project":
                 return ProjectCommand(path=rest[1] if len(rest) > 1 else None)
+            if token == "/instructions":
+                return InstructionsCommand(path=rest[1] if len(rest) > 1 else None)
             if token in ("/hint", "/more", "/solution"):
                 return cls._slash_assist(token)
             if token == "/clear":
@@ -233,6 +241,8 @@ class CommandParser:
             )
         if token == "project":
             return ProjectCommand(path=rest[1] if len(rest) > 1 else None)
+        if token == "instructions":
+            return InstructionsCommand(path=rest[1] if len(rest) > 1 else None)
         if token in ("hint", "more", "solution"):
             return cls._slash_assist("/" + token)
         if token in ("clear",):
@@ -268,8 +278,17 @@ class CommandParser:
             raise CLIError("")
         if tokens[0].startswith("/") or tokens[0] in AVAILABLE_ACTIONS:
             return cls.parse_argv(tokens)
-        if tokens[0] in ("help", "project", "hint", "more", "solution",
-                         "clear", "exit", "quit", "student"):
+        if tokens[0] in (
+            "help",
+            "project",
+            "hint",
+            "more",
+            "solution",
+            "clear",
+            "exit",
+            "quit",
+            "student",
+        ):
             return cls.parse_argv(tokens)
         options, positional = cls._parse_flags(tokens[1:])
         return cls._action_command(tokens[0], options, positional)

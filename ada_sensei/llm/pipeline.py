@@ -50,6 +50,16 @@ class StructuredPipeline:
         model: str | None = None,
     ) -> T:
         schema = LLMValidator.schema_for(model_type)
+        # Identify which top-level fields in the schema are arrays so we can
+        # normalize an object→array coercion before validation.  Some LLMs
+        # return a single GroundedClaim object instead of a list when there is
+        # only one item; wrapping it recovers the response rather than wasting
+        # a retry attempt on a fixable format error.
+        array_fields: set[str] = {
+            name
+            for name, prop in schema.get("properties", {}).items()
+            if prop.get("type") == "array"
+        }
         work = deepcopy(messages)
         work.insert(
             0,
@@ -69,6 +79,7 @@ class StructuredPipeline:
             )
             try:
                 data = LLMValidator.parse_json(raw)
+                data = _coerce_array_fields(data, array_fields)
                 LLMValidator.validate(data, schema)
                 return model_type.model_validate(data)
             except (InvalidJSONError, LLMError, pydantic.ValidationError) as exc:
@@ -87,3 +98,24 @@ class StructuredPipeline:
             f"structured output failed after {self.max_attempts} total "
             f"attempt(s): {last_error}"
         )
+
+
+def _coerce_array_fields(data: dict, array_fields: set[str]) -> dict:
+    """Wrap any top-level field that should be an array but arrived as an object.
+
+    Some LLMs return ``{"claim": "...", "evidence_refs": [...]}`` (a single
+    item) instead of ``[{"claim": "...", "evidence_refs": [...]}]`` for a
+    one-element list.  Wrapping it here lets the pipeline recover without
+    counting the response as a failure (spec.md §LLM Output).
+
+    Only top-level fields declared as ``"type": "array"`` in the schema are
+    normalised; nested objects are left untouched.
+    """
+    if not array_fields:
+        return data
+    result = dict(data)
+    for field in array_fields:
+        value = result.get(field)
+        if isinstance(value, dict):
+            result[field] = [value]
+    return result

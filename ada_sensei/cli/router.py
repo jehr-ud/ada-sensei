@@ -9,6 +9,7 @@ logic.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -72,6 +73,8 @@ from .commands import (
     HelpCommand,
     HelpResult,
     HintCommand,
+    InstructionsCommand,
+    InstructionsResult,
     InternalFailure,
     LanguageCommand,
     LearnCommand,
@@ -136,6 +139,9 @@ class CommandRouter:
         #: the bus cannot be rebuilt per action invocation (RQ-EXM-005/031).
         self.event_bus = AppEventBus()
         self._teacher = None
+        #: Optional localized progress sink set by the TUI for long-running
+        #: actions (RQ-EXM-048). ``None`` outside an interactive session.
+        self.progress: Callable[[str], None] | None = None
 
     def _build_client(self) -> LLMClient:
         cfg = self.config.llm
@@ -223,6 +229,8 @@ class CommandRouter:
                 return self._examine_finish(command)
             if isinstance(command, ProjectCommand):
                 return self._project(command)
+            if isinstance(command, InstructionsCommand):
+                return self._instructions(command)
             if isinstance(command, (HintCommand, MoreCommand, SolutionCommand)):
                 return self._assist(command)
             if isinstance(command, HelpCommand):
@@ -301,6 +309,13 @@ class CommandRouter:
     # -- exam workflow (007-examine) --------------------------------------
 
     def _examine_start(self, cmd: ExamineStartCommand) -> CommandResult:
+        # A direct legacy ``exam-init <path>`` remains a convenient alias for
+        # selecting the statement, but the actual validation is still shared
+        # with the preparation service and cannot be bypassed by ``--yes``.
+        if cmd.statement and not self.context.instructions_path:
+            selected = self._set_instructions(cmd.statement)
+            if isinstance(selected, ErrorResponse):
+                return selected
         return ExamineAction(self.services()).start(
             ExamStartInput(
                 statement=cmd.statement,
@@ -312,7 +327,7 @@ class CommandRouter:
         )
 
     def _examine_finish(self, cmd: ExamineFinishCommand) -> CommandResult:
-        return ExamineAction(self.services()).finish(
+        return ExamineAction(self.services(), progress=self.progress).finish(
             ExamFinishInput(
                 confirmed=cmd.confirmed,
                 instrumented=cmd.instrumented,
@@ -450,8 +465,7 @@ class CommandRouter:
         else:
             outcome = "ok"
         project_active = bool(self.context.project_id) or (
-            str(getattr(self.config.project, "path", "") or "").strip()
-            not in ("", ".")
+            str(getattr(self.config.project, "path", "") or "").strip() not in ("", ".")
         )
         exam = self.exam_status()
         ctx = assemble_context(
@@ -480,12 +494,17 @@ class CommandRouter:
     def _project(self, cmd: ProjectCommand) -> CommandResult:
         if cmd.path:
             path = str(Path(cmd.path).expanduser().resolve())
+            if not Path(path).exists():
+                return ErrorResponse(message=f"project path does not exist: {path}")
+            if not Path(path).is_dir():
+                return ErrorResponse(message=f"project path is not a directory: {path}")
             # Keep the session and the action-facing project in sync: actions
             # (evaluate/exam) read ``config.project.path``, so a /project that
             # only updated the session context would still evaluate the old
             # path or the current directory.
             self.config.project.path = path
             self.context.set_project(path)
+            self.context.persist()
             return ProjectResult(path=path, project_id=self.context.project_id)
         path = str(self.config.project.path)
         project_id = (
@@ -494,6 +513,39 @@ class CommandRouter:
             else None
         )
         return ProjectResult(path=path, project_id=project_id)
+
+    def _set_instructions(self, value: str) -> InstructionsResult | ErrorResponse:
+        path = Path(value).expanduser().resolve()
+        if path.suffix.lower() != ".md":
+            return ErrorResponse(
+                message="exam instructions must be a Markdown (.md) file"
+            )
+        if not path.exists() or not path.is_file():
+            return ErrorResponse(message=f"instructions file does not exist: {path}")
+        try:
+            if not path.read_text(encoding="utf-8").strip():
+                return ErrorResponse(message="instructions file is empty")
+            from ..exams.definition import ExamDefinitionLoader
+
+            ExamDefinitionLoader().load(path, exam_id=None)
+        except (OSError, UnicodeError):
+            return ErrorResponse(message=f"instructions file is not readable: {path}")
+        except Exception as exc:
+            return ErrorResponse(message=f"invalid exam instructions: {exc}")
+        self.context.set_instructions(path)
+        self.context.persist()
+        return InstructionsResult(path=str(path))
+
+    def _instructions(self, cmd: InstructionsCommand) -> CommandResult:
+        if not cmd.path:
+            return InstructionsResult(path=self.context.instructions_path)
+        return self._set_instructions(cmd.path)
+
+    def exam_preparation_status(self):
+        """Read-only status used by the compact preparation panel."""
+        from ..exams.preparation import ExamPreparationService
+
+        return ExamPreparationService(self.services(), env=self.env).validate()
 
     def _assist(self, cmd: Command) -> CommandResult:
         name = {
@@ -531,8 +583,7 @@ class CommandRouter:
             # Confirm in the newly selected language (spec 0011 §6.5).
             if pref.locale == "es-CO":
                 return MetaResult(
-                    message="Idioma cambiado a Español. "
-                    "Tu progreso no se vio afectado."
+                    message="Idioma cambiado a Español. Tu progreso no se vio afectado."
                 )
             return MetaResult(
                 message=f"Language changed to {LOCALE_LABELS.get(pref.locale, pref.locale)}. "
@@ -555,9 +606,7 @@ class CommandRouter:
             locale = self.current_locale()
             data_dir = str(self.config.resolved_data_dir)
             catalog = LearningCatalogLoader().load_catalog(locale)
-            profile = LearningProfileStore(data_dir).get(
-                self.context.student_id or ""
-            )
+            profile = LearningProfileStore(data_dir).get(self.context.student_id or "")
             plan = build_learning_plan(catalog, profile, locale)
             return MetaResult(message=render_learning_plan(plan))
         # Explicit topic: teaching flow through the existing AskAction.

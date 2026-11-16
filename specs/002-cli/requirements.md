@@ -578,8 +578,9 @@ Automated tests SHALL cover navigation order, draft restoration, edit-before-sub
 ## RQ-TUI-040 Confirmation controls
 
 When the TUI requests confirmation for a consequential action (evaluate,
-exam start, exam finish), it SHALL show localized Confirm and Cancel controls
-in addition to accepting typed `yes`/`no`. Confirm SHALL run the pending
-command and Cancel SHALL abort it without executing the action. The controls
-SHALL be hidden when no confirmation is pending and SHALL NOT imply that an
-action ran when the user has not confirmed.
+exam start, exam finish), it SHALL show localized Confirm and Cancel controls.
+For Start exam, the controls SHALL appear as soon as the action is selected,
+while leaving the input editable. Confirm SHALL run the pending command and
+Cancel SHALL abort it without executing the action. The controls SHALL be
+hidden when no confirmation is pending and SHALL NOT imply that an action ran
+when the user has not confirmed.

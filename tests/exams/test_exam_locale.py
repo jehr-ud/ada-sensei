@@ -36,8 +36,8 @@ class OkRunner:
 
 
 class RoutedExamine(ExamineAction):
-    def __init__(self, services):
-        super().__init__(services, runner=OkRunner())
+    def __init__(self, services, **kwargs):
+        super().__init__(services, runner=OkRunner(), **kwargs)
 
 
 def _statement(tmp_path) -> Path:

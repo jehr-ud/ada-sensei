@@ -1,159 +1,225 @@
-# Requirements — Examine Action
+# Requisitos — 007 Examine: preparación, inicio y temporizador
 
-## RQ-EXM-001 — Exam identity
-The system SHALL maintain separate `student_id`, `project_id`, `exam_id`, `attempt_id`, and `exam_attempt_id`.
+## RQ-EXM-001 — Identidad del examen
+Se conservan separados `student_id`, `project_id`, `exam_id`, `attempt_id` y
+`exam_attempt_id`.
 
-## RQ-EXM-002 — Exam definition
-The system SHALL resolve an authoritative exam definition from instructor-provided Markdown/structured specification/PDF.
+## RQ-EXM-002 — Definición autoritativa
+El examen se carga desde un archivo de instrucciones del docente. En esta
+iteración, el formato admitido por el flujo `/instructions` es Markdown (`.md`).
+`ExamDefinitionLoader` es el único responsable de interpretar y normalizar el
+enunciado; debe preservar el texto original y la ruta fuente.
 
-## RQ-EXM-003 — Exam start
-The system SHALL create an `ExamAttempt`, record `started_at`, initialize counters, and create the exam documentation directory.
+## RQ-EXM-003 — Inicio transaccional
+El sistema solo crea y persiste `ExamAttempt`, definición, eventos de inicio y
+documentación después de que el estudiante elija explícitamente `Empezar examen`
+y todas las precondiciones hayan pasado. La operación debe crear exactamente
+un intento.
 
-## RQ-EXM-004 — Exam finish
-The system SHALL require explicit finish confirmation and make the completed attempt immutable except administrative metadata.
+## RQ-EXM-004 — Finalización
+El sistema conserva el flujo de finalización y la inmutabilidad del intento
+completado.
 
-## RQ-EXM-005 — Ask counter
-The system SHALL count successful `/ask` invocations during an active exam from application events.
+## RQ-EXM-005 — Conteo de consultas
+El sistema cuenta `/ask` exitosos mediante eventos `ASK_COMPLETED`; no usa
+texto de terminal ni salida del LLM.
 
-## RQ-EXM-006 — Ask event history
-The system SHALL persist ask events with timestamp, question id, and duration.
+## RQ-EXM-006 — Historial de eventos
+El sistema persiste eventos de examen con id, attempt id, tipo, timestamp,
+question id, duración y metadata.
 
-## RQ-EXM-007 — Duration
-The system SHALL record start time, finish time, duration, and overtime when an allowed duration exists.
+## RQ-EXM-007 — Duración autoritativa
+El sistema calcula duración desde timestamps persistidos. El reloj de pantalla
+es solo presentación y nunca constituye evidencia ni fuente de verdad.
 
-## RQ-EXM-008 — Student documentation
-The system SHALL support student documentation under the exam's accepted documentation format.
+## RQ-EXM-008 — Documentación del estudiante
+Se conservan `DocumentationRules`, globs, archivos requeridos y modo advisory
+del examen existente.
 
-## RQ-EXM-009 — Exam docs
-The system SHALL create `docs/ada-sensei/exams/<exam_id>/` with exam context and rubric documentation at exam start.
+## RQ-EXM-009 — Documentación generada
+Al iniciar se crea `docs/ada-sensei/exams/<exam-slug>/` con los archivos
+definidos por la especificación existente, sin sobrescribir archivos del
+estudiante que no tengan el marcador generado por ADA Sensei.
 
-## RQ-EXM-010 — Project evidence
-The system SHALL reuse the `006-evaluate` evidence pipeline for project inspection, build, unit tests, Android Lint, and Detekt.
+## RQ-EXM-010 — Evidencia del proyecto
+Se reutiliza el pipeline de `006-evaluate` para inspección, build, pruebas
+unitarias, Android Lint y Detekt.
 
-## RQ-EXM-011 — No instrumented tests
-The system SHALL NOT execute `connectedAndroidTest` in the exam workflow until explicitly implemented as a supported capability.
+## RQ-EXM-011 — Sin pruebas instrumentadas
+No se ejecuta `connectedAndroidTest`; `--instrumented` continúa rechazado.
 
-## RQ-EXM-012 — Functional requirements
-The system SHALL evaluate functional requirements from the authoritative exam definition using stable requirement ids and evidence.
+## RQ-EXM-012 — Requisitos funcionales
+Se conservan ids estables, pesos funcionales válidos y matching específico del
+examen.
 
-## RQ-EXM-013 — Code quality
-The system SHALL evaluate code quality using deterministic evidence plus bounded LLM interpretation.
+## RQ-EXM-013 — Calidad de código
+Se conserva la evaluación determinista y la interpretación LLM acotada.
 
-## RQ-EXM-014 — Clean architecture
-The system SHALL evaluate the actual Android architecture using project evidence and student documentation.
+## RQ-EXM-014 — Arquitectura limpia
+La puntuación se basa únicamente en señales observadas del proyecto.
 
-## RQ-EXM-015 — Tests
-The system SHALL evaluate unit-test evidence and report missing/unavailable evidence as not evaluated.
+## RQ-EXM-015 — Pruebas
+Las pruebas unitarias no disponibles se reportan como no evaluadas, nunca como
+éxito supuesto.
 
-## RQ-EXM-016 — Android practices
-The system SHALL use Android Lint evidence plus project inspection.
+## RQ-EXM-016 — Prácticas Android
+Se conservan las reglas deterministas basadas en Android Lint.
 
-## RQ-EXM-017 — Exam process rubric
-The system SHALL score duration and `/ask` usage when the exam defines limits; otherwise those criteria SHALL be not evaluated.
+## RQ-EXM-017 — Rúbrica de proceso
+Duración y uso de `/ask` se evalúan solo si el enunciado establece límites,
+usando las bandas de la rúbrica versionada.
 
-## RQ-EXM-018 — Exam weights
-The system SHALL use the initial exam weights 40/15/15/15/5/10 unless a versioned exam rubric overrides them.
+## RQ-EXM-018 — Pesos de examen
+Se conserva `exam-default:v1` y sus pesos actuales.
 
-## RQ-EXM-019 — Deterministic score
-The system SHALL compute the raw exam score deterministically from evaluated rubric dimensions and evidence.
+## RQ-EXM-019 — Puntaje determinista
+El puntaje se calcula a partir de dimensiones evaluadas; denominador cero
+produce `not evaluated`.
 
-## RQ-EXM-020 — Score range
-The system SHALL produce a raw score from 0 to 50.
+## RQ-EXM-020 — Rango del puntaje
+El puntaje bruto se mantiene en el rango 0–50.
 
-## RQ-EXM-021 — Suggested grade
-The system SHALL derive a suggested grade from 1.0 to 5.0 from the raw score and display both values.
+## RQ-EXM-021 — Nota sugerida
+La nota sugerida se deriva determinísticamente del puntaje bruto.
 
-## RQ-EXM-022 — Evidence sufficiency
-Missing evidence SHALL never be interpreted as success.
+## RQ-EXM-022 — Suficiencia de evidencia
+La ausencia de evidencia nunca se interpreta como cumplimiento.
 
-## RQ-EXM-023 — Architecture report
-The system SHALL generate an evidence-grounded explanation of the actual Android architecture.
+## RQ-EXM-023 — Informe de arquitectura
+Se conserva la explicación de arquitectura fundamentada en evidencias.
 
-## RQ-EXM-024 — PDF
-The system SHALL generate a detailed PDF containing rubric, evidence, findings, architecture, process metrics, score, suggested grade, and limitations.
+## RQ-EXM-024 — Informe PDF
+Se conserva el informe PDF detallado. El PDF se escribe dentro del proyecto
+examinado, en el subárbol propio `docs/ada-sensei/exams/<exam-slug>/report.pdf`,
+junto a la documentación generada del examen. No se escribe en el directorio de
+datos de ADA Sensei.
 
-## RQ-EXM-025 — Structured output
-All structured LLM outputs SHALL be schema validated with a maximum of 3 total attempts.
+## RQ-EXM-025 — Salida estructurada
+Las respuestas estructuradas del LLM siguen usando el pipeline compartido y
+sus límites de intentos.
 
-## RQ-EXM-026 — Persistence
-The system SHALL persist the completed exam result and preserve its identity and rubric version.
+## RQ-EXM-026 — Persistencia
+Se conserva la persistencia del resultado y se reportan fallos como limitaciones.
 
-## RQ-EXM-027 — History
-The system SHALL append the completed exam outcome to student history.
+## RQ-EXM-027 — Historial
+El resultado final se agrega al historial del estudiante.
 
-## RQ-EXM-028 — Project integrity
-The system SHALL NOT modify student source files during examination or evaluation.
+## RQ-EXM-028 — Integridad del proyecto
+La evaluación no modifica archivos fuente del estudiante.
 
-## RQ-EXM-029 — Suggested-grade disclosure
-The report SHALL explicitly identify the grade as a suggested grade generated by ADA Sensei.
+## RQ-EXM-029 — Nota sugerida identificada
+El informe identifica la nota como sugerida y generada por ADA Sensei.
 
-## RQ-EXM-030 — No unsupported claims
-The system SHALL distinguish observed, student-documented, and inferred architectural evidence.
+## RQ-EXM-030 — Afirmaciones sustentadas
+Se distinguen evidencias observadas, documentadas e inferidas.
 
-## RQ-EXM-031 — Process integrity
-Duration and `/ask` counts SHALL be based on application events/persisted state and not LLM-generated content.
+## RQ-EXM-031 — Integridad de métricas
+Duración y consultas se derivan del estado/eventos persistidos.
 
-## RQ-EXM-032 — Project readiness before exam start
-After confirmation and before creating an `ExamAttempt`, the system SHALL verify
-that the current project can be evaluated: the configured project path exists
-and is a directory, the project contains an Android manifest and a Gradle build
-file, and Gradle, JDK 17+, and the Android SDK are discoverable.
+## RQ-EXM-032 — Preflight obligatorio
+Antes de iniciar, `ProjectPreflight` debe comprobar que la ruta configurada
+existe y es directorio, que se detecta proyecto Android y que Gradle/JDK 17+/
+Android SDK están disponibles. No ejecuta Gradle ni modifica el proyecto.
 
-If any check fails, the system SHALL NOT create the attempt, the exam timer,
-or the exam docs directory, and SHALL show every blocking reason in the active
-locale. The readiness check SHALL NOT run Gradle or modify the project.
+## RQ-EXM-033 — Panel de preparación
+Al seleccionar `Iniciar examen`, el TUI presenta un panel de preparación
+compacto, con instrucciones y estado de proyecto/instrucciones. No muestra
+botones grandes Confirmar/Cancelar. Usa una lista de opciones con cursor y
+navegación Arriba/Abajo/Enter/Escape, siguiendo el patrón `LanguageList`.
 
-## RQ-EXM-033 — Start confirmation controls
-The TUI SHALL present explicit Confirm and Cancel controls when exam start
-confirmation is requested, in the active locale, in addition to the existing
-typed `yes`/`no` and Enter/Escape responses. Cancel SHALL resolve the pending
-action without creating an attempt.
+## RQ-EXM-034 — Configuración de proyecto
+`/project <ruta>` configura y persiste en el contexto existente la ruta raíz
+del proyecto. Acepta rutas absolutas y relativas, normaliza `~`, resuelve las
+relativas desde el cwd del proceso y no cambia el cwd.
 
-## Traceability
+## RQ-EXM-035 — Configuración de instrucciones
+`/instructions <ruta>` configura el archivo Markdown del docente. Debe ser un
+archivo regular, legible y no vacío. La definición se valida con
+`ExamDefinitionLoader`. No inicia el examen ni copia/modifica el archivo.
 
-| Requirement | Primary component | Test |
+## RQ-EXM-036 — Requisitos obligatorios
+No se puede iniciar si falta estudiante, proyecto válido, preflight correcto,
+archivo Markdown válido o si ya existe un intento activo. Se muestran todos
+los bloqueos conocidos y se permite corregir las rutas sin cerrar el panel.
+
+## RQ-EXM-037 — Revalidación al iniciar
+Al elegir `Empezar examen`, se vuelven a ejecutar las validaciones. La
+validación no crea estado. Si falla, no se crea intento, timer, evento ni docs.
+
+## RQ-EXM-038 — Opción explícita
+El inicio requiere seleccionar `Empezar examen`. Abrir el panel de preparación
+no inicia nada. `Volver`/Escape cancela la preparación sin efectos secundarios.
+No existe un segundo diálogo de botones Confirmar/Cancelar.
+
+## RQ-EXM-039 — Temporizador TUI
+Durante un examen activo se muestra tiempo transcurrido `HH:MM:SS`. Si hay
+`allowed_duration_seconds`, se muestra además tiempo restante y vencimiento.
+Si no hay límite, no se inventa un countdown.
+
+## RQ-EXM-040 — Temporizador no bloqueante
+La actualización visual es periódica y no bloquea el TUI. Al reanudar, el
+tiempo se reconstruye desde `started_at`. Los ticks no se persisten ni puntúan.
+
+## RQ-EXM-041 — Estado de consultas
+Durante el examen se muestra el número de `/ask` exitosos y, si está definido,
+el límite. El dato procede del event log.
+
+## RQ-EXM-042 — Límite alcanzado
+Al agotarse el tiempo se muestra aviso localizado. El examen no se finaliza
+automáticamente en esta iteración; el estudiante usa `Finalizar examen`.
+
+## RQ-EXM-043 — Configuración inmutable del intento
+Cambiar `/project` durante un examen activo no altera el proyecto asociado al
+intento actual; solo afecta un examen posterior.
+
+## RQ-EXM-044 — CLI no interactivo
+Los comandos directos `exam-init`/`--yes` también deben ejecutar las mismas
+precondiciones y `ProjectPreflight`. Ninguna opción no interactiva puede
+saltarse la validación.
+
+## RQ-EXM-045 — Localización
+Todas las cadenas nuevas existen en `es-CO` y `en-US`, con fallback
+determinista. El panel usa el locale actual y el intento conserva el snapshot
+del idioma al iniciar.
+
+## RQ-EXM-046 — Compatibilidad
+Se mantienen las reglas de rúbrica, scoring, evidence pipeline, PDF, persistencia,
+eventos, idioma y finalización del examen ya existentes.
+
+## RQ-EXM-047 — Finalización compacta
+Si se presenta una confirmación TUI para finalizar, utiliza el selector compacto
+de opciones y no botones grandes, manteniendo confirmación explícita.
+
+## RQ-EXM-048 — Progreso de finalización
+Durante la finalización, el TUI emite mensajes localizados de avance por etapa:
+inspección del proyecto, build, pruebas unitarias, Android Lint, Detekt,
+interpretación del modelo e informe. Los mensajes se derivan de las etapas
+reales del pipeline, nunca de un temporizador simulado, y no alteran el
+resultado ni la puntuación.
+
+## RQ-EXM-049 — Apertura del informe
+Tras generar el PDF, el TUI lo abre con el visor del sistema de forma
+best-effort: si no hay visor disponible, no falla ni cambia el resultado. La
+apertura se controla con un ajuste de configuración `tools.open_report`
+(por defecto activado). El CLI no interactivo no abre el PDF.
+
+## RQ-EXM-050 — Ruta del informe en la salida
+El resultado de finalización expone la ruta del PDF dentro del proyecto para
+que el TUI la muestre y pueda abrirla.
+
+## Matriz de trazabilidad
+
+| Requisito | Componente principal | Prueba requerida |
 |---|---|---|
-| RQ-EXM-001 | `ExamAttempt` | `tests/exams/test_exams_models.py::test_identities_are_separate` |
-| RQ-EXM-002 | `ExamDefinitionLoader` | `tests/exams/test_definition.py::test_resolves_markdown_json_and_pdf` |
-| RQ-EXM-003 | `ExamLifecycle.start` | `tests/exams/test_lifecycle.py::test_start_creates_attempt_and_docs` |
-| RQ-EXM-004 | `ExamLifecycle.finish` | `tests/exams/test_lifecycle.py::test_completed_attempt_is_immutable` |
-| RQ-EXM-005 | `ExamEventBridge` | `tests/exams/test_ask_tracking.py::test_ask_counted_from_app_events` |
-| RQ-EXM-006 | `ExamEventBridge` | `tests/exams/test_ask_tracking.py::test_ask_event_persisted` |
-| RQ-EXM-007 | `ExamAttempt` / `ExamLifecycle` | `tests/exams/test_duration.py::test_duration_and_overtime` |
-| RQ-EXM-008 | `ExamDocs` | `tests/exams/test_docs.py::test_student_documentation_accepted` |
-| RQ-EXM-009 | `ExamDocsWriter` | `tests/exams/test_docs.py::test_start_docs_created` |
-| RQ-EXM-010 | `EvaluationEngine` | `tests/exams/test_integration.py::test_engine_reuse_without_duplication` |
-| RQ-EXM-011 | `ExamineAction` | `tests/exams/test_integration.py::test_instrumented_rejected` |
-| RQ-EXM-012 | `RequirementMatcher` | `tests/exams/test_integration.py::test_functional_requirements_scored` |
-| RQ-EXM-013 | `ExamScorer` | `tests/exams/test_scoring.py::test_code_quality_from_deterministic_evidence` |
-| RQ-EXM-014 | `ArchitectureAnalyzer` | `tests/exams/test_exams_architecture.py::test_observed_documented_inferred` |
-| RQ-EXM-015 | `ExamScorer` | `tests/exams/test_scoring.py::test_tests_not_evaluated_when_unavailable` |
-| RQ-EXM-016 | `ExamScorer` | `tests/exams/test_scoring.py::test_android_practices_from_lint` |
-| RQ-EXM-017 | `duration_score` / `ask_usage_score` | `tests/exams/test_process_metrics.py::test_bands_and_not_evaluated` |
-| RQ-EXM-018 | `EXAM_RUBRIC` | `tests/exams/test_exams_rubric.py::test_exam_weights` |
-| RQ-EXM-019 | `ExamScorer` | `tests/exams/test_scoring.py::test_raw_score_is_deterministic` |
-| RQ-EXM-020 | `ExamScorer` | `tests/exams/test_scoring.py::test_raw_score_in_range` |
-| RQ-EXM-021 | `suggested_grade` | `tests/exams/test_scoring.py::test_grade_conversion` |
-| RQ-EXM-022 | `RubricEngine` | `tests/exams/test_scoring.py::test_missing_evidence_never_succeeds` |
-| RQ-EXM-023 | `ArchitectureReport` | `tests/exams/test_exams_architecture.py::test_report_is_evidence_grounded` |
-| RQ-EXM-024 | `ExamReportGenerator` | `tests/exams/test_report.py::test_pdf_contains_required_sections` |
-| RQ-EXM-025 | `ExamInterpretationAgent` | `tests/exams/test_exams_structured_output.py::test_three_attempt_limit` |
-| RQ-EXM-026 | `ResultStore` | `tests/exams/test_persistence.py::test_exam_result_persisted` |
-| RQ-EXM-027 | `HistoryStore` | `tests/exams/test_persistence.py::test_history_appended` |
-| RQ-EXM-028 | `ExamineAction` | `tests/exams/test_integration.py::test_no_source_modification` |
-| RQ-EXM-029 | `ExamReportGenerator` | `tests/exams/test_report.py::test_suggested_grade_disclosure` |
-| RQ-EXM-030 | `ArchitectureAnalyzer` | `tests/exams/test_exams_architecture.py::test_no_unsupported_claims` |
-| RQ-EXM-031 | `ExamEventBridge` | `tests/exams/test_ask_tracking.py::test_counts_ignore_llm_text` |
-| RQ-EXM-032 | `ProjectPreflight` | `tests/evaluation/test_preflight.py`, `tests/cli/tui/test_exam_confirmation.py::test_start_is_blocked_when_project_cannot_be_evaluated` |
-| RQ-EXM-033 | TUI confirm controls | `tests/cli/tui/test_exam_confirmation.py::test_confirm_button_runs_the_pending_command`, `tests/cli/tui/test_exam_confirmation.py::test_cancel_button_aborts_the_pending_command` |
-
-
-## Orchestration and Progression Isolation
-
-### RQ-EXM-030 Teacher orchestration
-The `/exam-init` and `/exam-finish` intents SHALL enter through TeacherAgent and
-use the shared agent orchestration contracts.
-
-### RQ-EXM-031 Exam/progression isolation
-Exam completion SHALL NOT silently change the student's current learning stage.
-Exam results and mastery assessments SHALL be separately persisted.
+| RQ-EXM-032, 036, 037, 044 | `ProjectPreflight`, `ExamPreparationService` | rutas ausentes, proyecto inválido, herramientas ausentes, preflight CLI |
+| RQ-EXM-033, 038 | `ExamPreparationScreen` / `LanguageList` pattern | composición, teclado, cancelación, sin side effects |
+| RQ-EXM-034 | parser/handler `/project` | rutas absoluta/relativa, `~`, cwd sin cambios |
+| RQ-EXM-035 | parser/handler `/instructions`, `ExamDefinitionLoader` | `.md`, vacío, ilegible, definición inválida |
+| RQ-EXM-039, 040, 042 | `ExamStatusBar` / `ExamTimer` | elapsed, remaining, no limit, non-blocking, resume, timeout |
+| RQ-EXM-041 | `ExamEventBridge` / status presenter | ask count desde eventos |
+| RQ-EXM-043 | `ExamAttempt` snapshot | cambiar ruta no altera intento |
+| RQ-EXM-045 | locale UI strings | tests es-CO/en-US y fallback |
+| RQ-EXM-046, 047 | `ExamineAction`, finish TUI | regresión motor y selector compacto |
+| RQ-EXM-024, 050 | `ExamReportGenerator`, `ExamDocs` | PDF dentro de `docs/ada-sensei/exams/<slug>/`, ruta expuesta |
+| RQ-EXM-048 | `EvidenceCollector`, `ExamineAction`, TUI | mensajes por etapa, sin efecto en el resultado |
+| RQ-EXM-049 | `tools.opener`, config `tools.open_report` | apertura best-effort, toggle, sin fallo |

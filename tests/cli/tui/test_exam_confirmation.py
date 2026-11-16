@@ -16,9 +16,11 @@ from ada_sensei.cli.commands import (
 )
 from ada_sensei.cli.router import Router
 from ada_sensei.cli.tui.app import AdaSenseiTUI
+from ada_sensei.cli.tui.widgets import PromptArea
 from ada_sensei.config import Config
 from ada_sensei.evaluation.preflight import ProjectReadiness
 from ada_sensei.llm.base import LLMClient
+from textual.widgets import Select
 
 from conftest import seed_saved_locale
 
@@ -41,6 +43,24 @@ def _app(tmp_path, locale: str = "en-US") -> AdaSenseiTUI:
     router.context.set_student("student://s1")
     seed_saved_locale(tmp_path, "student://s1", locale)
     return AdaSenseiTUI(router=router)
+
+
+def _ready_app(tmp_path, locale: str = "en-US"):
+    """App fixture with a valid exam statement and a ready project."""
+    app = _app(tmp_path, locale)
+    project = tmp_path / "project"
+    project.mkdir(exist_ok=True)
+    exam = tmp_path / "exam.md"
+    exam.write_text(
+        "# Midterm Android Exam\n"
+        "## Requirements\n"
+        "- Build a screen with a list and a detail view\n",
+        encoding="utf-8",
+    )
+    app.router.config.project.path = str(project)
+    app.router.context.set_project(project)
+    app.router.check_project_readiness = lambda: ProjectReadiness(str(project))
+    return app, exam
 
 
 def test_exam_start_prompt_explains_configuration_and_confirmation(tmp_path):
@@ -100,8 +120,8 @@ def test_declining_start_aborts_with_localized_message(tmp_path):
 
 
 def test_confirm_button_runs_the_pending_command(tmp_path):
-    app = _app(tmp_path)
-    command = ExamineStartCommand(statement="exam.md")
+    app, exam = _ready_app(tmp_path)
+    command = ExamineStartCommand(statement=str(exam))
     ran = []
     app._run_nonblocking = lambda cmd: ran.append(cmd)
 
@@ -126,7 +146,7 @@ def test_cancel_button_aborts_the_pending_command(tmp_path):
 
 
 def test_confirmation_bar_is_shown_with_localized_labels(tmp_path):
-    app = _app(tmp_path, "es-CO")
+    app, exam = _ready_app(tmp_path, "es-CO")
     ran = []
     app._run_nonblocking = lambda cmd: ran.append(cmd)
 
@@ -136,7 +156,7 @@ def test_confirmation_bar_is_shown_with_localized_labels(tmp_path):
             app._resolve_pending_name("s1")
             await pilot.pause()
             assert app.query_one("#confirm-bar").display is False
-            app._confirm_then_run(ExamineStartCommand(statement="exam.md"))
+            app._confirm_then_run(ExamineStartCommand(statement=str(exam)))
             await pilot.pause()
             assert app.query_one("#confirm-bar").display is True
             assert "Confirmar" in str(app.query_one("#confirm-yes").label)
@@ -175,3 +195,128 @@ def test_start_proceeds_when_project_is_ready(tmp_path):
     assert result == "ok"
     assert len(dispatched) == 1
     assert isinstance(dispatched[0], ExamineStartCommand)
+
+
+def test_selecting_start_exam_shows_controls_immediately(tmp_path):
+    app = _app(tmp_path)
+
+    async def _run():
+        async with app.run_test(size=(80, 24)) as pilot:
+            seed_saved_locale(tmp_path, "s1", "en-US")
+            app._resolve_pending_name("s1")
+            await pilot.pause()
+            assert app.query_one("#confirm-bar").display is False
+
+            select = app.query_one("#action-select", Select)
+            select.value = "exam-init"
+            await pilot.pause()
+
+            assert app.query_one("#confirm-bar").display is True
+            assert app._pending_exam is None
+            assert any(
+                "How to configure the exam" in text
+                for text in app.ui_state.messages
+            )
+            return True
+
+    assert asyncio.run(_run())
+
+
+def test_confirm_without_statement_keeps_controls_open(tmp_path):
+    app = _app(tmp_path)
+
+    async def _run():
+        async with app.run_test(size=(80, 24)) as pilot:
+            seed_saved_locale(tmp_path, "s1", "en-US")
+            app._resolve_pending_name("s1")
+            await pilot.pause()
+            app.query_one("#action-select", Select).value = "exam-init"
+            await pilot.pause()
+
+            await pilot.click("#confirm-yes")
+            await pilot.pause()
+
+            assert app.query_one("#confirm-bar").display is True
+            assert app._pending_exam is None
+            assert any(
+                "exam statement" in text.lower()
+                for text in app.ui_state.messages
+            )
+            return True
+
+    assert asyncio.run(_run())
+
+
+def test_confirm_after_typing_statement_starts_with_it(tmp_path):
+    app, exam = _ready_app(tmp_path)
+    ran = []
+    app._run_nonblocking = lambda cmd: ran.append(cmd)
+
+    async def _run():
+        async with app.run_test(size=(80, 24)) as pilot:
+            seed_saved_locale(tmp_path, "s1", "en-US")
+            app._resolve_pending_name("s1")
+            await pilot.pause()
+            app.query_one("#action-select", Select).value = "exam-init"
+            await pilot.pause()
+            app.query_one("#input", PromptArea).text = str(exam)
+
+            await pilot.click("#confirm-yes")
+            await pilot.pause()
+
+            assert len(ran) == 1
+            assert isinstance(ran[0], ExamineStartCommand)
+            assert ran[0].statement == str(exam)
+            assert app.query_one("#confirm-bar").display is False
+            return True
+
+    assert asyncio.run(_run())
+
+
+def test_confirm_reports_all_missing_conditions(tmp_path):
+    app = _app(tmp_path)
+    app.ui_state.awaiting_name = True
+    app.router.context.set_student(None)
+
+    issues = app._validate_exam_start("")
+    joined = "\n".join(issues).lower()
+
+    assert "student name" in joined
+    assert "exam statement" in joined
+    assert "project" in joined
+
+
+def test_confirm_reports_missing_exam_instructions(tmp_path):
+    app, _exam = _ready_app(tmp_path)
+
+    issues = app._validate_exam_start(str(tmp_path / "missing.md"))
+
+    assert any("not found" in issue.lower() for issue in issues)
+
+
+def test_valid_inputs_produce_no_blocking_issues(tmp_path):
+    app, exam = _ready_app(tmp_path)
+
+    assert app._validate_exam_start(str(exam)) == []
+
+
+def test_changing_action_hides_start_exam_controls(tmp_path):
+    app = _app(tmp_path)
+
+    async def _run():
+        async with app.run_test(size=(80, 24)) as pilot:
+            seed_saved_locale(tmp_path, "s1", "en-US")
+            app._resolve_pending_name("s1")
+            await pilot.pause()
+            select = app.query_one("#action-select", Select)
+            select.value = "exam-init"
+            await pilot.pause()
+            assert app.query_one("#confirm-bar").display is True
+
+            select.value = "ask"
+            await pilot.pause()
+
+            assert app.query_one("#confirm-bar").display is False
+            return True
+
+    assert asyncio.run(_run())

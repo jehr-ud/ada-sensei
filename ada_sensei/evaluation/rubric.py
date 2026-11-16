@@ -303,11 +303,13 @@ class DimensionScorer:
         ev = [e for e in evidence if e.type == "structure"]
         if not ev:
             return None, NotEvaluatedReason.no_evidence
+        # "info" status means an optional convention file was absent; it must
+        # not count as a deficiency (RQ-EXM-010, spec.md §ArchitectureAnalyzer).
         missing = sum(1 for e in ev if e.status == "missing")
         passes = sum(1 for e in ev if e.status == "pass")
         if missing and passes:
             return 2, None
-        if missing:
+        if missing and not passes:
             return 1, None
         return (4 if passes >= 2 else 3), None
 

@@ -28,6 +28,7 @@ ENV_KEYS: dict[str, str] = {
     "TOOLS_OFFLINE": "tools.offline",
     "TOOLS_STATIC_KOTLIN": "tools.static_kotlin",
     "TOOLS_STATIC_ANDROID": "tools.static_android",
+    "TOOLS_OPEN_REPORT": "tools.open_report",
     "SECRETS_API_KEY_ENV": "secrets.api_key_env",
 }
 
@@ -76,6 +77,8 @@ class ToolsConfig(BaseModel):
     offline: bool = False
     static_kotlin: str = "detekt"
     static_android: str = "lint"
+    #: Open the generated exam report in the OS viewer after finishing.
+    open_report: bool = True
 
 
 class StorageConfig(BaseModel):

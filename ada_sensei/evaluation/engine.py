@@ -66,11 +66,13 @@ class EvaluationEngine:
         execution_policy: EvaluationExecutionPolicy | None = None,
         *,
         runner=None,
+        progress=None,
     ) -> EvidenceContext:
         """Run the default evidence scope and return a neutral context.
 
         The same context is reusable by any workflow; nothing here depends on
-        which workflow asked for it (RQ-EVA-029).
+        which workflow asked for it (RQ-EVA-029). ``progress`` is an optional
+        per-stage sink (RQ-EXM-048) that receives stable stage ids.
         """
         ctx = (
             project
@@ -78,7 +80,7 @@ class EvaluationEngine:
             else ProjectContext.from_path(project)
         )
         policy = execution_policy or EvaluationExecutionPolicy()
-        collector = self._collector_type(ctx, policy, runner=runner)
+        collector = self._collector_type(ctx, policy, runner=runner, progress=progress)
         return collector.collect()
 
     # -- stage 2: scoring --------------------------------------------------

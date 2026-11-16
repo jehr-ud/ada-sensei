@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ada_sensei.locale.ui_strings import get_ui_string
+from ada_sensei.locale.ui_strings import describe_blocker, get_ui_string
 
 
 def test_selector_and_status_localized():
@@ -55,3 +55,50 @@ def test_switching_locale_does_not_touch_progress(tmp_path):
     svc.set_locale("Ana", "en-US")
     assert store.get("Ana").current_stage_id == "kotlin-fundamentals"
     assert svc.get_or_prompt_locale("Ana") == "en-US"
+
+
+# -- RQ-EXM-036/045: blocker codes render as localized explanations -------------
+
+#: Every blocker code emitted by ProjectPreflight / ExamPreparationStatus.
+_BLOCKER_CODES = (
+    "no_student",
+    "no_project",
+    "missing_path",
+    "not_directory",
+    "no_gradle",
+    "no_android_manifest",
+    "no_build_file",
+    "no_jdk",
+    "no_android_sdk",
+    "no_instructions",
+    "instructions_not_markdown",
+    "instructions_missing",
+    "instructions_unreadable",
+    "instructions_empty",
+    "instructions_invalid",
+    "active_exam",
+)
+
+
+def test_every_blocker_code_has_a_localized_description():
+    for code in _BLOCKER_CODES:
+        en = describe_blocker(code, "en-US")
+        es = describe_blocker(code, "es-CO")
+        assert en and es, code
+        assert en != code and es != code, code
+        assert en != es, code  # actually translated, not just echoed
+        assert "{detail}" not in en and "{detail}" not in es, code
+
+
+def test_describe_blocker_fills_and_trims_detail():
+    filled = describe_blocker("missing_path", "en-US", detail="/tmp/x")
+    assert "/tmp/x" in filled
+    assert "{detail}" not in filled
+    trimmed = describe_blocker("missing_path", "en-US")
+    assert "{detail}" not in trimmed
+    assert trimmed.endswith("exist")
+
+
+def test_describe_blocker_unknown_code_falls_back_to_code():
+    assert describe_blocker("brand_new_blocker", "es-CO") == "brand_new_blocker"
+

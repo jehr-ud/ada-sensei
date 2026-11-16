@@ -8,7 +8,9 @@ workflow can reuse them without duplicating Android analysis (ADR-022).
 
 from __future__ import annotations
 
+import re
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
 from pathlib import Path
 
 from ..models import Evidence
@@ -44,8 +46,13 @@ class AndroidProjectAnalyzer:
                 "app/src/main/AndroidManifest.xml",
                 "structure",
             ),
-            self._check(
-                "debug variant manifest present",
+            # The debug-variant manifest is optional: not every project creates
+            # one and its absence says nothing about the student's architecture
+            # or code quality.  We record it as an informational note only;
+            # ``status="info"`` prevents it from lowering any dimension score
+            # (RQ-EXM-010, spec.md §ArchitectureAnalyzer).
+            self._check_optional(
+                "debug variant manifest",
                 "app/src/debug/AndroidManifest.xml",
                 "structure",
             ),
@@ -68,6 +75,22 @@ class AndroidProjectAnalyzer:
             )
         )
         return evidence
+
+    def _check_optional(self, message: str, relpath: str, type: str) -> Evidence:
+        """Like ``_check`` but uses ``status="info"`` when absent.
+
+        Optional convention files (debug variant manifests, etc.) are recorded
+        for transparency but their absence must not decrease any score.
+        """
+        present = self.inspector.exists(relpath)
+        return Evidence(
+            source="file",
+            type=type,
+            # "info" for absent optional files; "pass" when present.
+            status="pass" if present else "info",
+            message=message + (" present" if present else " not present (optional)"),
+            file=relpath,
+        )
 
     def _check(self, message: str, relpath: str, type: str) -> Evidence:
         return Evidence(
@@ -247,6 +270,28 @@ class StaticAnalysisTool:
         result = gradle_tool.runner.run(
             [command, DETEKT_TASK], cwd=self.project_path, timeout=timeout
         )
+        # A non-zero exit code from the detekt Gradle task has two very
+        # different meanings:
+        #   1. The task ran and found code issues → evidence of findings.
+        #   2. The task does not exist in this project → Detekt is not
+        #      configured; treat as a limitation, not a student failure.
+        # We distinguish them by checking for the task-not-found pattern in
+        # the output.  ``status="missing"`` means the tool is not available
+        # for this project; it must not lower the student's score
+        # (RQ-EXM-010, spec.md §Detekt).
+        if result.exit_code != 0 and _detekt_not_configured(result.stdout, result.stderr):
+            return [
+                Evidence(
+                    source="detekt",
+                    type="detekt",
+                    status="missing",
+                    message=(
+                        "limitation: detekt task not found in this project "
+                        "(detekt is not configured); code quality not evaluated"
+                    ),
+                    command=" ".join(result.command),
+                )
+            ]
         command_evidence = result.to_evidence("detekt", "detekt")
         findings = self.parse_detekt_reports()
         if not findings:
@@ -321,6 +366,42 @@ class StaticAnalysisTool:
         return findings
 
 
+def _detekt_not_configured(stdout: str, stderr: str) -> bool:
+    """Return True when the Gradle output indicates Detekt is not configured.
+
+    Patterns that indicate the task was not found (not a student failure):
+    - ``Task 'detekt' not found``
+    - ``Could not determine the dependencies of task ':detekt'``
+    - ``No tasks available`` with detekt mentioned
+    - Output only contains Gradle lifecycle text with no detekt task execution
+
+    A project where detekt ran and found issues will show task execution lines
+    like ``> Task :app:detekt`` or ``> Task :detekt`` before any failure.
+    """
+    combined = (stdout + stderr).lower()
+    # Explicit task-not-found messages
+    if "task 'detekt' not found" in combined:
+        return True
+    if "could not determine the dependencies of task ':detekt'" in combined:
+        return True
+    # Gradle finished without ever executing a detekt task
+    task_executed = bool(
+        re.search(r">\s+task\s+:[^\s]*detekt", combined, re.I)
+    )
+    if not task_executed and "detekt" not in combined.split("configuration cache")[0]:
+        return True
+    # Only the configuration cache line mentions detekt — task never ran
+    lines_mentioning_detekt = [
+        line for line in combined.splitlines()
+        if "detekt" in line and not line.strip().startswith("[incubating]")
+        and "configuration cache" not in line
+        and "task graph" not in line
+    ]
+    if not lines_mentioning_detekt:
+        return True
+    return False
+
+
 def assign_evidence_ids(evidence: list[Evidence]) -> list[Evidence]:
     """Stamp stable ``ev://<n>`` provenance ids, preserving order."""
     stamped: list[Evidence] = []
@@ -342,10 +423,15 @@ class EvidenceCollector:
         project: ProjectContext,
         policy: EvaluationExecutionPolicy | None = None,
         runner: SubprocessRunner | None = None,
+        progress: Callable[[str], None] | None = None,
     ) -> None:
         self.project = project
         self.policy = policy or EvaluationExecutionPolicy()
         self.runner = runner
+        #: Optional per-stage progress sink (RQ-EXM-048). Receives a stable
+        #: stage id, never a localized string, so the engine stays free of
+        #: presentation concerns.
+        self._progress = progress or (lambda _stage: None)
         self.analyzer = AndroidProjectAnalyzer(project.path)
         self.gradle = GradleTool(project.path, runner=runner)
         self.tests = TestTool(project.path, runner=runner)
@@ -357,9 +443,11 @@ class EvidenceCollector:
         commands: list[str] = []
         timeout = self.policy.timeout_seconds
 
+        self._progress("inspection")
         evidence.extend(self.analyzer.analyze())
 
         if self.policy.gradle_confirmed and self.policy.run_build:
+            self._progress("build")
             build = self.gradle.build(timeout=timeout)
             evidence.append(build)
             commands.append(f"gradle {BUILD_TASK}")
@@ -369,6 +457,7 @@ class EvidenceCollector:
                     f"{build.message}"
                 )
         if self.policy.gradle_confirmed and self.policy.run_unit_tests:
+            self._progress("unit_tests")
             unit_evidence = self.tests.run_unit_tests(timeout=timeout)
             evidence.extend(unit_evidence)
             commands.append(f"gradle {UNIT_TEST_TASK}")
@@ -378,9 +467,11 @@ class EvidenceCollector:
                     f"{unit_evidence[0].message if unit_evidence else 'no evidence'}"
                 )
         if self.policy.gradle_confirmed and self.policy.run_lint:
+            self._progress("lint")
             evidence.extend(self.static.run_lint(timeout=timeout))
             commands.append(f"gradle {LINT_TASK}")
         if self.policy.gradle_confirmed and self.policy.run_detekt:
+            self._progress("detekt")
             evidence.extend(self.static.run_detekt(timeout=timeout))
             commands.append(f"gradle {DETEKT_TASK}")
 

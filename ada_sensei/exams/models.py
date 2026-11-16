@@ -96,12 +96,31 @@ class StatementFormat(StrEnum):  # type: ignore[misc]
 
 
 class DocumentationRules(BaseModel):
-    """Which student-authored files count as exam documentation (RQ-EXM-008)."""
+    """Which student-authored files count as exam documentation (RQ-EXM-008).
+
+    The default globs cover common patterns. For an exam that specifies a
+    technical report with architecture diagrams, the instructor should supply
+    ``accepted_globs`` that match the actual expected locations (e.g. ``docs/**/*.md``,
+    ``docs/**/*.pdf``, ``*.md``). The defaults intentionally cover a wider set
+    of common patterns so a student who writes docs at the project root is not
+    penalised simply because their path doesn't start with ``docs/exam/``.
+    """
 
     model_config = ConfigDict(frozen=True)
 
     #: Globs, relative to the project root, the exam accepts as documentation.
-    accepted_globs: tuple[str, ...] = ("docs/exam/**/*.md", "docs/exam/**/*.txt")
+    accepted_globs: tuple[str, ...] = (
+        "docs/exam/**/*.md",
+        "docs/exam/**/*.txt",
+        "docs/**/*.md",
+        "docs/**/*.txt",
+        "docs/**/*.pdf",
+        "*.md",
+        "INFORME*.md",
+        "REPORT*.md",
+        "informe*.md",
+        "report*.md",
+    )
     #: Optional files an instructor requires for a complete submission.
     required_files: tuple[str, ...] = ()
     #: Documentation may not assert behaviour that project evidence contradicts

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import re
+from pathlib import Path
 
 from rich.syntax import Syntax
 from rich.text import Text
@@ -21,9 +22,11 @@ from textual.timer import Timer
 from textual.widgets import Button, Footer, Header, RichLog, Select
 from textual.worker import Worker, WorkerState
 
-from ...locale.ui_strings import get_ui_string
+from ...actions.examine import ExamFinishResult
+from ...locale.ui_strings import describe_blocker, get_ui_string
 from ...storage.history import HistoryStore
 from ...storage.last_student import LastStudentStore
+from ...tools.opener import open_path
 from ..action_registry import get_actions as _registry_actions
 from ..commands import (
     AskCommand,
@@ -58,6 +61,7 @@ from .state import MessageKind, PresentationState, View
 from .widgets import (
     ActionGuide,
     ActionSelector,
+    ExamPreparationList,
     LanguageList,
     PromptArea,
     SessionBar,
@@ -79,6 +83,8 @@ HELP_TEXT = (
     "  /practice, /ask, /examples, /evaluate   run an action\n"
     "  /exam-init <statement>      start an exam (asks for confirmation)\n"
     "  /exam-finish               finish the active exam (asks for confirmation)\n"
+    "  /project <path>             configure the Android project for an exam\n"
+    "  /instructions <path.md>     configure the teacher's exam statement\n"
     "  /learn [topic]              explain current-stage concepts\n"
     "  /diagnose [stage]           run a brief diagnostic\n"
     "  /language <locale>          change language (es-CO | en-US)\n"
@@ -151,6 +157,7 @@ def action_prompt(action_id: str, locale: str | None) -> str:
         if action.id == action_id:
             return action.hint(locale)
     return ACTION_PROMPTS.get(action_id, "type a text…")
+
 
 #: Commands that require an explicit confirmation before running.
 CONFIRMING_ACTIONS = ("evaluate", "exam-init", "exam-finish")
@@ -325,6 +332,11 @@ class AdaSenseiTUI(App):
         self._pending_exam: (
             EvaluateCommand | ExamineStartCommand | ExamineFinishCommand | None
         ) = None
+        self._exam_preparing = False
+        #: Last blocker set emitted for the preparation panel (dedup guard).
+        self._exam_prep_signature: tuple[str, ...] | None = None
+        #: Start exam guidance was already emitted when the action was picked.
+        self._exam_start_offer_shown: bool = False
         self._anim_timer: Timer | None = None
         self._anim_step = 0
         self._current_kind: MessageKind = MessageKind.SYSTEM
@@ -357,9 +369,7 @@ class AdaSenseiTUI(App):
             )
         yield ActionGuide(id="action-guide")
         yield LanguageList(id="language-list")
-        with Horizontal(id="confirm-bar"):
-            yield Button("Confirm", id="confirm-yes", variant="success")
-            yield Button("Cancel", id="confirm-no", variant="error")
+        yield ExamPreparationList(id="exam-preparation-list")
         yield PromptArea("", id="input")
         yield SessionFooter(id="session-footer")
         yield Footer()
@@ -453,16 +463,12 @@ class AdaSenseiTUI(App):
             else:
                 from ..action_registry import action_guidance
 
-                text = action_guidance(
-                    self.ui_state.action, self._current_locale()
-                )
+                text = action_guidance(self.ui_state.action, self._current_locale())
             guide.update(text)
 
     def _apply_action_prompt(self) -> None:
         with contextlib.suppress(Exception):
-            placeholder = action_prompt(
-                self.ui_state.action, self._current_locale()
-            )
+            placeholder = action_prompt(self.ui_state.action, self._current_locale())
             self.query_one("#input", PromptArea).placeholder = placeholder
 
     def _set_identity(self, name: str) -> bool:
@@ -520,9 +526,7 @@ class AdaSenseiTUI(App):
         try:
             catalog = LearningCatalogLoader().load_catalog(locale)
         except ConfigLoadError as exc:
-            self._emit(
-                get_ui_string("onboard_config_error", locale).format(detail=exc)
-            )
+            self._emit(get_ui_string("onboard_config_error", locale).format(detail=exc))
             return None
         store = LearningProfileStore(str(self.router.config.resolved_data_dir))
         return store, catalog, locale
@@ -550,9 +554,9 @@ class AdaSenseiTUI(App):
 
         try:
             has_profile = (
-                LearningProfileStore(
-                    str(self.router.config.resolved_data_dir)
-                ).get(student_id)
+                LearningProfileStore(str(self.router.config.resolved_data_dir)).get(
+                    student_id
+                )
                 is not None
             )
         except Exception:  # noqa: BLE001 - degraded storage skips onboarding
@@ -622,9 +626,7 @@ class AdaSenseiTUI(App):
                 )
             )
         else:
-            stage = next(
-                s for s in catalog.stages if s.id == profile.current_stage_id
-            )
+            stage = next(s for s in catalog.stages if s.id == profile.current_stage_id)
             self._emit(
                 get_ui_string("onboard_started", locale).format(
                     number=stage.number, title=stage.title
@@ -826,7 +828,22 @@ class AdaSenseiTUI(App):
         self._apply_action_prompt()
         self._refresh_guide()
         self.refresh_footer()
-        if str(event.value) == "language" and self._language_selection is None:
+        action = str(event.value)
+        if action != "exam-init":
+            # Changing actions abandons any confirmation that was still open.
+            self._exam_start_offer_shown = False
+            self._pending_exam = None
+            self._pending_eval = None
+            self._close_exam_preparation()
+        if action == "exam-init":
+            self._open_exam_preparation()
+            return
+        if action == "exam-finish":
+            # Selecting the finish action must immediately expose its explicit
+            # compact confirmation; the input intentionally remains blank.
+            self._open_finish_confirmation()
+            return
+        if action == "language" and self._language_selection is None:
             # RQ-LNG-015: picking Change language opens the shared list
             # immediately — no extra Enter needed. The list takes focus.
             self._start_language_flow()
@@ -1015,9 +1032,13 @@ class AdaSenseiTUI(App):
         if availability is not None:
             self._emit(availability)
             return
-        if isinstance(
-            command, (EvaluateCommand, ExamineStartCommand, ExamineFinishCommand)
-        ):
+        if isinstance(command, ExamineStartCommand):
+            self._open_exam_preparation()
+            return
+        if isinstance(command, ExamineFinishCommand):
+            self._open_finish_confirmation()
+            return
+        if isinstance(command, EvaluateCommand):
             self._confirm_then_run(command)
             return
         self._run_nonblocking(command)
@@ -1178,8 +1199,118 @@ class AdaSenseiTUI(App):
         self.ui_state.view = _CONFIRM_VIEW.get(type(command), View.EVALUATE)
         self._pending_eval = command if isinstance(command, EvaluateCommand) else None
         self._status(get_ui_string("waiting_confirmation", self._current_locale()))
-        self._emit(self._confirm_prompt(command))
+        if not (
+            isinstance(command, ExamineStartCommand) and self._exam_start_offer_shown
+        ):
+            self._emit(self._confirm_prompt(command))
         self._set_confirmation_visible(True)
+
+    def _open_exam_preparation(self) -> None:
+        """Show read-only readiness and the compact start/back selector."""
+        getter = getattr(self.router, "exam_preparation_status", None)
+        if not callable(getter):
+            return
+        status = getter()
+        self._exam_preparing = True
+        self.ui_state.view = View.EXAM_START
+        self.query_one("#exam-preparation-list", ExamPreparationList).show(
+            status, locale=self._current_locale()
+        )
+        self._emit_preparation_blockers(status)
+
+    def _emit_preparation_blockers(self, status) -> None:
+        """Explain, in the conversation log, why the exam cannot start yet.
+
+        The panel stays compact so ``Empezar examen`` is always visible; the
+        full, localized reasons (and how to fix each one) live in the scrollable
+        log instead of being clipped by the panel's height (RQ-EXM-036/045).
+        Re-emitted only when the set of blockers changes, so re-opening the
+        panel does not spam the conversation.
+        """
+        if status.ready_to_start:
+            self._exam_prep_signature = None
+            return
+        signature = tuple(status.blockers)
+        if signature == self._exam_prep_signature:
+            return
+        self._exam_prep_signature = signature
+        locale = self._current_locale()
+        self._emit(get_ui_string("exam_start_blocked", locale))
+        for code in status.blockers:
+            self._emit("- " + describe_blocker(code, locale))
+
+    def _close_exam_preparation(self) -> None:
+        self._exam_preparing = False
+        with contextlib.suppress(Exception):
+            self.query_one("#exam-preparation-list", ExamPreparationList).hide()
+        self._focus_input()
+
+    def _open_finish_confirmation(self) -> None:
+        """Present the required compact finish/continue confirmation."""
+        self._exam_preparing = False
+        self.ui_state.view = View.EXAM_FINISH
+        self.query_one("#exam-preparation-list", ExamPreparationList).show_finish(
+            locale=self._current_locale()
+        )
+
+    @on(ExamPreparationList.Confirmed)
+    def on_exam_preparation_confirmed(
+        self, message: ExamPreparationList.Confirmed
+    ) -> None:
+        if message.option == "finish":
+            self._close_exam_preparation()
+            self._run_nonblocking(ExamineFinishCommand(yes=True))
+            return
+        if message.option == "continue":
+            self._close_exam_preparation()
+            return
+        if message.option == "back":
+            self._close_exam_preparation()
+            return
+        getter = getattr(self.router, "exam_preparation_status", None)
+        status = getter() if callable(getter) else None
+        if status is None or not status.ready_to_start:
+            self._open_exam_preparation()
+            return
+        self._close_exam_preparation()
+        self._run_nonblocking(
+            ExamineStartCommand(statement=status.instructions_path or "", yes=True)
+        )
+
+    @on(ExamPreparationList.Cancelled)
+    def on_exam_preparation_cancelled(
+        self, _message: ExamPreparationList.Cancelled
+    ) -> None:
+        self._close_exam_preparation()
+
+    def _show_exam_start_offer(self) -> None:
+        """Open Start exam confirmation as soon as the action is selected.
+
+        The controls appear before any pending command exists so the student
+        can still type the exam statement. Confirm validates that input (or
+        the already-pending command) and only then runs the action.
+        """
+        self._pending_exam = None
+        self._pending_eval = None
+        self.ui_state.view = View.EXAM_START
+        self._status(get_ui_string("waiting_confirmation", self._current_locale()))
+        if not self._exam_start_offer_shown:
+            self._emit(
+                self._confirm_prompt(
+                    ExamineStartCommand(statement=self._exam_start_statement())
+                )
+            )
+            self._exam_start_offer_shown = True
+        self._set_confirmation_visible(True)
+
+    def _exam_start_statement(self) -> str:
+        with contextlib.suppress(Exception):
+            return (self.query_one("#input", PromptArea).text or "").strip()
+        return ""
+
+    def _clear_input(self) -> None:
+        with contextlib.suppress(Exception):
+            self.query_one("#input", PromptArea).clear()
 
     def _set_confirmation_visible(self, visible: bool) -> None:
         """Show/hide the shared Confirm/Cancel buttons and localize labels."""
@@ -1209,6 +1340,7 @@ class AdaSenseiTUI(App):
     def _resolve_pending_exam(self, pending: Command, answer: str) -> None:
         self._pending_exam = None
         self._pending_eval = None
+        self._exam_start_offer_shown = False
         self.ui_state.view = View.CHAT
         self._set_confirmation_visible(False)
         if answer.strip().lower() in {"y", "yes"}:
@@ -1225,13 +1357,102 @@ class AdaSenseiTUI(App):
 
     @on(Button.Pressed, "#confirm-yes")
     def _confirm_pressed(self) -> None:
-        if self._pending_exam is not None:
-            self._resolve_pending_exam(self._pending_exam, "yes")
+        if self.ui_state.busy:
+            self._emit(get_ui_string("busy_blocked", self._current_locale()))
+            return
+        pending = self._pending_exam
+        if isinstance(pending, ExamineStartCommand) or (
+            pending is None and self.ui_state.action == "exam-init"
+        ):
+            self._confirm_exam_start(pending)
+            return
+        if pending is not None:
+            self._resolve_pending_exam(pending, "yes")
+
+    def _confirm_exam_start(self, pending: Command | None) -> None:
+        """Validate student, exam instructions, and project before starting."""
+        statement = self._exam_start_statement()
+        if not statement and isinstance(pending, ExamineStartCommand):
+            statement = pending.statement
+        issues = self._validate_exam_start(statement)
+        if issues:
+            self._emit_exam_start_issues(issues)
+            if statement:
+                # Keep the edited statement so the next click can proceed.
+                self._pending_exam = ExamineStartCommand(statement=statement)
+            return
+        command = ExamineStartCommand(statement=statement)
+        self._clear_input()
+        self._resolve_pending_exam(command, "yes")
+
+    def _validate_exam_start(self, statement: str) -> list[str]:
+        """Return every blocking reason for starting the exam, localized."""
+        locale = self._current_locale()
+        issues: list[str] = []
+        if self.ui_state.awaiting_name or not self.router.context.student_id:
+            issues.append(get_ui_string("exam_start_no_student", locale))
+        text = statement.strip()
+        if not text:
+            issues.append(get_ui_string("prereq_statement", locale))
+        else:
+            path = Path(text).expanduser()
+            try:
+                from ...exams.definition import ExamDefinitionLoader
+
+                loader = ExamDefinitionLoader()
+                if path.is_file():
+                    loader.load(path, exam_id=None)
+                elif "\n" in text or text.startswith(("{", "[")):
+                    loader.load_text(text, exam_id=None)
+                else:
+                    issues.append(
+                        get_ui_string("exam_statement_not_found", locale).format(
+                            detail=path
+                        )
+                    )
+            except Exception as exc:  # noqa: BLE001 - report, never crash
+                issues.append(
+                    get_ui_string("exam_statement_invalid", locale).format(
+                        detail=str(exc)
+                    )
+                )
+        try:
+            readiness = self.router.check_project_readiness()
+        except Exception as exc:  # noqa: BLE001 - report, never crash
+            issues.append(f"{get_ui_string('preflight_failed', locale)} {exc}")
+        else:
+            if not readiness.ready:
+                for issue in readiness.issues:
+                    issues.append(
+                        describe_blocker(issue.code, locale, detail=issue.detail)
+                    )
+        return issues
+
+    def _emit_exam_start_issues(self, issues: list[str]) -> None:
+        locale = self._current_locale()
+        self._emit(get_ui_string("exam_start_blocked", locale))
+        for issue in issues:
+            self._emit("- " + issue)
+        self._status(get_ui_string("waiting_confirmation", locale))
+        self._focus_input()
 
     @on(Button.Pressed, "#confirm-no")
     def _cancel_pressed(self) -> None:
         if self._pending_exam is not None:
             self._resolve_pending_exam(self._pending_exam, "no")
+            return
+        if self.ui_state.action != "exam-init":
+            return
+        self._clear_input()
+        self._exam_start_offer_shown = False
+        self._set_confirmation_visible(False)
+        self._status(get_ui_string("ready", self._current_locale()))
+        self._emit(
+            get_ui_string(
+                _ABORT_STRING_KEYS[ExamineStartCommand], self._current_locale()
+            )
+        )
+        self._focus_input()
 
     #: Backward-compatible alias for the evaluate-only flow.
     _resolve_pending_eval = _resolve_pending_exam
@@ -1270,21 +1491,31 @@ class AdaSenseiTUI(App):
         self._on_worker_done(event.worker)
 
     def _dispatch_worker(self, command: Command) -> CommandResult:
+        # Long-running actions report localized progress through this sink while
+        # the worker runs (RQ-EXM-048).
+        self.router.progress = self._emit_progress
         if isinstance(command, ExamineStartCommand):
             readiness = self.router.check_project_readiness()
             if not readiness.ready:
                 return ErrorResponse(message=self._readiness_message(readiness))
         return self.router.dispatch(command)
 
+    def _emit_progress(self, text: str) -> None:
+        """Post one progress line from a worker thread (thread-safe).
+
+        ``post_message`` schedules the update on the UI thread, so the worker
+        never mutates presentation state directly (RQ-EXM-048).
+        """
+        if text:
+            self.post_message(OutputReady(text, kind=MessageKind.SYSTEM))
+
     def _readiness_message(self, readiness) -> str:
         """Localized explanation of every blocking project-readiness issue."""
         locale = self._current_locale()
         lines = [get_ui_string("preflight_failed", locale)]
         for issue in readiness.issues:
-            text = get_ui_string(f"preflight_{issue.code}", locale)
-            if issue.detail and "{detail}" in text:
-                text = text.format(detail=issue.detail)
-            lines.append(f"- {text}")
+            reason = describe_blocker(issue.code, locale, detail=issue.detail)
+            lines.append(f"- {reason}")
         return "\n".join(lines)
 
     def _on_worker_done(self, worker: Worker) -> None:
@@ -1317,6 +1548,8 @@ class AdaSenseiTUI(App):
             text = self.formatter.result(result)
             self._emit_kind(kind, text if text else "(done)")
             self._emit_recommendation(result)
+            if isinstance(result, ExamFinishResult):
+                self._open_exam_report(result)
         notice = self.router.context_notice()
         if notice:
             self._emit("Note: " + self.formatter.error(notice))
@@ -1333,6 +1566,22 @@ class AdaSenseiTUI(App):
             self._resume_onboarding = False
             self._maybe_start_onboarding()
         self._focus_input()
+
+    def _open_exam_report(self, result: ExamFinishResult) -> None:
+        """Open the generated PDF with the OS viewer, best-effort (RQ-EXM-049).
+
+        Controlled by ``tools.open_report``; a missing viewer never affects the
+        result or the conversation.
+        """
+        path = getattr(result, "report_path", None)
+        if not path:
+            return
+        try:
+            enabled = bool(self.router.config.tools.open_report)
+        except Exception:  # noqa: BLE001 - never break the result display
+            enabled = True
+        if enabled:
+            open_path(path)
 
     def _emit_recommendation(self, result: CommandResult) -> None:
         """Emit one validated next-step recommendation, or a neutral invite.
@@ -1361,39 +1610,109 @@ class AdaSenseiTUI(App):
             return
 
     def on_output_ready(self, message: OutputReady) -> None:
-        self._write_output(message.kind, message.text)
+        self._enqueue_output(message.kind, message.text)
 
     # ------------------------------------------------------------------
     # Conversation rendering (RQ-TUI-034)
     # ------------------------------------------------------------------
 
-    def _write_output(self, kind: MessageKind, text: str) -> None:
-        """Append a distinguished conversation entry to the log.
+    #: Characters revealed per animation tick when streaming ADA Sensei output.
+    _STREAM_CHARS = 24
+    #: Seconds between stream ticks (lightweight, event-loop driven).
+    _STREAM_INTERVAL = 0.03
 
-        User/assistant/result entries get a role label, a divider, and wrapped
-        body content; code blocks are preserved and rendered with Rich Syntax.
-        System entries keep the previous plain rendering.
+    def _scroll_log_end(self) -> None:
+        with contextlib.suppress(Exception):
+            self.query_one("#log", RichLog).scroll_end(animate=False)
+
+    def _enqueue_output(self, kind: MessageKind, text: str) -> None:
+        """Append an entry, animating ADA Sensei responses as a typing stream.
+
+        Animation simulates the agent thinking/writing: text is revealed
+        progressively while the log scrolls to keep the latest text visible.
         """
         if not text:
             return
         try:
             log = self.query_one("#log", RichLog)
         except Exception:
-            # A pending entry may be delivered around unmount (e.g. at app
-            # shutdown); there is nowhere meaningful to render it then.
             return
         if kind is MessageKind.SYSTEM:
             log.write(text)
+            self._scroll_log_end()
             return
         label = MESSAGE_LABELS.get(kind)
         width = max((log.size.width or 60), 12)
         if label:
             log.write(Text(f"  {label}\n", style="bold"))
             log.write(Text("  " + "─" * max(width - 2, 1) + "\n", style="dim"))
-        self._write_body(log, text)
+        self._scroll_log_end()
+        # Stream ADA Sensei/result messages progressively; show user echoes instantly.
+        if kind is MessageKind.USER or "```" in text:
+            self._write_body(log, text)
+            self._scroll_log_end()
+            return
+        self._stream_body(text)
 
-    @staticmethod
-    def _write_body(log: RichLog, text: str) -> None:
+    def _stream_body(self, text: str) -> None:
+        """Progressively reveal ``text`` into the log, scrolling as it grows."""
+        if not hasattr(self, "_stream_queue"):
+            self._stream_queue = []
+            self._stream_timer = None
+        self._stream_queue.append(text)
+        if self._stream_timer is None and self._is_mounted:
+            with contextlib.suppress(Exception):
+                self._stream_timer = self.set_interval(
+                    self._STREAM_INTERVAL, self._advance_stream, name="output-stream"
+                )
+        if self._stream_timer is None:
+            # Not mounted (e.g. tests): render immediately.
+            while self._stream_queue:
+                with contextlib.suppress(Exception):
+                    log = self.query_one("#log", RichLog)
+                    log.write(Text(self._stream_queue.pop(0)))
+            self._scroll_log_end()
+
+    def _advance_stream(self) -> None:
+        """Reveal the next chunk of the streaming output queue."""
+        queue = getattr(self, "_stream_queue", None)
+        if not queue:
+            timer = getattr(self, "_stream_timer", None)
+            if timer is not None:
+                with contextlib.suppress(Exception):
+                    timer.stop()
+            self._stream_timer = None
+            return
+        try:
+            log = self.query_one("#log", RichLog)
+        except Exception:
+            self._stream_queue = []
+            return
+        current = queue[0]
+        n = min(self._STREAM_CHARS, len(current))
+        chunk = current[:n]
+        remaining = current[n:]
+        if chunk:
+            log.write(Text(chunk))
+            self._scroll_log_end()
+        if remaining:
+            queue[0] = remaining
+        else:
+            queue.pop(0)
+            log.write(Text("\n"))
+            self._scroll_log_end()
+        if not queue:
+            timer = getattr(self, "_stream_timer", None)
+            if timer is not None:
+                with contextlib.suppress(Exception):
+                    timer.stop()
+            self._stream_timer = None
+
+    def _write_output(self, kind: MessageKind, text: str) -> None:
+        """Compatibility wrapper: append an entry to the log."""
+        self._enqueue_output(kind, text)
+
+    def _write_body(self, log: RichLog, text: str) -> None:
         """Write body content, rendering fenced code blocks via Rich Syntax.
 
         Prose paragraphs wrap at the terminal width (RichLog ``wrap=True``);

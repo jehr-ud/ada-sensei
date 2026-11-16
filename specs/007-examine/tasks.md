@@ -1,128 +1,103 @@
-# Tasks — Examine Action
+# Tareas — refactorización de 007 Examine
 
-## Specification and foundation
+## 0. Inspección obligatoria
 
-- [x] Add `007-examine` specification and traceability.
-- [x] Define `ExamDefinition`.
-- [x] Define `ExamRequirement`.
-- [x] Define `ExamAttempt`.
-- [x] Define `ExamEvent`.
-- [x] Define `ExamResult`.
-- [x] Define versioned exam rubric configuration.
-- [x] Add exam lifecycle state machine.
+- [ ] Leer `AGENTS.md` y todos los artefactos actuales de `007-examine`,
+  `002-cli`, `001-foundation`, `006-evaluate`, `0010-language-selection` y
+  `009-agent-orchestration`.
+- [ ] Inspeccionar el flujo real de `exam-init` en TUI, parser, router,
+  `ExamineAction`, `ProjectPreflight`, `SessionContext` y configuración.
+- [ ] Inspeccionar `LanguageList` y su montaje real en la bienvenida y en
+  Change language; reutilizar ese patrón de widget/teclado.
+- [ ] Identificar el origen de los botones grandes Confirmar/Cancelar y
+  eliminar el flujo duplicado, sin mantener dos confirmaciones.
+- [ ] Verificar qué campos canónicos ya existen para project path e
+  instrucciones; evitar duplicar configuración.
 
-## Exam lifecycle
+## 1. Comandos y contexto
 
-- [x] Implement exam resolution from instructor source.
-- [x] Implement explicit exam start confirmation.
-- [x] Add localized TUI Confirm/Cancel controls for exam start.
-- [x] Block exam start when the project is not evaluable and list every reason.
-- [x] Add readiness tests for missing project, non-Android project, and missing toolchain.
-- [x] Add tests proving Confirm runs the pending command and Cancel creates no exam.
-- [x] Create `ExamAttempt` with separate identities.
-- [x] Record `EXAM_STARTED`.
-- [x] Create `docs/ada-sensei/exams/<exam_id>/`.
-- [x] Generate exam context/rubric documentation.
-- [x] Implement finish confirmation.
-- [x] Record `EXAM_FINISHED`.
-- [x] Prevent new ask events after completion.
+- [ ] Añadir `/project <ruta>` al registry/parser compartido.
+- [ ] Resolver rutas absolutas, relativas y `~` con cwd del proceso.
+- [ ] Guardar la ruta en el campo canónico existente.
+- [ ] Añadir `/instructions <ruta>` al registry/parser compartido.
+- [ ] Validar extensión `.md`, archivo regular, legible y no vacío.
+- [ ] Guardar ruta en contexto/configuración existente con persistencia
+  compatible.
+- [ ] Añadir ayuda bilingüe a `/help` y descripciones del selector.
+- [ ] Añadir pruebas para ambos comandos y para que cwd no cambie.
 
-## Ask tracking
+## 2. Servicio de preparación
 
-- [x] Integrate exam event tracking with AskAction.
-- [x] Count successful asks during active exam.
-- [x] Persist ask events.
-- [x] Record failed/cancelled ask events separately.
-- [x] Add tests proving the counter is not based on terminal text.
+- [ ] Implementar o extender `ExamPreparationService` como capa de aplicación.
+- [ ] Integrar identidad, proyecto, `ProjectPreflight`, instrucciones y
+  `ExamDefinitionLoader`.
+- [ ] Devolver todos los bloqueos de validación en una estructura tipada.
+- [ ] Garantizar que validación no crea intento, eventos, timer ni docs.
+- [ ] Volver a validar al iniciar.
+- [ ] Hacer validación final y creación de intento en una operación protegida
+  contra doble dispatch.
+- [ ] Aplicar preflight también a CLI y `--yes`.
 
-## Duration
+## 3. Panel de preparación TUI
 
-- [x] Record monotonic start/end timing.
-- [x] Persist wall-clock timestamps for reporting.
-- [x] Calculate duration.
-- [x] Calculate overtime when a limit exists.
-- [x] Implement deterministic duration scorer.
-- [x] Add duration tests.
+- [ ] Crear/extender pantalla/panel de preparación de examen.
+- [ ] Reutilizar patrón `LanguageList` (lista compacta, cursor `>`, teclado).
+- [ ] Eliminar botones grandes Confirmar/Cancelar de la preparación.
+- [ ] Mostrar explicación y comandos `/project` y `/instructions`.
+- [ ] Mostrar estado de estudiante, proyecto, preflight e instrucciones.
+- [ ] Añadir opciones `Empezar examen` y `Volver`.
+- [ ] Deshabilitar o bloquear con mensaje localizado `Empezar examen` si hay
+  precondiciones incumplidas.
+- [ ] Mantener visible el contenido previo y el área de conversación.
+- [ ] Implementar Arriba/Abajo/Enter/Escape y restauración correcta del foco.
+- [ ] Permitir que el estudiante escriba comandos de configuración y volver a
+  actualizar el estado del panel.
+- [ ] Probar terminal estrecha/pequeña y wrap de texto.
+- [ ] Confirmar que abrir/cancelar el panel no crea side effects.
 
-## Documentation
+## 4. Inicio de examen
 
-- [x] Support instructor Markdown/structured exam definition.
-- [x] Support instructor PDF source.
-- [x] Preserve original exam source.
-- [x] Support student documentation.
-- [x] Distinguish instructor statement from student documentation.
-- [x] Generate architecture documentation from observed evidence.
-- [x] Do not overwrite student-authored documentation.
+- [ ] Cargar Markdown con `ExamDefinitionLoader` sin reimplementar parsing.
+- [ ] Preservar original statement y source path.
+- [ ] Revalidar todo al elegir `Empezar examen`.
+- [ ] Crear exactamente un `ExamAttempt` al pasar todas las validaciones.
+- [ ] Conservar snapshot de proyecto, locale, definición, límites y rúbrica.
+- [ ] Crear documentación generada solo después de iniciar.
+- [ ] Bloquear doble Enter/doble click.
+- [ ] Mantener compatible la interfaz CLI directa.
 
-## Evaluation reuse
+## 5. Temporizador y estado activo
 
-- [x] Reuse `AndroidProjectAnalyzer`.
-- [x] Reuse `GradleTool`.
-- [x] Reuse `TestTool`.
-- [x] Reuse `StaticAnalysisTool`.
-- [x] Reuse `RequirementMatcher`.
-- [x] Reuse structured LLM validation/retry.
-- [x] Reuse `ResultStore`, `AttemptStore`, and `HistoryStore`.
-- [x] Verify no source modifications.
+- [ ] Añadir indicador compacto persistente de examen activo.
+- [ ] Mostrar elapsed `HH:MM:SS`.
+- [ ] Mostrar remaining si `allowed_duration_seconds` está definido.
+- [ ] Mostrar aviso localizado al alcanzar cero sin auto-finalizar.
+- [ ] Mostrar contador `/ask` y límite si existe.
+- [ ] Refrescar mediante scheduler no bloqueante del TUI.
+- [ ] Reconstruir reloj al reanudar desde `started_at`.
+- [ ] Detener refresco al finalizar/cancelar la sesión TUI.
+- [ ] No persistir ticks ni usarlos en scoring.
 
-## Exam rubric
+## 6. Finalización y regresión
 
-- [x] Implement 40/15/15/15/5/10 exam rubric.
-- [x] Implement functional requirement subweights.
-- [x] Implement exam-process dimension.
-- [x] Implement duration and ask usage subweights.
-- [x] Implement not-evaluated denominator handling.
-- [x] Implement deterministic 0–50 raw score.
-- [x] Implement 1.0–5.0 suggested grade conversion.
-- [x] Add rubric validation tests.
-- [x] Add deterministic score tests.
+- [ ] Si se presenta confirmación de finalización, usar lista compacta
+  `Finalizar examen` / `Continuar`.
+- [ ] Conservar semántica de `exam-finish`, ask bridge, evidencia, score y PDF.
+- [ ] Verificar que cambio de `/project` durante examen no modifica el intento.
+- [ ] Ejecutar pruebas de 007-examine, 006-evaluate, CLI/TUI, locale y storage.
+- [ ] Añadir pruebas de integración desde configuración hasta PDF final.
+- [ ] Actualizar traceability y documentación/help.
+- [ ] Registrar ADR si el diseño real requiere decisión arquitectónica nueva.
 
-## Architecture evaluation
+## Definición de terminado
 
-- [x] Collect Android architecture evidence.
-- [x] Generate evidence-grounded architecture explanation.
-- [x] Distinguish observed/documented/inferred claims.
-- [x] Add architecture-report tests.
-
-## PDF
-
-- [x] Implement `ExamReportGenerator`.
-- [x] Generate detailed PDF.
-- [x] Include rubric and calculation.
-- [x] Include evidence and limitations.
-- [x] Include architecture section.
-- [x] Include process metrics.
-- [x] Include raw score and suggested grade.
-- [x] Label grade as "Suggested grade — generated by ADA Sensei".
-- [x] Add PDF generation tests.
-
-## Persistence
-
-- [x] Persist `ExamResult`.
-- [x] Bind result to student/project/exam/exam_attempt/attempt ids.
-- [x] Mark attempt completed.
-- [x] Append result to history.
-- [x] Add persistence-failure tests.
-
-## CLI/TUI
-
-- [x] Add `exam-init` to the action selector.
-- [x] Add direct CLI command for starting an exam.
-- [x] Add Finish Exam interaction.
-- [x] Show exam timer/status in TUI.
-- [x] Show ask count while an exam is active.
-- [x] Ensure completed exams cannot accept new asks.
-
-## Integration tests
-
-- [x] Start exam integration test.
-- [x] Ask counter integration test.
-- [x] Duration integration test.
-- [x] Finish exam integration test.
-- [x] Build failure integration test.
-- [x] Missing tests integration test.
-- [x] Missing static analysis integration test.
-- [x] Full rubric integration test.
-- [x] PDF report integration test.
-- [x] Persistence integration test.
-- [x] Completed-attempt immutability test.
+- [ ] Los requisitos nuevos tienen pruebas automatizadas o una justificación
+  documentada.
+- [ ] No hay botones grandes Confirmar/Cancelar en el inicio de examen.
+- [ ] El examen no puede comenzar sin proyecto Android válido e instrucciones
+  Markdown válidas.
+- [ ] El temporizador se muestra y es reconstruible desde el timestamp
+  persistido.
+- [ ] No se ha duplicado parser, preflight, loader, lifecycle, scoring o
+  persistencia.
+- [ ] No se han modificado las reglas existentes de evaluación.

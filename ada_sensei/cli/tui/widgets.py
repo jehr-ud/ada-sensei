@@ -82,27 +82,29 @@ class SessionFooter(Static):
         return f"{value}" if value not in (None, "") else self.EMPTY
 
     @staticmethod
-    def _mmss(seconds) -> str:
+    def _hhmmss(seconds) -> str:
         seconds = int(seconds)
-        return f"{seconds // 60:02d}:{seconds % 60:02d}"
+        return f"{seconds // 3600:02d}:{(seconds % 3600) // 60:02d}:{seconds % 60:02d}"
 
     @classmethod
     def _exam_text(cls, status) -> str:
         if status is None:
             return ""
-        label = "Exam done" if status.is_completed else "Exam"
+        label = "EXAM DONE" if status.is_completed else "EXAM ACTIVE"
         elapsed = (
-            cls._mmss(status.duration_seconds)
+            cls._hhmmss(status.duration_seconds)
             if status.duration_seconds is not None
             else cls.EMPTY
         )
         if status.allowed_duration_seconds is not None:
-            allowed = cls._mmss(status.allowed_duration_seconds)
-            elapsed = f"{elapsed}/{allowed}"
+            remaining = max(
+                0, status.allowed_duration_seconds - (status.duration_seconds or 0)
+            )
+            elapsed = f"Elapsed: {elapsed} | Remaining: {cls._hhmmss(remaining)}"
         asks = str(status.ask_count)
         if status.allowed_ask_count is not None:
             asks = f"{asks}/{status.allowed_ask_count}"
-        return f"{label} {elapsed} | Asks {asks}"
+        return f"{label} | {elapsed} | /ask: {asks}"
 
     def update_session(
         self,
@@ -352,6 +354,158 @@ class LanguageList(Static):
 
     def action_cancel(self) -> None:
         self.post_message(self.Cancelled())
+
+
+class ExamPreparationList(Static):
+    """Compact keyboard-only exam preparation selector.
+
+    It intentionally mirrors ``LanguageList`` instead of using Textual
+    buttons: arrows move the ``>`` cursor, Enter chooses, Escape returns.
+    """
+
+    can_focus = True
+    BINDINGS = [
+        Binding("up", "cursor_up", "Move up"),
+        Binding("down", "cursor_down", "Move down"),
+        Binding("enter", "confirm", "Select"),
+        Binding("escape", "cancel", "Back"),
+    ]
+
+    class Confirmed(Message):
+        def __init__(self, option: str) -> None:
+            super().__init__()
+            self.option = option
+
+    class Cancelled(Message):
+        pass
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.index = 0
+        self.ready = False
+        self.status = None
+        self.locale = "en-US"
+        self.mode = "prepare"
+
+    def show(self, status, *, locale: str) -> None:
+        self.status, self.ready, self.index, self.locale = (
+            status,
+            status.ready_to_start,
+            0,
+            locale,
+        )
+        self.mode = "prepare"
+        self.styles.display = "block"
+        self.update(self._render_preparation(locale))
+        self.focus()
+
+    def hide(self) -> None:
+        self.styles.display = "none"
+        self.status = None
+
+    def show_finish(self, *, locale: str) -> None:
+        """Reuse the compact list for the explicit finish/continue choice."""
+        self.status, self.ready, self.index, self.locale = None, True, 0, locale
+        self.mode = "finish"
+        self.styles.display = "block"
+        self.update(self._render_preparation(locale))
+        self.focus()
+
+    def _render_preparation(self, locale: str):
+        from rich.text import Text
+
+        es = locale == "es-CO"
+        if self.mode == "finish":
+            title = "Finalizar examen" if es else "Finish exam"
+            intro = (
+                "Se ejecutarán build, pruebas, lint y Detekt; después se generará "
+                "el informe."
+                if es
+                else (
+                    "Build, tests, lint and Detekt will run, then the report is "
+                    "generated."
+                )
+            )
+            options = (
+                ("Finalizar examen", "Continuar") if es else ("Finish exam", "Continue")
+            )
+            text = Text(f"{title}\n\n{intro}\n\n")
+            for i, option in enumerate(options):
+                text.append(
+                    ("> " if i == self.index else "  ") + option + "\n",
+                    style="reverse" if i == self.index else "",
+                )
+            text.append(
+                "\n↑/↓ Mover · Enter Seleccionar · Esc Continuar"
+                if es
+                else "\nUp/Down Move · Enter Select · Esc Continue",
+                style="dim",
+            )
+            return text
+        title = "Preparar examen" if es else "Prepare exam"
+        intro = (
+            "Configura el proyecto Android y el archivo Markdown antes de comenzar."
+            if es
+            else (
+                "Configure the Android project and Markdown instructions before "
+                "starting."
+            )
+        )
+        missing = "Faltan requisitos" if es else "Requirements missing"
+        ready = "Listo para comenzar" if es else "Ready to start"
+        project = self.status.project_path or (
+            "No configurado" if es else "Not configured"
+        )
+        instructions = self.status.instructions_path or (
+            "No configuradas" if es else "Not configured"
+        )
+        state = ready if self.ready else missing
+        text = Text(f"{title}\n\n{intro}\n\n")
+        text.append(f"{'Proyecto' if es else 'Project'}: {project}\n")
+        text.append(f"{'Instrucciones' if es else 'Instructions'}: {instructions}\n")
+        # The blocker list is intentionally NOT rendered here: it is variable
+        # length and would push the options past the panel's ``max-height``,
+        # hiding ``Empezar examen``. The app emits the localized reasons to the
+        # conversation log instead, where they stay fully readable and
+        # scrollable (RQ-EXM-036/045).
+        text.append(f"{'Estado' if es else 'Status'}: {state}\n\n")
+        options = ("Empezar examen", "Volver") if es else ("Start exam", "Back")
+        for i, option in enumerate(options):
+            text.append(
+                ("> " if i == self.index else "  ") + option + "\n",
+                style="reverse" if i == self.index else "",
+            )
+        text.append(
+            "↑/↓ Mover · Enter Seleccionar · Esc Volver"
+            if es
+            else "Up/Down Move · Enter Select · Esc Back",
+            style="dim",
+        )
+        return text
+
+    def _move(self, amount: int) -> None:
+        self.index = (self.index + amount) % 2
+        # Locale does not change while this list has focus; it is only needed
+        # for copy, and the app refreshes on locale changes.
+        self.update(self._render_preparation(self.locale))
+
+    def action_cursor_up(self) -> None:
+        self._move(-1)
+
+    def action_cursor_down(self) -> None:
+        self._move(1)
+
+    def action_confirm(self) -> None:
+        if self.mode == "finish":
+            option = "finish" if self.index == 0 else "continue"
+        else:
+            option = "start" if self.index == 0 else "back"
+        self.post_message(self.Confirmed(option))
+
+    def action_cancel(self) -> None:
+        self.post_message(
+            self.Confirmed("continue" if self.mode == "finish" else "back")
+        )
 
 
 class StatusIndicator(Static):

@@ -39,6 +39,17 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
             "definition, or a PDF. It must include a title and the functional "
             "requirements. Example: /exam-init ~/exams/midterm.md"
         ),
+        "exam_start_blocked": "The exam cannot start yet:",
+        "exam_start_no_student": (
+            "The student name is not configured. Use /name followed by your name."
+        ),
+        "exam_statement_not_found": (
+            "Exam instructions not found: {detail}. Pass an existing .md/.txt, "
+            "JSON, or PDF file path, or paste the statement as multiple lines."
+        ),
+        "exam_statement_invalid": (
+            "The exam instructions are not valid: {detail}"
+        ),
         "exam_start_confirm": (
             "Start exam — review before confirming.\n\n"
             "How to configure the exam:\n"
@@ -59,7 +70,8 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
         "exam_finish_confirm": (
             "Finish exam — review before confirming.\n\n"
             "Finishing stops the timer, scores the project (Gradle build, "
-            "unit tests, Android Lint, Detekt), and writes a PDF report.\n\n"
+            "unit tests, Android Lint, Detekt), and writes a PDF report to "
+            "docs/ada-sensei/exams/<exam>/report.pdf in the project.\n\n"
             "To confirm, type yes (or y) and press Enter. To cancel, type no."
         ),
         "evaluate_confirm": (
@@ -69,6 +81,13 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
         "evaluate_aborted": "Evaluation aborted before running any Gradle task.",
         "exam_start_aborted": "Exam start aborted; no attempt was created.",
         "exam_finish_aborted": "Exam finish aborted; the attempt is still active.",
+        "exam_progress_inspecting": "Inspecting the project…",
+        "exam_progress_build": "Running Gradle build…",
+        "exam_progress_unit_tests": "Running unit tests…",
+        "exam_progress_lint": "Running Android Lint…",
+        "exam_progress_detekt": "Running Detekt…",
+        "exam_progress_interpreting": "Interpreting results with the model…",
+        "exam_progress_report": "Generating the PDF report…",
         "confirm_yes": "Confirm",
         "confirm_no": "Cancel",
         "preflight_failed": (
@@ -95,6 +114,33 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
         "preflight_no_android_sdk": (
             "No Android SDK was found. Set ANDROID_HOME/ANDROID_SDK_ROOT or "
             "sdk.dir in local.properties."
+        ),
+        "preflight_no_instructions": (
+            "No exam instructions file is configured. Set one with "
+            "/instructions <path>."
+        ),
+        "preflight_instructions_not_markdown": (
+            "The exam instructions must be a Markdown (.md) file."
+        ),
+        "preflight_instructions_missing": (
+            "The exam instructions file was not found. Check the path set with "
+            "/instructions <path>."
+        ),
+        "preflight_instructions_unreadable": (
+            "The exam instructions file could not be read. Check its "
+            "permissions and encoding."
+        ),
+        "preflight_instructions_empty": (
+            "The exam instructions file is empty. Add a title and the "
+            "functional requirements."
+        ),
+        "preflight_instructions_invalid": (
+            "The exam instructions are not a valid exam definition. Include a "
+            "title and the functional requirements as a list."
+        ),
+        "preflight_active_exam": (
+            "An exam is already active. Finish it with /exam-finish before "
+            "starting another."
         ),
         "prereq_locale": "Enter a locale: es-CO or en-US.",
         "activation_hint": "Navigate with Up/Down and press Enter to run.",
@@ -145,6 +191,19 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
             "definición JSON o un PDF. Debe incluir título y requisitos "
             "funcionales. Ejemplo: /exam-init ~/exams/midterm.md"
         ),
+        "exam_start_blocked": "El examen aún no puede comenzar:",
+        "exam_start_no_student": (
+            "El nombre del estudiante no está configurado. Usa /name seguido "
+            "de tu nombre."
+        ),
+        "exam_statement_not_found": (
+            "No se encontraron las instrucciones del examen: {detail}. Indica "
+            "una ruta existente .md/.txt, JSON o PDF, o pega el enunciado en "
+            "varias líneas."
+        ),
+        "exam_statement_invalid": (
+            "Las instrucciones del examen no son válidas: {detail}"
+        ),
         "exam_start_confirm": (
             "Iniciar examen — revisa antes de confirmar.\n\n"
             "Cómo configurar el examen:\n"
@@ -167,7 +226,8 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
             "Terminar examen — revisa antes de confirmar.\n\n"
             "Al terminar se detiene el temporizador, se califica el proyecto "
             "(build de Gradle, pruebas unitarias, Android Lint, Detekt) y se "
-            "genera un informe PDF.\n\n"
+            "genera un informe PDF en docs/ada-sensei/exams/<exam>/report.pdf "
+            "del proyecto.\n\n"
             "Para confirmar, escribe yes (o y) y pulsa Enter. "
             "Para cancelar, escribe no."
         ),
@@ -185,6 +245,13 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
         "exam_finish_aborted": (
             "Finalización cancelada; el intento de examen sigue activo."
         ),
+        "exam_progress_inspecting": "Inspeccionando el proyecto…",
+        "exam_progress_build": "Ejecutando build de Gradle…",
+        "exam_progress_unit_tests": "Ejecutando pruebas unitarias…",
+        "exam_progress_lint": "Ejecutando Android Lint…",
+        "exam_progress_detekt": "Ejecutando Detekt…",
+        "exam_progress_interpreting": "Interpretando resultados con el modelo…",
+        "exam_progress_report": "Generando el informe PDF…",
         "confirm_yes": "Confirmar",
         "confirm_no": "Cancelar",
         "preflight_failed": (
@@ -214,6 +281,33 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
             "No se encontró el Android SDK. Define ANDROID_HOME/"
             "ANDROID_SDK_ROOT o sdk.dir en local.properties."
         ),
+        "preflight_no_instructions": (
+            "No hay un archivo de instrucciones del examen configurado. "
+            "Configúralo con /instructions <ruta>."
+        ),
+        "preflight_instructions_not_markdown": (
+            "Las instrucciones del examen deben ser un archivo Markdown (.md)."
+        ),
+        "preflight_instructions_missing": (
+            "No se encontró el archivo de instrucciones del examen. Revisa la "
+            "ruta configurada con /instructions <ruta>."
+        ),
+        "preflight_instructions_unreadable": (
+            "No se pudo leer el archivo de instrucciones del examen. Revisa sus "
+            "permisos y su codificación."
+        ),
+        "preflight_instructions_empty": (
+            "El archivo de instrucciones del examen está vacío. Agrega un título "
+            "y los requisitos funcionales."
+        ),
+        "preflight_instructions_invalid": (
+            "Las instrucciones del examen no son una definición válida. Incluye "
+            "un título y los requisitos funcionales en una lista."
+        ),
+        "preflight_active_exam": (
+            "Ya hay un examen activo. Finalízalo con /exam-finish antes de "
+            "iniciar otro."
+        ),
         "prereq_locale": "Ingrese un idioma: es-CO o en-US.",
         "activation_hint": "Navegue con Arriba/Abajo y pulse Enter para ejecutar.",
         "lang_list_title": "Select language / Selecciona el idioma",
@@ -241,6 +335,29 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
 }
 
 
+#: Stable blocker code -> localized UI string key. Codes come from
+#: ``ProjectPreflight`` issues and ``ExamPreparationStatus.blockers``; keeping
+#: the mapping here means the TUI never shows a raw machine identifier.
+_BLOCKER_UI_KEYS: dict[str, str] = {
+    "no_student": "exam_start_no_student",
+    "no_project": "preflight_no_project",
+    "missing_path": "preflight_missing_path",
+    "not_directory": "preflight_not_directory",
+    "no_gradle": "preflight_no_gradle",
+    "no_android_manifest": "preflight_no_android_manifest",
+    "no_build_file": "preflight_no_build_file",
+    "no_jdk": "preflight_no_jdk",
+    "no_android_sdk": "preflight_no_android_sdk",
+    "no_instructions": "preflight_no_instructions",
+    "instructions_not_markdown": "preflight_instructions_not_markdown",
+    "instructions_missing": "preflight_instructions_missing",
+    "instructions_unreadable": "preflight_instructions_unreadable",
+    "instructions_empty": "preflight_instructions_empty",
+    "instructions_invalid": "preflight_instructions_invalid",
+    "active_exam": "preflight_active_exam",
+}
+
+
 def get_ui_string(key: str, locale: str | None) -> str:
     """Return the localized UI string for ``key`` with deterministic fallback."""
     requested = locale if locale in _UI_STRINGS else FALLBACK_LOCALE
@@ -250,8 +367,26 @@ def get_ui_string(key: str, locale: str | None) -> str:
     return _UI_STRINGS[FALLBACK_LOCALE].get(key, key)
 
 
+def describe_blocker(code: str, locale: str | None, *, detail: str = "") -> str:
+    """Return a localized, human-readable explanation for a blocker ``code``.
+
+    Unknown codes fall back to the code itself so a new blocker never renders
+    as an empty line. ``{detail}`` placeholders are filled when a detail is
+    supplied and otherwise trimmed so the sentence stays readable.
+    """
+    key = _BLOCKER_UI_KEYS.get(code)
+    if key is None:
+        return code
+    text = get_ui_string(key, locale)
+    if "{detail}" not in text:
+        return text
+    if detail:
+        return text.format(detail=detail)
+    return text.replace(": {detail}", "").replace(" {detail}", "").strip()
+
+
 def supported_ui_locales() -> tuple[str, ...]:
     return tuple(_UI_STRINGS.keys())
 
 
-__all__ = ["get_ui_string", "supported_ui_locales"]
+__all__ = ["describe_blocker", "get_ui_string", "supported_ui_locales"]

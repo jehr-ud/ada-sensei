@@ -47,8 +47,8 @@ class OkRunner:
 class RoutedExamine(ExamineAction):
     """Router-constructed examine action with the fake runner injected."""
 
-    def __init__(self, services):
-        super().__init__(services, runner=OkRunner())
+    def __init__(self, services, **kwargs):
+        super().__init__(services, runner=OkRunner(), **kwargs)
 
 
 def _statement(tmp_path) -> Path:
@@ -124,6 +124,44 @@ def test_exam_flow_start_asks_finish(tmp_path, monkeypatch):
     report = Path(finished.report_path)
     assert report.exists()
     assert router.exam_status() is None
+
+
+def test_finish_writes_report_into_project(tmp_path, monkeypatch):
+    """RQ-EXM-024/050: the PDF lives in the project, not in the data dir."""
+    router = _router(tmp_path, monkeypatch)
+    proj = Path(router.config.project.path)
+    router.dispatch(
+        ExamineStartCommand(statement=str(_statement(tmp_path)), yes=True)
+    )
+
+    finished = router.dispatch(ExamineFinishCommand(yes=True))
+    assert isinstance(finished, ExamFinishResult)
+    report = Path(finished.report_path)
+    assert report.exists()
+    assert report.name == "report.pdf"
+    assert report.is_relative_to(proj)
+    assert report.parent.parent.name == "exams"
+    assert report.parent.parent.parent.name == "ada-sensei"
+    assert not report.is_relative_to(tmp_path / "data")
+
+
+def test_finish_emits_localized_progress(tmp_path, monkeypatch):
+    """RQ-EXM-048: every real finish stage reports progress."""
+    router = _router(tmp_path, monkeypatch)
+    router.dispatch(
+        ExamineStartCommand(statement=str(_statement(tmp_path)), yes=True)
+    )
+    seen: list[str] = []
+    router.progress = seen.append
+
+    router.dispatch(ExamineFinishCommand(yes=True))
+
+    joined = "\n".join(seen)
+    assert "Gradle build" in joined
+    assert "unit tests" in joined
+    assert "Android Lint" in joined
+    assert "Detekt" in joined
+    assert "PDF report" in joined
 
 
 def test_second_exam_starts_clean(tmp_path, monkeypatch):

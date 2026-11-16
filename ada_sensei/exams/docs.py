@@ -17,18 +17,21 @@ from .rubric import EXAM_RUBRIC
 GENERATED_MARKER = "<!-- generated-by: ada-sensei -->"
 
 #: Root of the generated documentation subtree, relative to the project.
-DOCS_ROOT = Path("docs") / "ada-sensei"
+#: Matches RQ-EXM-009 (``docs/ada-sensei/exams/<exam-slug>/``).
+DOCS_ROOT = Path("docs") / "ada-sensei" / "exams"
 
 README_NAME = "README.md"
 CONTEXT_NAME = "exam-context.md"
 RUBRIC_NAME = "exam-rubric.md"
 ARCHITECTURE_NAME = "architecture.md"
 SUMMARY_NAME = "evaluation-summary.md"
+#: The detailed PDF report, written inside the project (RQ-EXM-024).
+REPORT_NAME = "report.pdf"
 
 #: Files written at exam start (RQ-EXM-009).
 START_FILES = (README_NAME, CONTEXT_NAME, RUBRIC_NAME)
 #: Files added after the exam finishes (spec.md §Project docs directory).
-FINISH_FILES = ARCHITECTURE_NAME, SUMMARY_NAME
+FINISH_FILES = ARCHITECTURE_NAME, SUMMARY_NAME, REPORT_NAME
 
 
 class DocsWriteError(Exception):
@@ -317,6 +320,7 @@ __all__ = [
     "FINISH_FILES",
     "GENERATED_MARKER",
     "README_NAME",
+    "REPORT_NAME",
     "RUBRIC_NAME",
     "START_FILES",
     "SUMMARY_NAME",

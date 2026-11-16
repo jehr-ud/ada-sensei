@@ -8,6 +8,29 @@ documentation).
 
 The loader is deterministic: the same statement always yields the same exam id
 and the same ``req://`` ids, because both are derived from the statement text.
+
+## Supported Markdown requirement formats
+
+The loader recognises two explicit formats:
+
+**Format A — bullet list under a requirements heading:**
+
+The heading (level 1-6) must match one of the labels in ``_REQUIREMENT_HEADINGS``.
+Bullets may be:
+  - plain: ``- Some requirement text``
+  - explicit id+weight: ``- [REQ-01] (0.20) Some requirement text``
+
+**Format B — Markdown table under a criteria/evaluation heading:**
+
+The heading must match one of the labels in ``_CRITERIA_HEADINGS``.
+The table must have a column labelled ``ID`` or ``id`` and a column labelled
+``Criterio``, ``Criterion``, ``Criteria``, ``Description`` or ``Descripción``.
+An optional ``Peso funcional`` / ``Functional weight`` column provides weights.
+Row ids beginning with ``**`` (bold total rows) are skipped.
+
+If neither format is found and the statement has non-trivial content, a
+``limitations`` entry is added describing the unrecognised section and the
+section name, so the problem is explicit rather than silent.
 """
 
 from __future__ import annotations
@@ -70,7 +93,7 @@ _DURATION_UNITS = {
     "hours": 3600,
 }
 
-#: Markdown sections whose bullets are the functional requirements.
+#: Markdown sections whose bullets are the functional requirements (Format A).
 _REQUIREMENT_HEADINGS = (
     "requirement",
     "requirements",
@@ -79,6 +102,68 @@ _REQUIREMENT_HEADINGS = (
     "requisitos",
     "requisitos funcionales",
 )
+
+#: Markdown sections whose tables are the evaluation criteria (Format B).
+#: Numbered headings (``## 7. Criterios de evaluación``) are matched by
+#: stripping the leading number and dot first.
+_CRITERIA_HEADINGS = (
+    "criterios de evaluación",
+    "criterios de evaluacion",
+    "criterios de calificación",
+    "criterios de calificacion",
+    "evaluation criteria",
+    "grading criteria",
+    "scoring criteria",
+    "criteria",
+    "criterios",
+    "rúbrica",
+    "rubrica",
+    "rubric",
+)
+
+#: Markdown table row: ``| cell | cell | …``
+_TABLE_ROW_RE = re.compile(r"^\s*\|(.+)\|\s*$")
+#: Separator row: ``|---|---|``
+_TABLE_SEP_RE = re.compile(r"^\s*\|[\s|:\-]+\|\s*$")
+
+#: Column names accepted as the requirement id column (case-insensitive).
+_ID_COL_NAMES = {"id", "req", "código", "codigo", "code", "num", "#"}
+#: Column names accepted as the description column.
+_DESC_COL_NAMES = {
+    "criterio",
+    "criterion",
+    "criteria",
+    "description",
+    "descripción",
+    "descripcion",
+    "requirement",
+    "requisito",
+    "detalle",
+    "detail",
+}
+#: Column names accepted as the functional weight column.
+#: Listed from most specific to least specific; the first match wins.
+_WEIGHT_COL_NAMES_ORDERED = (
+    "peso funcional",
+    "functional weight",
+    "ponderación",
+    "ponderacion",
+    "weight",
+    "peso",
+    "puntaje",
+    "score",
+    "puntos",
+    "points",
+)
+_WEIGHT_COL_NAMES = set(_WEIGHT_COL_NAMES_ORDERED)
+
+
+def _strip_heading_number(label: str) -> str:
+    """Remove a leading ordinal (``7.``, ``3)``, ``II.``) from a heading label.
+
+    ``## 7. Criterios de evaluación`` → ``criterios de evaluación``.
+    """
+    return re.sub(r"^\s*(?:\d+|[ivxlIVXL]+)[.)]\s*", "", label).strip()
 
 
 class ExamDefinitionLoader:
@@ -189,40 +274,202 @@ class ExamDefinitionLoader:
 
     @staticmethod
     def _parse_markdown(text: str) -> dict:
-        """Extract requirements, title, and limits from a Markdown statement."""
-        requirements: list[dict] = []
-        in_requirements = False
+        """Extract requirements, title, and limits from a Markdown statement.
+
+        Supports two formats:
+        - Format A: bullet list under a requirements heading.
+        - Format B: Markdown table under a criteria/evaluation heading.
+
+        Returns a dict with keys ``title``, ``requirements``,
+        ``allowed_duration_seconds``, ``allowed_ask_count``, and
+        ``limitations`` (a list of human-readable parse warnings).
+        """
+        lines = text.splitlines()
         title = ""
         front: list[str] = []
-        for raw_line in text.splitlines():
+        limitations: list[str] = []
+
+        # --- pass 1: collect title and determine section types -----------
+        # We need to scan all headings to find what sections exist and
+        # which section type (bullet vs table) each is.
+        sections: list[tuple[int, str, str]] = []  # (line_idx, section_type, heading_label)
+        for idx, raw_line in enumerate(lines):
             heading = _HEADING_RE.match(raw_line)
             if heading:
-                label = heading.group("text").strip().lower().rstrip(":")
-                in_requirements = label in _REQUIREMENT_HEADINGS
-                if not title and not in_requirements and label:
-                    title = heading.group("text").strip()
-                continue
-            if in_requirements:
-                bullet = _BULLET_RE.match(raw_line)
-                if bullet is None:
-                    continue
-                body = bullet.group("text").strip()
-                if not body or body.startswith("<!--"):
-                    continue
-                requirements.append(
-                    ExamDefinitionLoader._markdown_requirement(
-                        body, len(requirements)
-                    )
+                raw_label = heading.group("text").strip()
+                label = raw_label.lower().rstrip(":")
+                stripped = _strip_heading_number(label)
+                if not title:
+                    title = raw_label
+                if label in _REQUIREMENT_HEADINGS or stripped in _REQUIREMENT_HEADINGS:
+                    sections.append((idx, "bullets", raw_label))
+                elif label in _CRITERIA_HEADINGS or stripped in _CRITERIA_HEADINGS:
+                    sections.append((idx, "table", raw_label))
+
+        # --- pass 2: extract requirements --------------------------------
+        requirements: list[dict] = []
+
+        for sec_idx, (line_idx, sec_type, heading_label) in enumerate(sections):
+            end_idx = sections[sec_idx + 1][0] if sec_idx + 1 < len(sections) else len(lines)
+            section_lines = lines[line_idx + 1 : end_idx]
+
+            if sec_type == "bullets":
+                found = ExamDefinitionLoader._parse_bullet_requirements(
+                    section_lines, heading_label
                 )
-                continue
-            front.append(raw_line)
+                requirements.extend(found)
+            elif sec_type == "table":
+                found, table_limitations = ExamDefinitionLoader._parse_table_requirements(
+                    section_lines, heading_label
+                )
+                requirements.extend(found)
+                limitations.extend(table_limitations)
+
+            if not requirements and not found:
+                limitations.append(
+                    f"section '{heading_label}' matched a known criteria heading "
+                    "but no parsable requirements were found in it; check the "
+                    "format (expected bullets or a table with ID and description columns)"
+                )
+
+        # Collect non-section lines for duration/ask scanning
+        # (everything outside the recognised sections)
+        in_section = set()
+        for sec_idx, (line_idx, _, _) in enumerate(sections):
+            end_idx = sections[sec_idx + 1][0] if sec_idx + 1 < len(sections) else len(lines)
+            in_section.update(range(line_idx, end_idx))
+
+        for idx, raw_line in enumerate(lines):
+            if idx not in in_section:
+                front.append(raw_line)
+
         header = "\n".join(front)
         return {
             "title": title,
             "requirements": requirements,
             "allowed_duration_seconds": _scan_duration(header),
             "allowed_ask_count": _scan_asks(header),
+            "limitations": limitations,
         }
+
+    @staticmethod
+    def _parse_bullet_requirements(
+        section_lines: list[str], heading_label: str
+    ) -> list[dict]:
+        """Extract requirements from a bullet list section (Format A)."""
+        requirements: list[dict] = []
+        for raw_line in section_lines:
+            bullet = _BULLET_RE.match(raw_line)
+            if bullet is None:
+                continue
+            body = bullet.group("text").strip()
+            if not body or body.startswith("<!--"):
+                continue
+            requirements.append(
+                ExamDefinitionLoader._markdown_requirement(body, len(requirements))
+            )
+        return requirements
+
+    @staticmethod
+    def _parse_table_requirements(
+        section_lines: list[str], heading_label: str
+    ) -> tuple[list[dict], list[str]]:
+        """Extract requirements from a Markdown table section (Format B).
+
+        Returns ``(requirements, limitations)``. Limitations describe parse
+        warnings without raising an exception, so the caller can surface them
+        instead of silently returning an empty list.
+        """
+        limitations: list[str] = []
+        # Collect the table lines (must start with |)
+        table_lines = [l for l in section_lines if _TABLE_ROW_RE.match(l)]
+        if not table_lines:
+            return [], []
+
+        # First non-separator row is the header
+        header_row: list[str] | None = None
+        data_rows: list[list[str]] = []
+        for line in table_lines:
+            if _TABLE_SEP_RE.match(line):
+                continue
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if header_row is None:
+                header_row = cells
+            else:
+                data_rows.append(cells)
+
+        if header_row is None:
+            limitations.append(
+                f"section '{heading_label}': table found but no header row could be parsed"
+            )
+            return [], limitations
+
+        # Locate relevant columns
+        header_lower = [h.lower().strip() for h in header_row]
+        id_col = next(
+            (i for i, h in enumerate(header_lower) if h in _ID_COL_NAMES), None
+        )
+        desc_col = next(
+            (i for i, h in enumerate(header_lower) if h in _DESC_COL_NAMES), None
+        )
+        # Weight column uses priority order: "peso funcional" wins over "puntaje".
+        weight_col: int | None = None
+        for col_name in _WEIGHT_COL_NAMES_ORDERED:
+            idx = next((i for i, h in enumerate(header_lower) if h == col_name), None)
+            if idx is not None:
+                weight_col = idx
+                break
+
+        if id_col is None:
+            limitations.append(
+                f"section '{heading_label}': table has no recognized ID column; "
+                f"headers found: {header_row}. Expected one of: {sorted(_ID_COL_NAMES)}"
+            )
+            return [], limitations
+        if desc_col is None:
+            limitations.append(
+                f"section '{heading_label}': table has no recognized description column; "
+                f"headers found: {header_row}. Expected one of: {sorted(_DESC_COL_NAMES)}"
+            )
+            return [], limitations
+
+        requirements: list[dict] = []
+        for row in data_rows:
+            if len(row) <= max(id_col, desc_col):
+                continue
+            req_id = _strip_md_bold(row[id_col]).strip()
+            description = _strip_md_bold(row[desc_col]).strip()
+            # Skip total/summary rows (bold id or empty description)
+            if not req_id or not description or req_id.startswith("*"):
+                continue
+            # Skip obviously non-requirement rows (totals)
+            if req_id.lower() in {"total", "totales", "subtotal", "suma"}:
+                continue
+            weight: float | None = None
+            if weight_col is not None and weight_col < len(row):
+                raw_w = _strip_md_bold(row[weight_col]).strip().rstrip("%")
+                try:
+                    weight = float(raw_w)
+                    # If column is in percentage points (e.g. 20), normalize to 0-1
+                    if weight > 1.0:
+                        weight = weight / 100.0
+                except (ValueError, TypeError):
+                    weight = None
+            requirements.append(
+                {
+                    "requirement_id": req_id,
+                    "description": description,
+                    "weight": weight,
+                }
+            )
+
+        if not requirements:
+            limitations.append(
+                f"section '{heading_label}': table parsed but contained no "
+                "valid requirement rows (all rows may be total/summary rows or "
+                "the id/description columns could not be matched)"
+            )
+        return requirements, limitations
 
     @staticmethod
     def _markdown_requirement(body: str, index: int) -> dict:
@@ -263,6 +510,12 @@ class ExamDefinitionLoader:
             title, statement, source_path or source
         )
         rules = self._documentation_rules(payload.get("documentation_rules"))
+        # Surface parse limitations (from table/bullet parsing) explicitly so
+        # the user can see why requirements may be absent rather than getting a
+        # silent empty list (RQ-EXM-002, spec.md §Exam definition and documentation).
+        parse_limitations: list[str] = [
+            str(lim) for lim in (payload.get("limitations") or [])
+        ]
         return ExamDefinition(
             exam_id=resolved_exam_id,
             title=title or resolved_exam_id,
@@ -278,6 +531,7 @@ class ExamDefinitionLoader:
             allowed_ask_count=_as_optional_int(payload.get("allowed_ask_count")),
             rubric_ref=str(payload.get("rubric_ref") or DEFAULT_EXAM_RUBRIC_REF),
             documentation_rules=rules,
+            limitations=parse_limitations,
         )
 
     @staticmethod
@@ -379,6 +633,11 @@ class ExamDefinitionLoader:
             f"{title}\n{statement}\n{source}".encode()
         ).hexdigest()[:12]
         return f"exam://{digest}"
+
+
+def _strip_md_bold(text: str) -> str:
+    """Remove Markdown bold markers (``**text**`` → ``text``)."""
+    return re.sub(r"\*{1,2}([^*]*)\*{1,2}", r"\1", text)
 
 
 def _scan_duration(text: str) -> int | None:

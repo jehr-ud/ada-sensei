@@ -22,12 +22,27 @@ def test_student_documentation_accepted(tmp_path):
     docs_dir.mkdir(parents=True, exist_ok=True)
     notes = docs_dir / "notes.md"
     notes.write_text("# Design decisions\nWe separated layers.\n", encoding="utf-8")
-    (project / "docs" / "README.md").write_text("project readme", encoding="utf-8")
+    readme = project / "docs" / "README.md"
+    readme.write_text("project readme", encoding="utf-8")
 
+    # With the default (broad) globs, both docs/exam/notes.md and docs/README.md
+    # are matched because docs/**/*.md covers the whole docs tree.
+    from ada_sensei.exams.models import DocumentationRules
     definition = make_definition()
     matched = definition.documentation_paths(project)
-    assert matched == [notes]
-    assert (project / "docs" / "README.md") not in matched
+    assert notes in matched
+    # docs/README.md is also matched by the broader default globs
+    assert readme in matched
+
+    # With narrow globs (docs/exam only), only the exam subdirectory is matched.
+    narrow_def = make_definition(
+        documentation_rules=DocumentationRules(
+            accepted_globs=("docs/exam/**/*.md",)
+        )
+    )
+    narrow_matched = narrow_def.documentation_paths(project)
+    assert narrow_matched == [notes]
+    assert readme not in narrow_matched
 
     exam_docs = ExamDocs(project, definition.exam_id)
     exam_docs.write(

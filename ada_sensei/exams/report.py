@@ -46,8 +46,9 @@ class ExamReportGenerator:
     """Renders an ``ExamResult`` into a detailed, evidence-linked PDF."""
 
     def __init__(self, output_dir: str | Path) -> None:
-        #: Reports live in the ADA Sensei data/output location, never in the
-        #: student's source tree (spec.md §Project docs directory).
+        #: Fallback output directory for ``default_path``. Callers that must
+        #: place the report inside the examined project pass an explicit
+        #: ``path`` instead (RQ-EXM-024); the generator is location-agnostic.
         self.output_dir = Path(output_dir)
 
     def default_path(self, result: ExamResult) -> Path:

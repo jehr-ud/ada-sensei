@@ -10,6 +10,7 @@ overlay, not a second implementation of project evaluation.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -28,7 +29,7 @@ from ..exams.agent import (
 )
 from ..exams.architecture import ArchitectureAnalyzer
 from ..exams.definition import ExamDefinitionLoader
-from ..exams.docs import ExamDocsWriter
+from ..exams.docs import REPORT_NAME, ExamDocsWriter
 from ..exams.lifecycle import ExamLifecycle
 from ..exams.models import (
     ASK_SUCCESS_EVENTS,
@@ -40,10 +41,12 @@ from ..exams.models import (
     ExamResult,
     ExamStateError,
 )
+from ..exams.preparation import ExamPreparationService
 from ..exams.report import ExamReportGenerator
 from ..exams.rubric import EXAM_RUBRIC, resolve_rubric
 from ..exams.scoring import ExamScorer
 from ..exams.store import ExamStore
+from ..locale.ui_strings import describe_blocker, get_ui_string
 from ..tools.subprocess import SubprocessRunner
 from ..urns import URN
 from .base import ActionResult, ActionServices
@@ -59,6 +62,16 @@ class ExamNotActiveError(Exception):
 
 class InstrumentedNotSupportedError(Exception):
     """``connectedAndroidTest`` stays unimplemented (spec.md §Evaluation scope)."""
+
+
+#: Evidence-collection stage -> localized progress UI key (RQ-EXM-048).
+_PROGRESS_STAGE_KEYS: dict[str, str] = {
+    "inspection": "exam_progress_inspecting",
+    "build": "exam_progress_build",
+    "unit_tests": "exam_progress_unit_tests",
+    "lint": "exam_progress_lint",
+    "detekt": "exam_progress_detekt",
+}
 
 
 def _or_not_evaluated(value: object) -> str:
@@ -104,9 +117,7 @@ class ExamStartResult(ActionResult):
             rules.append("Allowed /ask usage: not defined")
         if self.definition.limitations:
             rules.append("Statement limitations:")
-            rules += [
-                f"- {limitation}" for limitation in self.definition.limitations
-            ]
+            rules += [f"- {limitation}" for limitation in self.definition.limitations]
         if self.attempt.docs_dir:
             rules.append(f"Exam context written to: {self.attempt.docs_dir}")
         rules.append("Finish with 'Finish Exam' when you are done.")
@@ -144,9 +155,7 @@ class ExamFinishResult(ActionResult):
         if result.not_evaluated:
             parts.append("Not evaluated: " + ", ".join(result.not_evaluated))
         if result.strengths:
-            parts.append(
-                "Strengths:\n" + "\n".join(f"- {s}" for s in result.strengths)
-            )
+            parts.append("Strengths:\n" + "\n".join(f"- {s}" for s in result.strengths))
         if result.weaknesses:
             parts.append(
                 "Weaknesses:\n" + "\n".join(f"- {w}" for w in result.weaknesses)
@@ -175,10 +184,13 @@ class ExamineAction:
         services: ActionServices,
         runner: SubprocessRunner | None = None,
         engine: EvaluationEngine | None = None,
+        progress: Callable[[str], None] | None = None,
     ) -> None:
         self.services = services
         self.engine = engine or EvaluationEngine()
         self._runner = runner
+        #: Optional localized progress sink, driven by the TUI (RQ-EXM-048).
+        self._progress_callback = progress
         self.store = ExamStore(services.data_dir)
         self.scorer = ExamScorer()
         self.loader = ExamDefinitionLoader()
@@ -204,9 +216,7 @@ class ExamineAction:
         from ..locale.store import LocalePreferenceStore
 
         try:
-            svc = LocaleService(
-                LocalePreferenceStore(self.services.data_dir)
-            )
+            svc = LocaleService(LocalePreferenceStore(self.services.data_dir))
             return svc.get_or_prompt_locale(student_id) or FALLBACK_LOCALE
         except Exception:  # noqa: BLE001 - snapshot must never break start
             return FALLBACK_LOCALE
@@ -214,6 +224,12 @@ class ExamineAction:
     @property
     def docs(self) -> ExamDocsWriter:
         return self._resolve_docs()
+
+    def _progress(self, key: str, locale: str) -> None:
+        """Emit one localized progress message, if a sink is attached."""
+        if self._progress_callback is None:
+            return
+        self._progress_callback(get_ui_string(key, locale))
 
     # -- start ------------------------------------------------------------
 
@@ -223,7 +239,38 @@ class ExamineAction:
             raise ExamConfirmationRequired(
                 "starting an exam requires explicit confirmation"
             )
-        definition = self._resolve_definition(inp.statement)
+        # The application boundary repeats the preparation check.  The TUI is
+        # only a presenter and cannot be trusted to keep a preflight fresh.
+        configured_instructions = self.services.context.instructions_path
+        if configured_instructions:
+            status = ExamPreparationService(self.services).validate()
+            if not status.ready_to_start:
+                locale = (
+                    self._active_locale(self.services.context.student_id)
+                    if self.services.context.student_id
+                    else None
+                )
+                reasons = "; ".join(
+                    describe_blocker(code, locale) for code in status.blockers
+                )
+                raise ExamStateError(
+                    "exam preparation incomplete: " + (reasons or "unknown reason")
+                )
+            if (
+                inp.statement
+                and Path(inp.statement).expanduser().resolve()
+                != Path(configured_instructions).expanduser().resolve()
+            ):
+                raise ExamDefinitionError(
+                    "exam statement differs from configured instructions"
+                )
+            statement = configured_instructions
+        else:
+            # Compatibility for application callers that predate the explicit
+            # configuration commands. Router/TUI entry points always configure
+            # an instructions path and therefore take the strict path above.
+            statement = inp.statement
+        definition = self._resolve_definition(statement)
         student_id = self._require_student(inp.student_id)
         project_id = self._require_project(inp.project_id)
         attempt = self.lifecycle.start(
@@ -279,24 +326,39 @@ class ExamineAction:
             raise ExamConfirmationRequired(
                 "finishing an exam requires explicit confirmation"
             )
+        from ..locale.models import FALLBACK_LOCALE
+
+        locale = attempt.locale or FALLBACK_LOCALE
         definition = self._definition_for(attempt)
         self.lifecycle.request_finish(attempt, confirmed=True)
         self._log(attempt, ExamEventType.evaluation_started)
+
+        def on_stage(stage: str) -> None:
+            key = _PROGRESS_STAGE_KEYS.get(stage)
+            if key:
+                self._progress(key, locale)
 
         evidence = self.engine.collect_evidence(
             ProjectContext.from_path(self._project_path()),
             None,
             self._policy(),
             runner=self._runner,
+            progress=on_stage,
         )
         self.lifecycle.finish(attempt)
         self._detach_bridge()
 
+        self._progress("exam_progress_interpreting", locale)
         result = self._assemble(attempt, definition, evidence)
-        path, report_id = self.reports.generate(result, definition)
+        self._progress("exam_progress_report", locale)
+        # RQ-EXM-024: the report lives inside the examined project, next to the
+        # other generated exam documentation, never in ADA Sensei's data dir.
+        docs = self.docs.docs_for(definition.exam_id)
+        report_target = docs.ensure() / REPORT_NAME
+        path, report_id = self.reports.generate(result, definition, path=report_target)
         result.report_id = report_id
         result.report_path = str(path)
-        self.docs.write_finish_docs(result, definition)
+        self.docs.write_finish_docs(result, definition, docs=docs)
         self._log(attempt, ExamEventType.evaluation_completed)
         self._persist(result, attempt)
         self.services.context.clear_exam()
@@ -445,9 +507,7 @@ class ExamineAction:
             rubric_version=calculation.rubric_version,
             overall_score=calculation.percentage,
             criteria=self.scorer.functional_criteria(definition, evidence),
-            dimension_scores={
-                line.dimension: line.score for line in calculation.lines
-            },
+            dimension_scores={line.dimension: line.score for line in calculation.lines},
             evidence=list(evidence.evidence),
             strengths=interpretation.strengths(),
             weaknesses=interpretation.weaknesses(),
@@ -517,9 +577,7 @@ class ExamineAction:
         if attempt is None:
             raise ExamNotActiveError(f"unknown exam attempt: {exam_attempt_id}")
         if attempt.is_completed:
-            raise ExamStateError(
-                f"exam attempt {exam_attempt_id} is already completed"
-            )
+            raise ExamStateError(f"exam attempt {exam_attempt_id} is already completed")
         # RQ-EXM-031: the ask count is recounted from the attempt log, which is
         # the authoritative record, rather than read from a stored total.
         attempt.ask_count = sum(
@@ -539,8 +597,7 @@ class ExamineAction:
         rubric = resolve_rubric(rubric_ref)
         if rubric.id != EXAM_RUBRIC.id:
             raise ExamStateError(
-                f"exam attempts must be scored with {EXAM_RUBRIC.id}, "
-                f"not {rubric.id}"
+                f"exam attempts must be scored with {EXAM_RUBRIC.id}, not {rubric.id}"
             )
         return rubric
 
