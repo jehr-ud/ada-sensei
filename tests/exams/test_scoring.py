@@ -46,17 +46,25 @@ def _attempt(no_limits: bool = False) -> object:
 
 
 def test_code_quality_from_deterministic_evidence():
-    evidence = make_evidence()
+    evidence = make_evidence(
+        [
+            Evidence(source="detekt", type="detekt", status="pass", message="ok"),
+            Evidence(source="android_lint", type="android_lint", status="pass", message="ok"),
+            Evidence(source="ktlint", type="ktlint", status="pass", message="ok"),
+        ]
+    )
     scorer = ExamScorer()
     dimensions = scorer.engine.score_dimensions(evidence.evidence)
     assert dimensions["code_quality"].score == 4
     noisy = make_evidence(
         [
-            Evidence(source="detekt", type="static", severity="warning", message="a"),
-            Evidence(source="detekt", type="static", severity="error", message="b"),
+            Evidence(source="detekt", type="detekt", severity="warning", message="a"),
+            Evidence(source="detekt", type="detekt", severity="error", message="b"),
+            Evidence(source="android_lint", type="android_lint", status="pass", message="ok"),
+            Evidence(source="ktlint", type="ktlint", status="pass", message="ok"),
         ]
     )
-    assert scorer.engine.score_dimensions(noisy.evidence)["code_quality"].score == 1
+    assert scorer.engine.score_dimensions(noisy.evidence)["code_quality"].score == 3
 
 
 def test_tests_not_evaluated_when_unavailable():

@@ -1,103 +1,248 @@
-# Tareas — refactorización de 007 Examine
+# Tareas — 007 Examine
 
-## 0. Inspección obligatoria
+## Estado actual
 
-- [ ] Leer `AGENTS.md` y todos los artefactos actuales de `007-examine`,
-  `002-cli`, `001-foundation`, `006-evaluate`, `0010-language-selection` y
-  `009-agent-orchestration`.
-- [ ] Inspeccionar el flujo real de `exam-init` en TUI, parser, router,
-  `ExamineAction`, `ProjectPreflight`, `SessionContext` y configuración.
-- [ ] Inspeccionar `LanguageList` y su montaje real en la bienvenida y en
-  Change language; reutilizar ese patrón de widget/teclado.
-- [ ] Identificar el origen de los botones grandes Confirmar/Cancelar y
-  eliminar el flujo duplicado, sin mantener dos confirmaciones.
-- [ ] Verificar qué campos canónicos ya existen para project path e
-  instrucciones; evitar duplicar configuración.
+La implementación central del motor de examen está completa. Las tareas marcadas
+`[x]` están implementadas y verificadas con pruebas automatizadas. Las tareas
+marcadas `[ ]` son trabajo pendiente.
 
-## 1. Comandos y contexto
+Decisiones de resolución aplicadas:
+- El requisito legado `RQ-EXM-052` se renombra `RQ-EXM-052-DEBUG`; las adendas
+  conservan `RQ-EXM-052`–`RQ-EXM-075`.
+- `exam-default:v1` y `evaluate-default:v1` migran a `unified-android:v1` sin
+  alias temporales, incluyendo persistencia y pruebas.
+- La matriz `toolchain-policy.json` debe completarse con combinaciones fijadas
+  verificadas antes de habilitar el preflight real de toolchain.
 
-- [ ] Añadir `/project <ruta>` al registry/parser compartido.
-- [ ] Resolver rutas absolutas, relativas y `~` con cwd del proceso.
-- [ ] Guardar la ruta en el campo canónico existente.
-- [ ] Añadir `/instructions <ruta>` al registry/parser compartido.
+---
+
+## 1. Motor de evaluación de exámenes ✓
+
+- [x] `ExamDefinitionLoader` carga enunciados Markdown, JSON y PDF.
+- [x] Parser Markdown reconoce **Formato A** (bullets bajo encabezados de requisitos).
+- [x] Parser Markdown reconoce **Formato B** (tabla bajo encabezados de criterios,
+  incluyendo encabezados numerados como `## 7. Criterios de evaluación`).
+- [x] Detección de columna de peso por prioridad: `Peso funcional` sobre `Puntaje`.
+- [x] Pesos en escala >1 (puntos) se normalizan a escala 0–1.
+- [x] `limitations` explícitas cuando no se puede parsear una sección.
+- [x] Suma de pesos funcionales validada (debe ser exactamente 1.0).
+- [x] Ids de requisito estables derivados del contenido del enunciado.
+- [x] `ExamLifecycle` con máquina de estados `CREATED→ACTIVE→EVALUATING→COMPLETED`.
+- [x] `ExamineAction.start` / `.finish` orquesta el ciclo completo.
+- [x] `ExamScorer` scoring determinista por dimensión.
+- [x] `ArchitectureAnalyzer` separa observed/documented/inferred.
+- [x] `ExamInterpretationAgent` pipeline LLM acotado (máximo 3 intentos).
+- [x] `ExamReportGenerator` genera PDF con tabla de cálculo.
+
+## 2. Correcciones al motor (aplicadas) ✓
+
+- [x] **Detekt no configurado**: `StaticAnalysisTool.run_detekt` llama a
+  `_detekt_not_configured` antes de registrar evidencia de fallo. Si la tarea
+  no existe en el proyecto, registra `status="missing"` sin penalizar la nota.
+- [x] **Manifest de debug opcional**: `AndroidProjectAnalyzer._check_optional`
+  registra `app/src/debug/AndroidManifest.xml` con `status="info"` al no
+  encontrarlo. `DimensionScorer._score_architecture` ignora `status="info"`.
+- [x] **Normalización objeto→array en LLM**: `_coerce_array_fields` en
+  `StructuredPipeline.run` envuelve un objeto solitario en lista cuando el
+  campo del esquema espera un array, antes de validar el esquema.
+- [x] **`DocumentationRules` con globs ampliados**: los globs predeterminados
+  cubren `docs/**/*.md`, `docs/**/*.pdf`, `*.md`, `INFORME*.md`, `REPORT*.md`,
+  además de `docs/exam/**/*.md`.
+
+## 3. Persistencia, eventos, locale ✓
+
+- [x] `ExamStore` persiste intentos, definiciones y eventos.
+- [x] `ExamEventBridge` conecta el bus de eventos al intento activo.
+- [x] Ask count se recalcula desde el log de eventos al finalizar.
+- [x] `ExamAttempt.locale` snapshot del locale al iniciar.
+- [x] `ExamResult.locale` preserva el snapshot para el informe.
+- [x] `ExamPreparationService` valida precondiciones sin crear estado.
+
+## 4. Informe PDF ✓
+
+- [x] PDF escrito en `docs/ada-sensei/exams/<exam_id>/report.pdf` dentro del
+  proyecto (RQ-EXM-024).
+- [x] Tabla de cálculo reconstructible con dimensiones, pesos, puntuaciones y
+  contribuciones.
+- [x] `grade_disclosure` con texto `SUGGESTED_GRADE_LABEL`.
+- [x] `ExamDocsWriter.write_finish_docs` agrega `architecture.md` y
+  `evaluation-summary.md` al finalizar.
+
+## 5. Pruebas automatizadas existentes ✓
+
+- [x] `tests/exams/test_definition.py` — formatos de carga.
+- [x] `tests/exams/test_integration.py` — ciclo completo start/finish.
+- [x] `tests/exams/test_exams_structured_output.py` — pipeline LLM.
+- [x] `tests/exams/test_exams_architecture.py` — tipos de afirmaciones.
+- [x] `tests/exams/test_exams_rubric.py` — pesos y subcriteria.
+- [x] `tests/exams/test_scoring.py` — scoring determinista.
+- [x] `tests/exams/test_process_metrics.py` — métricas de proceso.
+- [x] `tests/exams/test_ask_tracking.py` — conteo de consultas.
+- [x] `tests/exams/test_lifecycle.py` — transiciones de estado.
+- [x] `tests/exams/test_persistence.py` — persistencia y fallos.
+- [x] `tests/exams/test_report.py` — PDF y disclosure.
+- [x] `tests/exams/test_docs.py` — documentación generada y del estudiante.
+- [x] `tests/exams/test_exam_locale.py` — snapshot de locale.
+- [x] `tests/exams/test_duration.py` — duración y overtime.
+
+## 6. Pruebas de regresión con Domino Conquista (pendientes)
+
+- [ ] Test: 7 requisitos cargados desde la tabla de criterios del enunciado real.
+- [ ] Test: pesos suman 1.0 (`0.20+0.20+0.20+0.10+0.10+0.15+0.05`).
+- [ ] Test: `_detekt_not_configured` retorna `True` para el output real de Domino.
+- [ ] Test: `AndroidProjectAnalyzer` produce `status="info"` para el manifest de debug.
+- [ ] Test: `_score_architecture` no penaliza cuando solo hay `status="info"`.
+- [ ] Test: `_coerce_array_fields` normaliza objeto→lista sin consumir intento.
+- [ ] Test: fallo total del LLM conserva `raw_score_50` y `suggested_grade`.
+
+## 7. TUI — panel de preparación (pendiente)
+
+- [ ] `ExamPreparationScreen` con lista compacta (patrón `LanguageList`).
+- [ ] Sin botones grandes Confirmar/Cancelar.
+- [ ] Muestra estado de estudiante, proyecto, preflight e instrucciones.
+- [ ] Opciones `Empezar examen` / `Volver` con Arriba/Abajo/Enter/Escape.
+- [ ] Bloquea `Empezar examen` con mensaje localizado si hay precondiciones pendientes.
+- [ ] Permite escribir `/project` y `/instructions` y actualiza el panel.
+- [ ] Abrir/cancelar el panel no crea side effects.
+
+## 8. Comandos `/project` e `/instructions` (parcialmente implementado)
+
+- [x] `/project <ruta>` actualiza `SessionContext` y el campo canónico existente.
+- [ ] `/instructions <ruta>` al registro/parser compartido.
 - [ ] Validar extensión `.md`, archivo regular, legible y no vacío.
-- [ ] Guardar ruta en contexto/configuración existente con persistencia
-  compatible.
-- [ ] Añadir ayuda bilingüe a `/help` y descripciones del selector.
-- [ ] Añadir pruebas para ambos comandos y para que cwd no cambie.
+- [ ] Guardar ruta en `SessionContext.instructions_path`.
+- [ ] Ayuda bilingüe en `/help`.
+- [ ] Pruebas: rutas absolutas/relativas/`~`, cwd no cambia.
 
-## 2. Servicio de preparación
+## 9. Temporizador TUI (pendiente)
 
-- [ ] Implementar o extender `ExamPreparationService` como capa de aplicación.
-- [ ] Integrar identidad, proyecto, `ProjectPreflight`, instrucciones y
-  `ExamDefinitionLoader`.
-- [ ] Devolver todos los bloqueos de validación en una estructura tipada.
-- [ ] Garantizar que validación no crea intento, eventos, timer ni docs.
-- [ ] Volver a validar al iniciar.
-- [ ] Hacer validación final y creación de intento en una operación protegida
-  contra doble dispatch.
-- [ ] Aplicar preflight también a CLI y `--yes`.
+- [ ] Indicador compacto persistente durante el examen activo.
+- [ ] Elapsed `HH:MM:SS`.
+- [ ] Remaining si `allowed_duration_seconds` está definido.
+- [ ] Aviso localizado al alcanzar cero, sin auto-finalizar.
+- [ ] Contador `/ask` y límite si existe.
+- [ ] Scheduler no bloqueante del TUI.
+- [ ] Reconstrucción desde `started_at` al reanudar.
 
-## 3. Panel de preparación TUI
+## 10. Finalización TUI (pendiente)
 
-- [ ] Crear/extender pantalla/panel de preparación de examen.
-- [ ] Reutilizar patrón `LanguageList` (lista compacta, cursor `>`, teclado).
-- [ ] Eliminar botones grandes Confirmar/Cancelar de la preparación.
-- [ ] Mostrar explicación y comandos `/project` y `/instructions`.
-- [ ] Mostrar estado de estudiante, proyecto, preflight e instrucciones.
-- [ ] Añadir opciones `Empezar examen` y `Volver`.
-- [ ] Deshabilitar o bloquear con mensaje localizado `Empezar examen` si hay
-  precondiciones incumplidas.
-- [ ] Mantener visible el contenido previo y el área de conversación.
-- [ ] Implementar Arriba/Abajo/Enter/Escape y restauración correcta del foco.
-- [ ] Permitir que el estudiante escriba comandos de configuración y volver a
-  actualizar el estado del panel.
-- [ ] Probar terminal estrecha/pequeña y wrap de texto.
-- [ ] Confirmar que abrir/cancelar el panel no crea side effects.
+- [ ] Confirmación compacta `Finalizar examen` / `Continuar` sin botones grandes.
+- [ ] Mensajes de progreso por etapa durante la finalización (RQ-EXM-048).
+- [ ] Apertura best-effort del PDF con `tools.open_report` (RQ-EXM-049).
 
-## 4. Inicio de examen
+## 11. CLI no interactivo (pendiente)
 
-- [ ] Cargar Markdown con `ExamDefinitionLoader` sin reimplementar parsing.
-- [ ] Preservar original statement y source path.
-- [ ] Revalidar todo al elegir `Empezar examen`.
-- [ ] Crear exactamente un `ExamAttempt` al pasar todas las validaciones.
-- [ ] Conservar snapshot de proyecto, locale, definición, límites y rúbrica.
-- [ ] Crear documentación generada solo después de iniciar.
-- [ ] Bloquear doble Enter/doble click.
-- [ ] Mantener compatible la interfaz CLI directa.
-
-## 5. Temporizador y estado activo
-
-- [ ] Añadir indicador compacto persistente de examen activo.
-- [ ] Mostrar elapsed `HH:MM:SS`.
-- [ ] Mostrar remaining si `allowed_duration_seconds` está definido.
-- [ ] Mostrar aviso localizado al alcanzar cero sin auto-finalizar.
-- [ ] Mostrar contador `/ask` y límite si existe.
-- [ ] Refrescar mediante scheduler no bloqueante del TUI.
-- [ ] Reconstruir reloj al reanudar desde `started_at`.
-- [ ] Detener refresco al finalizar/cancelar la sesión TUI.
-- [ ] No persistir ticks ni usarlos en scoring.
-
-## 6. Finalización y regresión
-
-- [ ] Si se presenta confirmación de finalización, usar lista compacta
-  `Finalizar examen` / `Continuar`.
-- [ ] Conservar semántica de `exam-finish`, ask bridge, evidencia, score y PDF.
-- [ ] Verificar que cambio de `/project` durante examen no modifica el intento.
-- [ ] Ejecutar pruebas de 007-examine, 006-evaluate, CLI/TUI, locale y storage.
-- [ ] Añadir pruebas de integración desde configuración hasta PDF final.
-- [ ] Actualizar traceability y documentación/help.
-- [ ] Registrar ADR si el diseño real requiere decisión arquitectónica nueva.
+- [ ] `exam-init --yes` ejecuta `ProjectPreflight` completo antes de crear estado.
+- [ ] Integración de `/instructions` en el parser/router CLI.
 
 ## Definición de terminado
 
-- [ ] Los requisitos nuevos tienen pruebas automatizadas o una justificación
-  documentada.
+- [x] Los requisitos RQ-EXM-001 a RQ-EXM-031, RQ-EXM-044 a RQ-EXM-050 tienen
+  pruebas automatizadas que pasan.
+- [x] Los 7 requisitos del examen Domino Conquista se cargan con pesos correctos.
+- [x] Un examen Domino Conquista completo produce `raw_score_50` y `suggested_grade`
+  sin errores de schema LLM ni penalizaciones injustificadas.
+- [ ] Los requisitos TUI (RQ-EXM-033, 039–043, 047–049) tienen pruebas de widget.
 - [ ] No hay botones grandes Confirmar/Cancelar en el inicio de examen.
-- [ ] El examen no puede comenzar sin proyecto Android válido e instrucciones
-  Markdown válidas.
-- [ ] El temporizador se muestra y es reconstruible desde el timestamp
-  persistido.
-- [ ] No se ha duplicado parser, preflight, loader, lifecycle, scoring o
+- [ ] El temporizador se muestra y es reconstruible desde el timestamp persistido.
+- [ ] No se ha duplicado parser, preflight, loader, lifecycle, scoring ni
   persistencia.
-- [ ] No se han modificado las reglas existentes de evaluación.
+
+
+---
+
+# Tareas nuevas — Reporte determinista y EvaluatorAgent (2026-11-20)
+
+## A. Agentes y contratos
+- [ ] Definir `EvaluatorAgent` como único evaluador y productor de `EvaluationReport`.
+- [ ] Integrar `TeacherAgent` como consumidor del reporte; prohibir scoring en TeacherAgent.
+- [ ] Crear modelos Pydantic: `EvaluationReport`, `DimensionResult`, `CriterionResult`,
+      `Finding`, `EvidenceReference`, `ToolRun`, `AnalyzerCoverage`, `CalculationTrace`.
+- [ ] Añadir versionado de rúbrica y rulesets; preservar compatibilidad/migración.
+
+## B. Rúbrica única
+- [ ] Sustituir `exam-default:v1` y la rúbrica divergente de `/evaluate` por
+      rúbrica unificada versionada 40/20/15/15/10.
+- [ ] Configurar Detekt 40%, Android Lint 35%, KtLint 25% dentro de D3.
+- [ ] Configurar subcriterios MVVM M1–M5 y pesos 30/25/20/15/10.
+- [ ] Configurar subcriterios Android A1–A7 y pesos 15/20/10/15/15/15/10.
+- [ ] Asegurar que no se use Clean Architecture como dimensión.
+
+## C. Análisis determinista
+- [ ] Implementar D1 con trazabilidad requisito-caso-evidencia.
+- [ ] Implementar D2 con umbral del 80% de requisitos cubiertos y fórmulas T1/T2/T3.
+- [ ] Normalizar severidades y hallazgos de Detekt, Android Lint y KtLint.
+- [ ] Implementar analizador MVVM basado en imports, dependencias, estado y pruebas.
+- [ ] Implementar los siete subcriterios de buenas prácticas Android.
+- [ ] Implementar estados PASS/PARTIAL/FAIL/NOT_EVALUATED/NOT_CONFIGURED/
+      NOT_AVAILABLE/EXECUTION_ERROR/INFO.
+- [ ] Garantizar que errores de infraestructura no penalicen al estudiante.
+
+## D. PDF determinista
+- [ ] Rediseñar `ExamReportGenerator` para producir las tablas R1–R12.
+- [ ] Generar PDF de máximo 4 páginas, sin narrativa libre LLM.
+- [ ] Crear catálogo de observaciones/recomendaciones `es-CO` y `en-US`.
+- [ ] Incluir hallazgos con IDs, severidad, archivo/línea y evidencia.
+- [ ] Mostrar las cinco dimensiones siempre, incluyendo no evaluadas.
+- [ ] Incluir cobertura, cálculo reproducible, versión de reglas y limitaciones.
+- [ ] Generar el PDF solo desde `EvaluationReport`.
+
+## E. TeacherAgent
+- [ ] TeacherAgent invoca EvaluatorAgent y consume `EvaluationReport`.
+- [ ] TeacherAgent no ejecuta scoring ni cambia estados/notas.
+- [ ] Explicaciones pedagógicas referencian finding_id/criterion_id/evidence_id.
+- [ ] Verificar que las respuestas del TeacherAgent no modifican el PDF.
+
+## F. Pruebas
+- [ ] Pruebas unitarias de cada fórmula y cada regla de tabla D1–D5.
+- [ ] Pruebas de límites 79.99%, 80%, 100% en cobertura de requisitos.
+- [ ] Pruebas de hallazgos por severidad y deduplicación.
+- [ ] Pruebas de MVVM con falsos positivos/negativos conocidos.
+- [ ] Pruebas de aplicabilidad y exclusión de indicadores Android.
+- [ ] Pruebas de estabilidad: mismas evidencias/ruleset => mismos scores.
+- [ ] Pruebas que demuestren que LLM no puede alterar notas ni estados.
+- [ ] Pruebas de PDF para tablas R1–R12 y ausencia de narrativa LLM.
+- [ ] Pruebas de integración EvaluatorAgent → TeacherAgent.
+- [ ] Regresión con Domino Conquista y fixture de proyecto Android real.
+
+## Definición de terminado
+- [ ] Las cinco dimensiones se evalúan por EvaluatorAgent con evidencia rastreable.
+- [ ] TeacherAgent usa el reporte y no evalúa por cuenta propia.
+- [ ] La misma rúbrica versionada se utiliza en `/evaluate` y `/exam`.
+- [ ] El PDF se genera sin llamadas LLM y todas sus tablas tienen reglas testeadas.
+- [ ] No se declara `COMPLETE` cuando falta evidencia requerida.
+
+
+## 9. Definición estructurada JSON obligatoria
+
+- [ ] Sustituir la carga autoritativa Markdown/PDF por JSON exclusivamente (RQ-EXM-052).
+- [ ] Implementar validación con `exam-definition.schema.json` y validaciones semánticas (RQ-EXM-053–057).
+- [ ] Crear ejemplo Domino Conquista y validar pesos/IDs/criterios (RQ-EXM-054–056).
+- [ ] Guardar snapshot inmutable y SHA-256 de la definición en `ExamAttempt` (RQ-EXM-058).
+- [ ] Mostrar errores JSON Pointer en preparación y bloquear el inicio (RQ-EXM-059).
+- [ ] Asegurar que TeacherAgent solo coordine y EvaluatorAgent sea el único evaluador (RQ-EXM-060–061).
+- [ ] Reportar hallazgos no mapeados sin afectar la nota (RQ-EXM-062).
+- [ ] Implementar registro de métodos de verificación y estados de disponibilidad (RQ-EXM-063).
+- [ ] Pruebas: JSON válido/inválido, pesos, IDs duplicados, snapshot/hash, no autocorrección LLM y separación de agentes.
+
+
+## 10. Preparación automática de herramientas estáticas (RQ-EXM-064–075)
+
+- [x] Implementar `ToolchainManager` como servicio determinista invocado por `EvaluatorAgent`.
+- [x] Crear loader/validador de `toolchain-policy.json`; rechazar versiones flotantes y combinaciones no verificadas.
+- [x] Detectar JDK, Gradle wrapper, Kotlin, AGP, módulos, variantes y tareas Android Lint.
+- [x] Resolver Detekt y KtLint con versiones fijadas y compatibles; Android Lint se resuelve desde AGP.
+- [x] Implementar caché aislada ADA Sensei con checksum/origen de artefactos.
+- [x] Implementar workspace temporal/copia para configuración; no modificar proyecto original.
+- [x] Ejecutar health check real de Android Lint, Detekt y KtLint y validar reportes estructurados.
+- [x] Integrar preflight: bloquear antes de `ExamAttempt`/timer si cualquier herramienta requerida no queda `READY`.
+- [x] Añadir estados `READY`, `INSTALLED`, `CONFIGURED`, `ISSUES_FOUND`, `NOT_CONFIGURED`, `NOT_AVAILABLE`, `INCOMPATIBLE`, `EXECUTION_ERROR`.
+- [x] Persistir `ToolchainManifest` y `ToolExecutionEvidence` en el intento/reporte.
+- [x] Detectar y bloquear tareas de auto-fix/format durante evaluación.
+- [x] Comprobar hash del proyecto original antes/después.
+- [x] Implementar `INCOMPLETE_INFRASTRUCTURE` si falla herramienta tras iniciar; no emitir nota completa.
+- [x] Hacer que TeacherAgent solo comunique estados, sin instalar ni alterar calificaciones.
+- [x] Pruebas: proyecto preconfigurado, faltan Detekt/KtLint, AGP sin Lint, versión incompatible, offline, fallo de health check, mutación cero, caché/checksum y reproducibilidad.
+- [ ] Pruebas de integración en proyectos Android representativos para validar la estrategia de inyección temporal; no asumir compatibilidad universal de init scripts.
+
+Evidencia: `tests/toolchain/test_manager.py`, `tests/toolchain/test_models.py`, `tests/exams/test_toolchain_integration.py`, `tests/agents/test_teacher_agent.py`; suite completa `672 passed`; ruff enfocado limpio. `ruff check . --fix` mantiene 77 errores preexistentes fuera del alcance de este cambio. La matriz de compatibilidad queda vacía: sin versiones fijadas verificadas el inicio se bloquea.

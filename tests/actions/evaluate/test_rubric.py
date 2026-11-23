@@ -37,16 +37,16 @@ def test_rubric_weights():
         "functional_requirements": 0.40,
         "tests": 0.20,
         "code_quality": 0.15,
-        "architecture": 0.15,
+        "mvvm": 0.15,
         "android_practices": 0.10,
     }
     assert abs(sum(EVALUATE_RUBRIC.weights().values()) - 1.0) < 1e-9
 
 
 def test_rubric_definition_versioning():
-    assert EVALUATE_RUBRIC.id == "evaluate-default"
+    assert EVALUATE_RUBRIC.id == "unified-android"
     assert EVALUATE_RUBRIC.version == "v1"
-    assert EVALUATE_RUBRIC.ref == "evaluate-default:v1"
+    assert EVALUATE_RUBRIC.ref == "unified-android:v1"
     assert EVALUATE_RUBRIC.score_scale_max == 4
     assert EVALUATE_RUBRIC.evidence_policy.renormalize is True
     assert EVALUATE_RUBRIC.evidence_policy.build_dependent == (
@@ -59,21 +59,21 @@ def test_rubric_definition_versioning():
 
 def test_evaluate_rubric_isolated():
     """RQ-EVA-031: another workflow's rubric cannot change evaluate weights."""
-    exam_like = RubricDefinition(
-        id="exam-default",
+    foreign = RubricDefinition(
+        id="foreign-rubric",
         version="v1",
         dimensions=(
             RubricDimension(id="functional_requirements", weight=0.40),
             RubricDimension(id="exam_process", weight=0.60),
         ),
     )
-    assert exam_like.ref == "exam-default:v1"
+    assert foreign.ref == "foreign-rubric:v1"
     assert EVALUATE_RUBRIC.weight_of("tests") == 0.20
     assert EVALUATE_RUBRIC.dimension_ids == [
         "functional_requirements",
         "tests",
         "code_quality",
-        "architecture",
+        "mvvm",
         "android_practices",
     ]
     with pytest.raises(KeyError):
@@ -114,7 +114,7 @@ def test_subweights_inside_functional_dimension():
     """RQ-EVA-024: subweights subdivide 40%; they add no top-level weight."""
     engine = RubricEngine(EVALUATE_RUBRIC)
     breakdown = engine.score(
-        {"tests": 4, "code_quality": 3, "architecture": 4, "android_practices": 2},
+        {"tests": 4, "code_quality": 3, "mvvm": 4, "android_practices": 2},
         Fixtures.make_requirements(),
     )
     assert breakdown.functional_subweight_sum == pytest.approx(1.0)
@@ -166,7 +166,7 @@ def test_not_evaluated_excluded():
         {
             "tests": None,
             "code_quality": 4,
-            "architecture": None,
+            "mvvm": None,
             "android_practices": None,
         }
     )
@@ -175,7 +175,7 @@ def test_not_evaluated_excluded():
     assert set(breakdown.not_evaluated_dimensions) == {
         "functional_requirements",
         "tests",
-        "architecture",
+        "mvvm",
         "android_practices",
     }
     assert any("not evaluated" in lim for lim in breakdown.limitations)
@@ -191,7 +191,7 @@ def test_partial_functional_renormalizes_over_scored_subset():
     """
     engine = RubricEngine(EVALUATE_RUBRIC)
     breakdown = engine.score(
-        {"tests": 4, "code_quality": 3, "architecture": 4, "android_practices": 2},
+        {"tests": 4, "code_quality": 3, "mvvm": 4, "android_practices": 2},
         [
             EvaluationCriterion(
                 requirement_id="req://r1",
@@ -239,7 +239,7 @@ def test_no_dimension_evaluated_no_score():
         {
             "tests": None,
             "code_quality": None,
-            "architecture": None,
+            "mvvm": None,
             "android_practices": None,
         }
     )
@@ -251,7 +251,7 @@ def test_no_dimension_evaluated_no_score():
 def test_deterministic_reuse():
     """RQ-EVA-032: same definition + same inputs -> same score, no shared state."""
     engine = RubricEngine(EVALUATE_RUBRIC)
-    scores = {"tests": 4, "code_quality": 3, "architecture": 4, "android_practices": 1}
+    scores = {"tests": 4, "code_quality": 3, "mvvm": 4, "android_practices": 1}
     first = engine.score(scores, Fixtures.make_requirements())
     second = engine.score(scores, Fixtures.make_requirements())
     assert first.overall_score == second.overall_score
@@ -269,7 +269,7 @@ def test_weighted_score():
         {
             "tests": 4,
             "code_quality": 3,
-            "architecture": 4,
+            "mvvm": 4,
             "android_practices": 2,
         },
         Fixtures.make_requirements(),
@@ -293,7 +293,7 @@ def test_score_recomputed_not_taken_from_input():
     """RQ-EVA-007: the engine recomputes; it never trusts a supplied total."""
     engine = RubricEngine(EVALUATE_RUBRIC)
     breakdown = engine.score(
-        {"tests": 4, "code_quality": 4, "architecture": 4, "android_practices": 4},
+        {"tests": 4, "code_quality": 4, "mvvm": 4, "android_practices": 4},
         [],
     )
     assert breakdown.overall_score == 100.0
@@ -305,7 +305,7 @@ def test_build_failure_marks_functional_not_evaluated():
     """RQ-EVA-018: a failed build blocks compilation-dependent criteria."""
     engine = RubricEngine(EVALUATE_RUBRIC)
     breakdown = engine.score(
-        {"tests": 4, "code_quality": 4, "architecture": 4, "android_practices": 4},
+        {"tests": 4, "code_quality": 4, "mvvm": 4, "android_practices": 4},
         Fixtures.make_requirements(),
         build_failed=True,
     )

@@ -58,7 +58,7 @@ def test_engine_reusable(tmp_path):
         exercise=make_exercise(),
         client=None,
     )
-    assert result.rubric_id == "evaluate-default"
+    assert result.rubric_id == "unified-android"
     assert result.rubric_version == "v1"
     assert result.evidence
 
@@ -140,7 +140,7 @@ def test_external_workflow_reuse(tmp_path):
     """RQ-EVA-036: a foreign workflow reuses the engine with its own rubric."""
     project = Fixture.build_fixture_project(tmp_path)
     exam_rubric = RubricDefinition(
-        id="exam-default",
+        id="foreign-rubric",
         version="v1",
         dimensions=(
             RubricDimension(id="functional_requirements", weight=0.40),
@@ -161,11 +161,11 @@ def test_external_workflow_reuse(tmp_path):
         exercise=make_exercise(),
         client=None,
     )
-    assert result.rubric_id == "exam-default"
+    assert result.rubric_id == "foreign-rubric"
     assert result.rubric_version == "v1"
     assert "exam_process" in result.dimension_scores
     # The default evaluate rubric is untouched by the foreign workflow.
-    assert EVALUATE_RUBRIC.ref == "evaluate-default:v1"
+    assert EVALUATE_RUBRIC.ref == "unified-android:v1"
     assert EVALUATE_RUBRIC.weight_of("tests") == 0.20
     assert "exam_process" not in EVALUATE_RUBRIC.dimension_ids
 
@@ -174,7 +174,7 @@ def test_engine_accepts_two_definitions_without_cross_talk():
     a = RubricEngine(EVALUATE_RUBRIC)
     b = RubricEngine(
         RubricDefinition(
-            id="exam-default",
+            id="foreign-rubric",
             version="v1",
             dimensions=(
                 RubricDimension(id="functional_requirements", weight=0.5),
@@ -183,8 +183,8 @@ def test_engine_accepts_two_definitions_without_cross_talk():
         )
     )
     assert a.weights() != b.weights()
-    assert a.ref == "evaluate-default:v1"
-    assert b.ref == "exam-default:v1"
+    assert a.ref == "unified-android:v1"
+    assert b.ref == "foreign-rubric:v1"
 
 
 def test_evaluate_uses_the_engine_not_a_second_implementation(tmp_path):
@@ -333,4 +333,4 @@ def test_lint_and_detekt_evidence_reach_separate_dimensions():
     # An ERROR lint finding is evidence, not a one-to-one grade deduction: the
     # dimension drops to 1, the rest of the rubric is unaffected.
     assert result.dimension_scores["android_practices"] == 1.0
-    assert result.dimension_scores["code_quality"] == 3.0
+    assert result.dimension_scores["code_quality"] == 2.0

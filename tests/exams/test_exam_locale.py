@@ -19,6 +19,7 @@ from ada_sensei.cli.router import Router  # noqa: E402
 from ada_sensei.config import Config  # noqa: E402
 from ada_sensei.exams.report import ExamReportGenerator  # noqa: E402
 from helpers import FakeClient, Fixture  # noqa: E402
+from tests.toolchain.helpers import ReadyToolchainManager  # noqa: E402
 
 
 class OkRunner:
@@ -41,15 +42,65 @@ class RoutedExamine(ExamineAction):
 
 
 def _statement(tmp_path) -> Path:
-    statement = tmp_path / "exam.md"
+    statement = tmp_path / "exam.json"
     statement.write_text(
-        "# Midterm Android Exam\n\n"
-        "Allowed duration: 60 minutes\n"
-        "Allowed /ask count: 4\n\n"
-        "## Requirements\n\n"
-        "- Implement a task repository backed by Room\n"
-        "- Expose a ViewModel with UI state\n"
-        "- Write unit tests for the repository\n",
+        """{
+  "schema_version": "1.0",
+  "exam_id": "midterm-android-exam",
+  "title": "Midterm Android Exam",
+  "version": "1.0",
+  "allowed_duration_seconds": 3600,
+  "allowed_ask_count": 4,
+  "statement_language": "es-CO",
+  "rubric_ref": "unified-android:v1",
+  "requirements": [
+    {
+      "id": "REQ-MID-001",
+      "type": "functional",
+      "title": "Repository",
+      "description": "Implement a task repository backed by Room",
+      "weight": 0.34,
+      "source": {"file": "midterm-android-exam.json", "section": "Requirements"},
+      "acceptance_criteria": [
+        {
+          "id": "AC-MID-001",
+          "description": "Repository works.",
+          "verification": ["unit_test"]
+        }
+      ]
+    },
+    {
+      "id": "REQ-MID-002",
+      "type": "functional",
+      "title": "ViewModel",
+      "description": "Expose a ViewModel with UI state",
+      "weight": 0.33,
+      "source": {"file": "midterm-android-exam.json", "section": "Requirements"},
+      "acceptance_criteria": [
+        {
+          "id": "AC-MID-002",
+          "description": "ViewModel exposes state.",
+          "verification": ["source_inspection"]
+        }
+      ]
+    },
+    {
+      "id": "REQ-MID-003",
+      "type": "functional",
+      "title": "Tests",
+      "description": "Write unit tests for the repository",
+      "weight": 0.33,
+      "source": {"file": "midterm-android-exam.json", "section": "Requirements"},
+      "acceptance_criteria": [
+        {
+          "id": "AC-MID-003",
+          "description": "Repository tests exist.",
+          "verification": ["unit_test"]
+        }
+      ]
+    }
+  ]
+}""",
         encoding="utf-8",
     )
     return statement
@@ -67,7 +118,11 @@ def _router(tmp_path, monkeypatch) -> Router:
     config = Config(project={"path": str(proj)})
     config.data_dir = tmp_path / "data"
     config.cache_dir = tmp_path / "cache"
-    router = Router(config=config, client=FakeClient())
+    router = Router(
+        config=config,
+        client=FakeClient(),
+        toolchain=ReadyToolchainManager(),
+    )
     router.context.set_student("student://s1")
     router.context.set_project(str(proj))
     monkeypatch.setattr(router_mod, "ExamineAction", RoutedExamine)

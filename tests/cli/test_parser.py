@@ -63,9 +63,9 @@ def test_known_actions():
 
 
 def test_exam_init_parses():
-    cmd = CommandParser.parse_argv(["exam-init", "~/exams/midterm.md", "--yes"])
+    cmd = CommandParser.parse_argv(["exam-init", "~/exams/midterm.json", "--yes"])
     assert isinstance(cmd, ExamineStartCommand)
-    assert cmd.statement == "~/exams/midterm.md"
+    assert cmd.statement == "~/exams/midterm.json"
     assert cmd.confirmed is True
 
 

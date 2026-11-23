@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "policy_id": "ada-sensei-android-toolchain",
+  "policy_version": "1.0.0",
+  "resolution_policy": "pinned-compatible-only",
+  "repositories": [
+    "gradlePluginPortal",
+    "google",
+    "mavenCentral"
+  ],
+  "compatibility_matrix": [],
+  "tools": {
+    "android_lint": {
+      "provider": "android_gradle_plugin",
+      "required": true,
+      "task_resolution": [
+        "lint<Variant>",
+        "lint"
+      ]
+    },
+    "detekt": {
+      "provider": "gradle_plugin",
+      "required": true,
+      "version_source": "compatibility_matrix"
+    },
+    "ktlint": {
+      "provider": "gradle_plugin_or_cli",
+      "required": true,
+      "version_source": "compatibility_matrix"
+    }
+  },
+  "execution": {
+    "workspace": "isolated_temporary_copy",
+    "allow_global_install": false,
+    "allow_source_mutation": false,
+    "allow_auto_correct": false,
+    "require_health_check": true,
+    "require_structured_report": true
+  },
+  "network": {
+    "allow_unlisted_repositories": false,
+    "allow_unverified_install_scripts": false
+  },
+  "note": "Populate compatibility_matrix only with combinations verified by automated integration tests; never use latest or floating versions."
+}

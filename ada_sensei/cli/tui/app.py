@@ -367,6 +367,9 @@ class AdaSenseiTUI(App):
                 value="ask",
                 id="action-select",
             )
+        with Horizontal(id="confirm-bar"):
+            yield Button("Confirm", id="confirm-yes", variant="success")
+            yield Button("Cancel", id="confirm-no", variant="error")
         yield ActionGuide(id="action-guide")
         yield LanguageList(id="language-list")
         yield ExamPreparationList(id="exam-preparation-list")
@@ -834,9 +837,11 @@ class AdaSenseiTUI(App):
             self._exam_start_offer_shown = False
             self._pending_exam = None
             self._pending_eval = None
+            self._set_confirmation_visible(False)
             self._close_exam_preparation()
         if action == "exam-init":
             self._open_exam_preparation()
+            self._show_exam_start_offer()
             return
         if action == "exam-finish":
             # Selecting the finish action must immediately expose its explicit
@@ -1237,7 +1242,12 @@ class AdaSenseiTUI(App):
         locale = self._current_locale()
         self._emit(get_ui_string("exam_start_blocked", locale))
         for code in status.blockers:
-            self._emit("- " + describe_blocker(code, locale))
+            detail = (
+                status.toolchain_blockers[0]
+                if code == "toolchain_not_ready" and status.toolchain_blockers
+                else ""
+            )
+            self._emit("- " + describe_blocker(code, locale, detail=detail))
 
     def _close_exam_preparation(self) -> None:
         self._exam_preparing = False
@@ -1400,10 +1410,10 @@ class AdaSenseiTUI(App):
                 from ...exams.definition import ExamDefinitionLoader
 
                 loader = ExamDefinitionLoader()
-                if path.is_file():
-                    loader.load(path, exam_id=None)
-                elif "\n" in text or text.startswith(("{", "[")):
+                if text.startswith("{"):
                     loader.load_text(text, exam_id=None)
+                elif path.is_file():
+                    loader.load(path, exam_id=None)
                 else:
                     issues.append(
                         get_ui_string("exam_statement_not_found", locale).format(

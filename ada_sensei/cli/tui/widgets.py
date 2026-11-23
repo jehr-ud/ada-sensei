@@ -444,10 +444,10 @@ class ExamPreparationList(Static):
             return text
         title = "Preparar examen" if es else "Prepare exam"
         intro = (
-            "Configura el proyecto Android y el archivo Markdown antes de comenzar."
+            "Configura el proyecto Android y la definición JSON antes de comenzar."
             if es
             else (
-                "Configure the Android project and Markdown instructions before "
+                "Configure the Android project and JSON definition before "
                 "starting."
             )
         )
@@ -460,9 +460,16 @@ class ExamPreparationList(Static):
             "No configuradas" if es else "Not configured"
         )
         state = ready if self.ready else missing
+        toolchain_ready = getattr(self.status, "toolchain_ready", False)
+        toolchain = (
+            ("Listo" if toolchain_ready else "No listo")
+            if es
+            else ("Ready" if toolchain_ready else "Not ready")
+        )
         text = Text(f"{title}\n\n{intro}\n\n")
         text.append(f"{'Proyecto' if es else 'Project'}: {project}\n")
-        text.append(f"{'Instrucciones' if es else 'Instructions'}: {instructions}\n")
+        text.append(f"{'Definición' if es else 'Definition'}: {instructions}\n")
+        text.append(f"{'Toolchain' if es else 'Toolchain'}: {toolchain}\n")
         # The blocker list is intentionally NOT rendered here: it is variable
         # length and would push the options past the panel's ``max-height``,
         # hiding ``Empezar examen``. The app emits the localized reasons to the

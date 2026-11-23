@@ -17,6 +17,7 @@ from pathlib import Path
 
 from ..events import AppEventBus
 from ..models import Timestamps
+from ..toolchain.models import ToolchainManifest, ToolExecutionEvidence
 from .docs import ExamDocs, ExamDocsWriter
 from .events import ExamEventBridge
 from .models import (
@@ -70,6 +71,8 @@ class ExamLifecycle:
         attempt_id: str | None = None,
         exercise_id: str | None = None,
         locale: str | None = None,
+        toolchain_manifest: ToolchainManifest | None = None,
+        toolchain_evidence: list[ToolExecutionEvidence] | None = None,
     ) -> ExamAttempt:
         """RQ-EXM-003: create the attempt, record EXAM_STARTED, create the docs."""
         if not student_id:
@@ -93,6 +96,8 @@ class ExamLifecycle:
             allowed_ask_count=definition.allowed_ask_count,
             rubric_ref=definition.rubric_ref,
             locale=snapshot,
+            toolchain_manifest=toolchain_manifest,
+            toolchain_evidence=list(toolchain_evidence or []),
         )
         docs: ExamDocs | None = None
         writer = self._docs_writer() if self._docs_writer is not None else None

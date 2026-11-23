@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..evaluation.preflight import ProjectPreflight
+from ..toolchain.manager import ToolchainManager
+from ..toolchain.models import ToolchainPreparationResult
 from .definition import ExamDefinitionLoader
 from .models import ExamDefinition, ExamDefinitionError
 from .store import ExamStore
@@ -28,6 +30,9 @@ class ExamPreparationStatus:
     active_exam: bool
     ready_to_start: bool
     definition: ExamDefinition | None = None
+    toolchain_ready: bool = False
+    toolchain_blockers: tuple[str, ...] = ()
+    toolchain_preparation: ToolchainPreparationResult | None = None
 
     @property
     def blockers(self) -> tuple[str, ...]:
@@ -38,25 +43,52 @@ class ExamPreparationStatus:
         result.extend(self.instruction_blockers)
         if self.active_exam:
             result.append("active_exam")
+        if self.project_ready and not self.toolchain_ready:
+            result.append("toolchain_not_ready")
         return tuple(result)
 
 
 class ExamPreparationService:
     """Validates configured paths without starting an exam or writing state."""
 
-    def __init__(self, services, *, env: dict[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        services,
+        *,
+        env: dict[str, str] | None = None,
+        toolchain: ToolchainManager | None = None,
+    ) -> None:
         self.services = services
         self._env = env
         self.loader = ExamDefinitionLoader()
+        self.toolchain = toolchain if toolchain is not None else ToolchainManager()
 
-    def validate(self) -> ExamPreparationStatus:
+    def validate(self, *, require_instructions: bool = True) -> ExamPreparationStatus:
         context = self.services.context
         project_path = context.project_path or self._configured_project_path()
         readiness = ProjectPreflight(env=self._env).check(project_path)
         project_blockers = tuple(issue.code for issue in readiness.issues)
+        project_ready = readiness.ready
+        toolchain_preparation: ToolchainPreparationResult | None = None
+        toolchain_blockers: tuple[str, ...] = ()
+        if project_ready and readiness.project_path:
+            try:
+                toolchain_preparation = self.toolchain.prepare(readiness.project_path)
+            except Exception as exc:  # noqa: BLE001 - surfaced as a blocker
+                toolchain_blockers = (
+                    f"toolchain preparation failed: {type(exc).__name__}: {exc}",
+                )
+            else:
+                toolchain_blockers = tuple(toolchain_preparation.blockers)
+        toolchain_ready = (
+            toolchain_preparation is not None and toolchain_preparation.ready
+        )
 
         instructions_path = context.instructions_path
-        definition, instruction_blockers = self._instructions(instructions_path)
+        definition, instruction_blockers = self._instructions(
+            instructions_path if require_instructions else None,
+            required=require_instructions,
+        )
         store = ExamStore(self.services.data_dir)
         # Do not rely only on the in-memory session pointer: after a UI restart
         # the persisted attempt remains authoritative.
@@ -68,8 +100,9 @@ class ExamPreparationService:
                     active = candidate
                     break
         student_ready = bool(context.student_id)
-        project_ready = readiness.ready
-        instructions_ready = definition is not None and not instruction_blockers
+        instructions_ready = (
+            definition is not None and not instruction_blockers
+        ) or not require_instructions
         return ExamPreparationStatus(
             student_ready=student_ready,
             project_path=readiness.project_path or project_path,
@@ -84,8 +117,12 @@ class ExamPreparationService:
                 and project_ready
                 and instructions_ready
                 and active is None
+                and toolchain_ready
             ),
             definition=definition,
+            toolchain_ready=toolchain_ready,
+            toolchain_blockers=toolchain_blockers,
+            toolchain_preparation=toolchain_preparation,
         )
 
     def _configured_project_path(self) -> str | None:
@@ -93,12 +130,12 @@ class ExamPreparationService:
         return None if path in (None, "", ".") else str(path)
 
     def _instructions(
-        self, configured: str | None
+        self, configured: str | None, *, required: bool = True
     ) -> tuple[ExamDefinition | None, tuple[str, ...]]:
         if not configured:
-            return None, ("no_instructions",)
+            return (None, ("no_instructions",) if required else ())
         path = Path(configured)
-        if path.suffix.lower() != ".md":
+        if path.suffix.lower() != ".json":
             return None, ("instructions_not_markdown",)
         if not path.exists() or not path.is_file():
             return None, ("instructions_missing",)

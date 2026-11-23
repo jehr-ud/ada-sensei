@@ -204,6 +204,11 @@ without modifying the default `/evaluate` behavior.
 | RQ-EVA-034 | EvaluationAgent / structured parser | `tests/actions/evaluate/test_structured_output.py::test_three_attempt_limit` |
 | RQ-EVA-035 | Evidence validator | `tests/actions/evaluate/test_structured_output.py::test_unsupported_claim_rejected` |
 | RQ-EVA-036 | EvaluationEngine | `tests/actions/evaluate/test_engine.py::test_external_workflow_reuse` |
+| RQ-EVA-037 | EvaluationEngine | — |
+| RQ-EVA-038 | EvaluationEngine | — |
+| RQ-EVA-039 | `AndroidProjectAnalyzer._check_optional`, `DimensionScorer._score_architecture` | `tests/exams/test_integration.py` |
+| RQ-EVA-040 | `StaticAnalysisTool.run_detekt`, `_detekt_not_configured` | `tests/exams/test_integration.py` |
+| RQ-EVA-041 | `StructuredPipeline._coerce_array_fields` | `tests/exams/test_exams_structured_output.py` |
 
 
 ### RQ-EVA-037 Caller-supplied mastery rubric
@@ -213,3 +218,28 @@ requirements without mutating `evaluate-default:v1`.
 ### RQ-EVA-038 No progression ownership
 The evaluation engine SHALL return evidence and scores but SHALL NOT itself
 advance a learning stage or override a `ProgressionDecision`.
+
+### RQ-EVA-039 Optional convention files reported as info
+`AndroidProjectAnalyzer` SHALL record optional Android convention files
+(e.g. `app/src/debug/AndroidManifest.xml`) with `status="info"` when absent,
+not `status="missing"`. The `_check_optional` helper is used for this purpose.
+`DimensionScorer._score_architecture` SHALL treat `"info"` entries as neutral:
+they are not counted as deficiencies and do not lower the architecture score.
+
+### RQ-EVA-040 Detekt not configured versus Detekt findings
+`StaticAnalysisTool.run_detekt` SHALL distinguish two non-zero exit-code cases:
+
+1. The Detekt task does not exist in the project (Detekt not configured):
+   produce `status="missing"` with a limitation message. This SHALL NOT reduce
+   the student's code-quality score.
+2. The Detekt task executed and found issues: produce `status="fail"` as real
+   evidence.
+
+The function `_detekt_not_configured(stdout, stderr)` inspects Gradle output
+for task-not-found patterns to make this distinction.
+
+### RQ-EVA-041 LLM array field normalization
+`StructuredPipeline.run` SHALL normalize a top-level field that arrives as a
+JSON object when the schema declares it as an array by wrapping it in a list
+(`_coerce_array_fields`). This normalization occurs before schema validation
+and does not consume a retry attempt.

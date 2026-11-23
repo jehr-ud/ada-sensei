@@ -12,11 +12,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from ..evaluation import (
     EvaluationEngine,
     EvaluationExecutionPolicy,
+    EvaluatorAgent,
     EvidenceContext,
     ProjectContext,
     RubricDefinition,
@@ -47,6 +50,8 @@ from ..exams.rubric import EXAM_RUBRIC, resolve_rubric
 from ..exams.scoring import ExamScorer
 from ..exams.store import ExamStore
 from ..locale.ui_strings import describe_blocker, get_ui_string
+from ..toolchain.manager import ToolchainManager
+from ..toolchain.models import ToolchainManifest, ToolchainPreparationResult
 from ..tools.subprocess import SubprocessRunner
 from ..urns import URN
 from .base import ActionResult, ActionServices
@@ -77,6 +82,15 @@ _PROGRESS_STAGE_KEYS: dict[str, str] = {
 def _or_not_evaluated(value: object) -> str:
     """Never print a bare ``None`` where a score belongs (RQ-EXM-014)."""
     return "not evaluated" if value is None else str(value)
+
+
+def _empty_manifest() -> ToolchainManifest:
+    return ToolchainManifest(
+        policy_id="unknown",
+        policy_version="unknown",
+        resolution_policy="pinned-compatible-only",
+        created_at=datetime.now(UTC),
+    )
 
 
 @dataclass
@@ -185,15 +199,18 @@ class ExamineAction:
         runner: SubprocessRunner | None = None,
         engine: EvaluationEngine | None = None,
         progress: Callable[[str], None] | None = None,
+        toolchain: Any | None = None,
     ) -> None:
         self.services = services
         self.engine = engine or EvaluationEngine()
         self._runner = runner
+        self.toolchain = toolchain if toolchain is not None else ToolchainManager()
         #: Optional localized progress sink, driven by the TUI (RQ-EXM-048).
         self._progress_callback = progress
         self.store = ExamStore(services.data_dir)
         self.scorer = ExamScorer()
         self.loader = ExamDefinitionLoader()
+        self.evaluator = EvaluatorAgent()
         # The project path is resolved lazily: constructing the action must not
         # require a configured project, only running it does.
         self._docs: ExamDocsWriter | None = None
@@ -242,20 +259,31 @@ class ExamineAction:
         # The application boundary repeats the preparation check.  The TUI is
         # only a presenter and cannot be trusted to keep a preflight fresh.
         configured_instructions = self.services.context.instructions_path
+        status = ExamPreparationService(
+            self.services, toolchain=self.toolchain
+        ).validate(require_instructions=bool(configured_instructions))
+        if not status.ready_to_start:
+            locale = (
+                self._active_locale(self.services.context.student_id)
+                if self.services.context.student_id
+                else None
+            )
+            reasons = "; ".join(
+                describe_blocker(
+                    code,
+                    locale,
+                    detail=(
+                        status.toolchain_blockers[0]
+                        if code == "toolchain_not_ready" and status.toolchain_blockers
+                        else ""
+                    ),
+                )
+                for code in status.blockers
+            )
+            raise ExamStateError(
+                "exam preparation incomplete: " + (reasons or "unknown reason")
+            )
         if configured_instructions:
-            status = ExamPreparationService(self.services).validate()
-            if not status.ready_to_start:
-                locale = (
-                    self._active_locale(self.services.context.student_id)
-                    if self.services.context.student_id
-                    else None
-                )
-                reasons = "; ".join(
-                    describe_blocker(code, locale) for code in status.blockers
-                )
-                raise ExamStateError(
-                    "exam preparation incomplete: " + (reasons or "unknown reason")
-                )
             if (
                 inp.statement
                 and Path(inp.statement).expanduser().resolve()
@@ -273,6 +301,7 @@ class ExamineAction:
         definition = self._resolve_definition(statement)
         student_id = self._require_student(inp.student_id)
         project_id = self._require_project(inp.project_id)
+        preparation = status.toolchain_preparation
         attempt = self.lifecycle.start(
             definition,
             student_id=student_id,
@@ -281,6 +310,8 @@ class ExamineAction:
             exercise_id=inp.exercise_id or self.services.context.current_exercise_id,
             attempt_id=self.services.context.attempt_id or None,
             locale=self._active_locale(student_id),
+            toolchain_manifest=preparation.manifest if preparation else None,
+            toolchain_evidence=list(preparation.executions) if preparation else [],
         )
         # The session now knows which attempt is live, so `/ask` is attributed to
         # it without the student restating the id (RQ-EXM-001).
@@ -290,25 +321,24 @@ class ExamineAction:
         return ExamStartResult(attempt=attempt, definition=definition)
 
     def _resolve_definition(self, statement: str) -> ExamDefinition:
-        """Accept an instructor file path or a statement supplied inline.
+        """Accept a validated JSON file or an inline JSON definition.
 
-        RQ-EXM-002 requires a file-backed Markdown/structured/PDF statement. The
-        CLI also advertises inline text, so a multi-line statement is accepted
-        directly instead of failing the "statement not found" path. Either way
-        the resolved definition is persisted at start time, so the finish path
-        never re-reads the original (see ``ExamStore.save_definition``).
+        Markdown and PDF are no longer authoritative requirement sources. Inline
+        JSON is accepted for the advertised convenience; the resolved definition
+        is persisted at start time so the finish path never re-reads the original
+        (see ``ExamStore.save_definition``).
         """
         text = statement.strip()
         if not text:
             raise ExamDefinitionError("exam statement is empty")
+        if text.startswith("{"):
+            return self.loader.load_text(text, exam_id=None)
         path = Path(text).expanduser()
         if path.is_file():
             return self.loader.load(path, exam_id=None)
-        if "\n" in text or text.startswith(("{", "[")):
-            return self.loader.load_text(text, exam_id=None)
         raise ExamDefinitionError(
-            f"exam statement not found: {path}. Pass a Markdown, structured or "
-            "PDF file path, or pass the statement as multi-line text."
+            f"exam statement not found: {path}. Pass a .json file path or an "
+            "inline JSON exam definition."
         )
 
     # -- finish -----------------------------------------------------------
@@ -416,7 +446,7 @@ class ExamineAction:
             definition,
             inferred_claims=interpretation.architecture_claims,
         )
-        return self._result(
+        result = self._result(
             attempt,
             definition,
             evidence,
@@ -426,6 +456,31 @@ class ExamineAction:
             interpretation,
             documentation,
             build_failed,
+        )
+        result.evaluation_report = self.evaluator.build_report(
+            result=result,
+            definition=definition,
+            evidence=evidence,
+            build_failed=build_failed,
+            toolchain_preparation=self._toolchain_preparation(attempt),
+        )
+        result.toolchain_manifest = attempt.toolchain_manifest
+        result.toolchain_evidence = list(attempt.toolchain_evidence)
+        return result
+
+    @staticmethod
+    def _toolchain_preparation(attempt: ExamAttempt) -> ToolchainPreparationResult:
+        executions = list(attempt.toolchain_evidence)
+        ready = bool(
+            attempt.toolchain_manifest is not None
+            and executions
+            and all(item.health_check.status.value == "PASS" for item in executions)
+        )
+        return ToolchainPreparationResult(
+            ready=ready,
+            manifest=attempt.toolchain_manifest or _empty_manifest(),
+            executions=executions,
+            blockers=[] if ready else ["toolchain evidence is unavailable"],
         )
 
     def _interpret(

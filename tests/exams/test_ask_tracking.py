@@ -23,6 +23,7 @@ from exams_helpers import (
     make_definition,
     make_lifecycle,
 )
+from tests.toolchain.helpers import ReadyToolchainManager
 
 
 def _emit(bus, name, attempt_id, question_id=None):
@@ -102,7 +103,7 @@ def test_counts_ignore_llm_text(tmp_path):
         store.append(event)
 
     services.context.exam_attempt_id = attempt.exam_attempt_id
-    action = ExamineAction(services)
+    action = ExamineAction(services, toolchain=ReadyToolchainManager())
 
     recounted = action._require_active_attempt()
     assert recounted.ask_count == 2

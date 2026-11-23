@@ -50,11 +50,28 @@ def _ready_app(tmp_path, locale: str = "en-US"):
     app = _app(tmp_path, locale)
     project = tmp_path / "project"
     project.mkdir(exist_ok=True)
-    exam = tmp_path / "exam.md"
+    exam = tmp_path / "exam.json"
     exam.write_text(
-        "# Midterm Android Exam\n"
-        "## Requirements\n"
-        "- Build a screen with a list and a detail view\n",
+        """{
+  "schema_version": "1.0",
+  "exam_id": "midterm-android-exam",
+  "title": "Midterm Android Exam",
+  "version": "1.0",
+  "allowed_duration_seconds": 3600,
+  "allowed_ask_count": 4,
+  "rubric_ref": "unified-android:v1",
+  "requirements": [
+    {
+      "id": "REQ-MID-001",
+      "type": "functional",
+      "title": "Screen",
+      "description": "Build a screen with a list and a detail view",
+      "weight": 1.0,
+      "source": {"file": "midterm-android-exam.json", "section": "Requirements"},
+      "acceptance_criteria": [{"id": "AC-MID-001", "description": "Screen works.", "verification": ["ui_inspection"]}]
+    }
+  ]
+}""",
         encoding="utf-8",
     )
     app.router.config.project.path = str(project)
@@ -65,11 +82,11 @@ def _ready_app(tmp_path, locale: str = "en-US"):
 
 def test_exam_start_prompt_explains_configuration_and_confirmation(tmp_path):
     app = _app(tmp_path)
-    prompt = app._confirm_prompt(ExamineStartCommand(statement="exam.md"))
+    prompt = app._confirm_prompt(ExamineStartCommand(statement="exam.json"))
 
-    assert "Markdown" in prompt
     assert "JSON" in prompt
-    assert "PDF" in prompt
+    assert "Markdown" not in prompt
+    assert "PDF" not in prompt
     assert "title" in prompt.lower()
     assert "requirements" in prompt.lower()
     assert "Allowed duration" in prompt
@@ -90,7 +107,7 @@ def test_exam_finish_prompt_explains_confirmation(tmp_path):
 
 def test_exam_start_prompt_is_localized(tmp_path):
     app = _app(tmp_path, "es-CO")
-    prompt = app._confirm_prompt(ExamineStartCommand(statement="exam.md"))
+    prompt = app._confirm_prompt(ExamineStartCommand(statement="exam.json"))
 
     assert "Cómo configurar el examen" in prompt
     assert "Requisitos" in prompt
@@ -100,7 +117,7 @@ def test_exam_start_prompt_is_localized(tmp_path):
 
 def test_confirm_then_run_emits_the_guidance(tmp_path):
     app = _app(tmp_path)
-    command = ExamineStartCommand(statement="exam.md")
+    command = ExamineStartCommand(statement="exam.json")
 
     app._confirm_then_run(command)
 
@@ -110,7 +127,7 @@ def test_confirm_then_run_emits_the_guidance(tmp_path):
 
 def test_declining_start_aborts_with_localized_message(tmp_path):
     app = _app(tmp_path, "es-CO")
-    app._confirm_then_run(ExamineStartCommand(statement="exam.md"))
+    app._confirm_then_run(ExamineStartCommand(statement="exam.json"))
 
     app._resolve_pending_exam(app._pending_exam, "no")
 
@@ -138,7 +155,7 @@ def test_cancel_button_aborts_the_pending_command(tmp_path):
         AssertionError("must not run")
     )
 
-    app._confirm_then_run(ExamineStartCommand(statement="exam.md"))
+    app._confirm_then_run(ExamineStartCommand(statement="exam.json"))
     app._cancel_pressed()
 
     assert app._pending_exam is None
@@ -174,7 +191,7 @@ def test_start_is_blocked_when_project_cannot_be_evaluated(tmp_path):
     # The fixture project path does not exist, so the preflight reports it.
     app = _app(tmp_path)
     result = app._dispatch_worker(
-        ExamineStartCommand(statement="exam.md", yes=True)
+        ExamineStartCommand(statement="exam.json", yes=True)
     )
 
     assert isinstance(result, ErrorResponse)
@@ -189,7 +206,7 @@ def test_start_proceeds_when_project_is_ready(tmp_path):
     app.router.dispatch = lambda cmd: dispatched.append(cmd) or "ok"
 
     result = app._dispatch_worker(
-        ExamineStartCommand(statement="exam.md", yes=True)
+        ExamineStartCommand(statement="exam.json", yes=True)
     )
 
     assert result == "ok"
@@ -289,7 +306,7 @@ def test_confirm_reports_all_missing_conditions(tmp_path):
 def test_confirm_reports_missing_exam_instructions(tmp_path):
     app, _exam = _ready_app(tmp_path)
 
-    issues = app._validate_exam_start(str(tmp_path / "missing.md"))
+    issues = app._validate_exam_start(str(tmp_path / "missing.json"))
 
     assert any("not found" in issue.lower() for issue in issues)
 

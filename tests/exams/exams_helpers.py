@@ -56,6 +56,13 @@ def make_project(root: Path, name: str = "fixture-app") -> Path:
     (proj / "app" / "build.gradle.kts").write_text(
         'plugins { id("com.android.application") }\n', encoding="utf-8"
     )
+    (proj / "app" / "src" / "main" / "AndroidManifest.xml").write_text(
+        "<manifest />\n", encoding="utf-8"
+    )
+    (proj / "sdk" / "platforms").mkdir(parents=True, exist_ok=True)
+    (proj / "local.properties").write_text(
+        f"sdk.dir={proj / 'sdk'}\n", encoding="utf-8"
+    )
     wrapper = proj / "gradlew"
     wrapper.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     wrapper.chmod(0o755)
@@ -89,20 +96,36 @@ def default_evidence() -> list[Evidence]:
             message="5 tests passed",
         ),
         Evidence(
+            id="ev://mvvm",
+            source="mvvm",
+            type="mvvm",
+            status="pass",
+            file="app/src/main/java/com/example/app/MainViewModel.kt",
+            message="observable view model state",
+        ),
+        Evidence(
             id="ev://detekt",
             source="detekt",
-            type="static",
+            type="detekt",
             status="pass",
             file="app/build/reports/detekt/detekt.xml",
             message="no findings",
         ),
         Evidence(
             id="ev://lint",
-            source="lint",
-            type="static",
+            source="android_lint",
+            type="android_lint",
             status="pass",
             file="app/build/reports/lint-results-debug.xml",
             message="no findings",
+        ),
+        Evidence(
+            id="ev://ktlint",
+            source="ktlint",
+            type="ktlint",
+            status="pass",
+            file="app/src/main/java/com/example/app/TaskRepository.kt",
+            message="format check passed",
         ),
     ]
 
@@ -188,6 +211,37 @@ STATEMENT_MARKDOWN = (
     "\n"
     "- Repository with CRUD operations\n"
 )
+
+STATEMENT_JSON = """{
+  "schema_version": "1.0",
+  "exam_id": "midterm-android-exam",
+  "title": "Midterm Android Exam",
+  "version": "1.0",
+  "allowed_duration_seconds": 3600,
+  "allowed_ask_count": 4,
+  "statement_language": "es-CO",
+  "rubric_ref": "unified-android:v1",
+  "requirements": [
+    {
+      "id": "REQ-MID-001",
+      "type": "functional",
+      "title": "Repository",
+      "description": "Repository with CRUD operations",
+      "weight": 1.0,
+      "source": {
+        "file": "midterm-android-exam.json",
+        "section": "Requirements"
+      },
+      "acceptance_criteria": [
+        {
+          "id": "AC-MID-001",
+          "description": "Repository unit tests cover CRUD operations.",
+          "verification": ["unit_test"]
+        }
+      ]
+    }
+  ]
+}"""
 
 
 def make_statement_pdf(text: str) -> bytes:

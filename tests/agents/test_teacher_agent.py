@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from ada_sensei.agents.contracts import (
@@ -94,7 +95,7 @@ def _make_teacher(tmp_path: Path):
 
 
 def test_each_specialist_invoked_exactly_once(tmp_path):
-    """Spec 009: every student-facing action invokes all three specialists exactly once."""
+    """Spec 009: each student-facing action invokes all specialists once."""
     teacher, planner, evaluator, trainer, mock_result = _make_teacher(tmp_path)
 
     from ada_sensei.cli.commands import AskCommand
@@ -107,7 +108,7 @@ def test_each_specialist_invoked_exactly_once(tmp_path):
 
     # Patch the router dispatch to avoid real LLM
     with patch.object(teacher, "_execute_action", return_value=(mock_result, None)):
-        decision = teacher.handle(cmd, ctx)
+        teacher.handle(cmd, ctx)
 
     planner.run.assert_called_once()
     evaluator.run.assert_called_once()
@@ -304,3 +305,29 @@ def test_recommendation_never_advances_stage(tmp_path):
 
     assert store.get("student://alice").current_stage_id == "kotlin-fundamentals"
     assert decision.progression_decision_ref is None
+
+
+def test_teacher_explains_report_ids_without_rescoring():
+    report = SimpleNamespace(
+        overall_status="INCOMPLETE_INFRASTRUCTURE",
+        findings=[
+            SimpleNamespace(finding_id="F-001", message="detekt unavailable")
+        ],
+        limitations=[
+            SimpleNamespace(
+                reason_code="toolchain_preparation_failed",
+                description="pinned version missing",
+            )
+        ],
+        overall_score_5=None,
+    )
+    action_result = SimpleNamespace(
+        present=lambda: "Official result",
+        result=SimpleNamespace(evaluation_report=report),
+    )
+
+    response = TeacherAgent._compose_response(action_result, [], "en-US")
+
+    assert "no final score" in response
+    assert "F-001: detekt unavailable" in response
+    assert "toolchain_preparation_failed: pinned version missing" in response

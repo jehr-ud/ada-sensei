@@ -15,12 +15,14 @@ from ada_sensei.exams.models import (
 from ada_sensei.storage.history import HistoryStore
 from ada_sensei.storage.results import ResultStore
 from exams_helpers import (
-    STATEMENT_MARKDOWN,
+    STATEMENT_JSON,
     OkRunner,
     make_attempt,
     make_context,
     make_evidence,
+    make_project,
 )
+from tests.toolchain.helpers import ReadyToolchainManager
 
 
 def _result() -> ExamResult:
@@ -36,7 +38,7 @@ def _result() -> ExamResult:
         exam_title="Test exam",
         evidence=list(evidence.evidence),
         score_calculation=ScoreCalculation(
-            rubric_id="exam-default",
+            rubric_id="unified-android",
             rubric_version="v1",
             raw_score_50=44,
             max_raw_score=50,
@@ -101,15 +103,16 @@ class FailingStore:
 
 
 def test_finish_surfaces_persistence_failures(tmp_path):
-    project = tmp_path / "proj"
-    project.mkdir()
-    statement = tmp_path / "exam.md"
-    statement.write_text(STATEMENT_MARKDOWN, encoding="utf-8")
+    project = make_project(tmp_path)
+    statement = tmp_path / "exam.json"
+    statement.write_text(STATEMENT_JSON, encoding="utf-8")
 
     services = make_context(tmp_path, project, student="student://s1")
     services.context.attempt_id = "attempt://a-missing"
 
-    action = ExamineAction(services, runner=OkRunner())
+    action = ExamineAction(
+        services, runner=OkRunner(), toolchain=ReadyToolchainManager()
+    )
     action.start(
         ExamStartInput(
             statement=str(statement), project_id="project://p1", confirmed=True

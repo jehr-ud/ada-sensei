@@ -20,24 +20,20 @@ def test_student_documentation_accepted(tmp_path):
     project = make_project(tmp_path)
     docs_dir = project / "docs" / "exam"
     docs_dir.mkdir(parents=True, exist_ok=True)
-    notes = docs_dir / "notes.md"
-    notes.write_text("# Design decisions\nWe separated layers.\n", encoding="utf-8")
-    readme = project / "docs" / "README.md"
-    readme.write_text("project readme", encoding="utf-8")
+    notes = docs_dir / "notes.json"
+    notes.write_text('{"notes":"design"}\n', encoding="utf-8")
+    readme = project / "docs" / "README.json"
+    readme.write_text('{"readme":true}\n', encoding="utf-8")
 
-    # With the default (broad) globs, both docs/exam/notes.md and docs/README.md
-    # are matched because docs/**/*.md covers the whole docs tree.
     from ada_sensei.exams.models import DocumentationRules
     definition = make_definition()
     matched = definition.documentation_paths(project)
-    assert notes in matched
-    # docs/README.md is also matched by the broader default globs
-    assert readme in matched
+    assert notes not in matched
+    assert readme not in matched
 
-    # With narrow globs (docs/exam only), only the exam subdirectory is matched.
     narrow_def = make_definition(
         documentation_rules=DocumentationRules(
-            accepted_globs=("docs/exam/**/*.md",)
+            accepted_globs=("docs/exam/**/*.json",)
         )
     )
     narrow_matched = narrow_def.documentation_paths(project)
@@ -46,10 +42,10 @@ def test_student_documentation_accepted(tmp_path):
 
     exam_docs = ExamDocs(project, definition.exam_id)
     exam_docs.write(
-        "student-notes.md", "generated mirror of the accepted documentation"
+        "student-notes.json", "generated mirror of the accepted documentation"
     )
-    assert notes.read_text(encoding="utf-8").startswith("# Design decisions")
-    assert is_generated(exam_docs.path("student-notes.md"))
+    assert notes.read_text(encoding="utf-8").startswith('{"notes":"design"}')
+    assert is_generated(exam_docs.path("student-notes.json"))
 
 
 def test_start_docs_created(tmp_path):

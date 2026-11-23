@@ -118,15 +118,14 @@ class ExamScorer:
         actually honoured, instead of being silently ignored by a hardcoded 50/50
         (RQ-EXM-017/018, ADR-024).
         """
+        if PROCESS_DIMENSION not in self.definition.dimension_ids:
+            return 0.5, 0.5
         dimension = self.definition.dimension(PROCESS_DIMENSION)
         declared = {sub.id: sub.weight for sub in dimension.subcriteria}
-        if DURATION_CRITERION not in declared or ASK_USAGE_CRITERION not in declared:
-            raise ValueError(
-                f"rubric {self.definition.ref} must declare the "
-                f"{DURATION_CRITERION!r} and {ASK_USAGE_CRITERION!r} subcriteria "
-                f"on the {PROCESS_DIMENSION!r} dimension"
-            )
-        return declared[DURATION_CRITERION], declared[ASK_USAGE_CRITERION]
+        return (
+            declared.get(DURATION_CRITERION, 0.5),
+            declared.get(ASK_USAGE_CRITERION, 0.5),
+        )
 
     # -- criteria ---------------------------------------------------------
 
@@ -211,19 +210,17 @@ class ExamScorer:
                 ask_weight=ask_weight,
             )
         )
-        arch_score, arch_note = architecture_score(architecture)
-
         supplied: dict[str, float | None] = {
             dimension: value.score
             for dimension, value in self.engine.score_dimensions(
                 evidence.evidence
             ).items()
         }
-        supplied["clean_architecture"] = arch_score
-        supplied[PROCESS_DIMENSION] = process_dimension_score(metrics)[0]
+        process_score = process_dimension_score(metrics)[0]
         metrics_note = (
-            "no allowed duration and no allowed ask count; exam process not evaluated"
-            if supplied[PROCESS_DIMENSION] is None
+            "no allowed duration and no allowed ask count; exam process metrics "
+            "are not evaluated"
+            if process_score is None
             else ""
         )
 
@@ -231,10 +228,6 @@ class ExamScorer:
         if build_failed:
             limitations.append(
                 "build failed; compilation-dependent dimensions are not evaluated"
-            )
-        if arch_score is None:
-            limitations.append(
-                "clean_architecture: not evaluated (no_evidence)"
             )
         if metrics_note:
             limitations.append(f"exam_process: {metrics_note}")

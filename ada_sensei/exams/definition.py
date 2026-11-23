@@ -1,36 +1,9 @@
-"""Authoritative exam definition resolution (RQ-EXM-002).
+"""JSON-only exam definition loading (RQ-EXM-052–063).
 
-The instructor's statement is the only source of exam requirements. It may be
-Markdown, a structured JSON specification, or a PDF; all three normalize into one
-``ExamDefinition`` and the original statement is always preserved so the
-normalized requirements stay reviewable (spec.md §Exam definition and
-documentation).
-
-The loader is deterministic: the same statement always yields the same exam id
-and the same ``req://`` ids, because both are derived from the statement text.
-
-## Supported Markdown requirement formats
-
-The loader recognises two explicit formats:
-
-**Format A — bullet list under a requirements heading:**
-
-The heading (level 1-6) must match one of the labels in ``_REQUIREMENT_HEADINGS``.
-Bullets may be:
-  - plain: ``- Some requirement text``
-  - explicit id+weight: ``- [REQ-01] (0.20) Some requirement text``
-
-**Format B — Markdown table under a criteria/evaluation heading:**
-
-The heading must match one of the labels in ``_CRITERIA_HEADINGS``.
-The table must have a column labelled ``ID`` or ``id`` and a column labelled
-``Criterio``, ``Criterion``, ``Criteria``, ``Description`` or ``Descripción``.
-An optional ``Peso funcional`` / ``Functional weight`` column provides weights.
-Row ids beginning with ``**`` (bold total rows) are skipped.
-
-If neither format is found and the statement has non-trivial content, a
-``limitations`` entry is added describing the unrecognised section and the
-section name, so the problem is explicit rather than silent.
+``exam-definition.schema.json`` is the single source of truth for the v1
+teacher-authored JSON format. Markdown and PDF files are no longer authoritative
+requirements sources: they may be attached as reading material, but the loader
+only accepts a validated ``.json`` definition.
 """
 
 from __future__ import annotations
@@ -38,575 +11,388 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from dataclasses import dataclass
+from importlib.resources import files
 from pathlib import Path
+from typing import Any
+
+from jsonschema import Draft202012Validator
 
 from .models import (
     DEFAULT_EXAM_RUBRIC_REF,
+    AcceptanceCriterion,
     DocumentationRules,
     ExamDefinition,
     ExamDefinitionError,
-    ExamRequirement,
+    RequirementSource,
+    RequirementType,
     StatementFormat,
-    requirement_id_for,
-)
-from .pdftext import PdfTextExtractionError, extract_text_file
-
-#: A Markdown heading that introduces a functional requirement list.
-_BULLET_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(?P<text>.+?)\s*$")
-_HEADING_RE = re.compile(r"^\s{0,3}(?P<hashes>#{1,6})\s+(?P<text>.+?)\s*$")
-#: ``- id: FR-1 (0.5) Some text`` gives explicit ids and weights.
-_WEIGHTED_RE = re.compile(
-    r"^\[(?P<id>[A-Za-z0-9_.\-]+)\]\s*(?:\((?P<weight>[0-9]*\.?[0-9]+)\)\s*)?(?P<text>.+)$"
-)
-#: ``allowed duration: 90m`` / ``allowed /ask count: 3`` in a Markdown front block.
-#: Separators and unit spellings are matched loosely because instructors write
-#: these headers by hand; an unparsed limit would silently turn a scored
-#: criterion into ``not_evaluated`` (RQ-EXM-007, RQ-EXM-017).
-_DURATION_RE = re.compile(
-    r"allowed[\s_/-]*duration"
-    r"(?:[\s_]+(?P<word>seconds?|secs?|minutes?|mins?|hours?|hrs?))?"
-    r"[\s_]*[:=]\s*(?P<value>\d+(?:\.\d+)?)\s*"
-    r"(?P<unit>seconds?|secs?|minutes?|mins?|hours?|hrs?|[smh])?",
-    re.I,
-)
-_ASK_RE = re.compile(
-    r"allowed[\s_/-]*(?:/\s*)?asks?[\s_]*(?:count|usage)?[\s_]*[:=]\s*(?P<value>\d+)",
-    re.I,
 )
 
-#: Unit spellings accepted in a Markdown duration header, in seconds.
-_DURATION_UNITS = {
-    "s": 1,
-    "sec": 1,
-    "secs": 1,
-    "second": 1,
-    "seconds": 1,
-    "m": 60,
-    "min": 60,
-    "mins": 60,
-    "minute": 60,
-    "minutes": 60,
-    "h": 3600,
-    "hr": 3600,
-    "hrs": 3600,
-    "hour": 3600,
-    "hours": 3600,
-}
-
-#: Markdown sections whose bullets are the functional requirements (Format A).
-_REQUIREMENT_HEADINGS = (
-    "requirement",
-    "requirements",
-    "functional requirement",
-    "functional requirements",
-    "requisitos",
-    "requisitos funcionales",
-)
-
-#: Markdown sections whose tables are the evaluation criteria (Format B).
-#: Numbered headings (``## 7. Criterios de evaluación``) are matched by
-#: stripping the leading number and dot first.
-_CRITERIA_HEADINGS = (
-    "criterios de evaluación",
-    "criterios de evaluacion",
-    "criterios de calificación",
-    "criterios de calificacion",
-    "evaluation criteria",
-    "grading criteria",
-    "scoring criteria",
-    "criteria",
-    "criterios",
-    "rúbrica",
-    "rubrica",
-    "rubric",
-)
-
-#: Markdown table row: ``| cell | cell | …``
-_TABLE_ROW_RE = re.compile(r"^\s*\|(.+)\|\s*$")
-#: Separator row: ``|---|---|``
-_TABLE_SEP_RE = re.compile(r"^\s*\|[\s|:\-]+\|\s*$")
-
-#: Column names accepted as the requirement id column (case-insensitive).
-_ID_COL_NAMES = {"id", "req", "código", "codigo", "code", "num", "#"}
-#: Column names accepted as the description column.
-_DESC_COL_NAMES = {
-    "criterio",
-    "criterion",
-    "criteria",
-    "description",
-    "descripción",
-    "descripcion",
-    "requirement",
-    "requisito",
-    "detalle",
-    "detail",
-}
-#: Column names accepted as the functional weight column.
-#: Listed from most specific to least specific; the first match wins.
-_WEIGHT_COL_NAMES_ORDERED = (
-    "peso funcional",
-    "functional weight",
-    "ponderación",
-    "ponderacion",
-    "weight",
-    "peso",
-    "puntaje",
-    "score",
-    "puntos",
-    "points",
-)
-_WEIGHT_COL_NAMES = set(_WEIGHT_COL_NAMES_ORDERED)
+_SCHEMA_PATH = "schemas/exam-definition.schema.json"
+_EXAM_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{2,63}$")
 
 
-def _strip_heading_number(label: str) -> str:
-    """Remove a leading ordinal (``7.``, ``3)``, ``II.``) from a heading label.
+@dataclass(frozen=True)
+class ExamDefinitionIssue:
+    """One actionable validation error tied to a JSON Pointer."""
 
-    ``## 7. Criterios de evaluación`` → ``criterios de evaluación``.
-    """
-    return re.sub(r"^\s*(?:\d+|[ivxlIVXL]+)[.)]\s*", "", label).strip()
+    pointer: str
+    code: str
+    message: str
+
+    def render(self) -> str:
+        return f"{self.pointer}: {self.code}: {self.message}"
+
+
+class ExamDefinitionValidationError(ExamDefinitionError):
+    """A JSON definition failed syntax, schema, or semantic validation."""
+
+    def __init__(self, issues: list[ExamDefinitionIssue]) -> None:
+        self.issues = tuple(issues)
+        super().__init__(
+            "invalid exam definition: " + "; ".join(issue.render() for issue in issues)
+        )
 
 
 class ExamDefinitionLoader:
-    """Resolves an ``ExamDefinition`` from an instructor statement."""
+    """Resolves a validated ``ExamDefinition`` from a teacher JSON file."""
 
     def load(
         self, source: str | Path, *, exam_id: str | None = None
     ) -> ExamDefinition:
         path = Path(source).expanduser()
         if not path.is_file():
-            raise ExamDefinitionError(f"exam statement not found: {path}")
-        suffix = path.suffix.lower()
-        if suffix in {".json"}:
-            return self._from_json(path, exam_id)
-        if suffix in {".pdf"}:
-            return self._from_pdf(path, exam_id)
-        return self._from_markdown(path, exam_id)
+            raise ExamDefinitionValidationError(
+                [
+                    ExamDefinitionIssue(
+                        "/", "definition_not_found", f"exam definition not found: {path}"
+                    )
+                ]
+            )
+        if path.suffix.lower() != ".json":
+            raise ExamDefinitionValidationError(
+                [
+                    ExamDefinitionIssue(
+                        "/",
+                        "unsupported_extension",
+                        "only .json exam definitions are accepted",
+                    )
+                ]
+            )
+        try:
+            raw = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise ExamDefinitionValidationError(
+                [
+                    ExamDefinitionIssue(
+                        "/", "definition_unreadable", str(exc)
+                    )
+                ]
+            ) from exc
+        return self._definition_from_json(
+            raw, exam_id, str(path), str(path)
+        )
 
     def load_text(
         self,
         text: str,
         *,
-        statement_format: StatementFormat = StatementFormat.markdown,
+        statement_format: StatementFormat = StatementFormat.json,
         exam_id: str | None = None,
         source: str = "inline",
     ) -> ExamDefinition:
-        """Normalize an inline statement without touching the filesystem."""
-        if statement_format is StatementFormat.json:
-            return self._definition_from_payload(
-                self._parse_json(text), exam_id, source, None, StatementFormat.json
+        """Normalize an inline JSON definition without touching the filesystem."""
+        if statement_format is not StatementFormat.json:
+            raise ExamDefinitionValidationError(
+                [
+                    ExamDefinitionIssue(
+                        "/",
+                        "unsupported_format",
+                        "only JSON exam definitions are accepted",
+                    )
+                ]
             )
-        if statement_format is StatementFormat.pdf:
-            raise ExamDefinitionError(
-                "inline statements cannot be PDF; pass a .pdf path to load()"
-            )
-        payload = self._parse_markdown(text)
-        return self._definition_from_payload(
-            payload, exam_id, source, None, StatementFormat.markdown, original=text
-        )
-
-    # -- formats ----------------------------------------------------------
-
-    def _from_markdown(self, path: Path, exam_id: str | None) -> ExamDefinition:
-        text = path.read_text(encoding="utf-8")
-        payload = self._parse_markdown(text)
-        return self._definition_from_payload(
-            payload,
-            exam_id,
-            str(path),
-            str(path),
-            StatementFormat.markdown,
-            original=text,
-        )
-
-    def _from_json(self, path: Path, exam_id: str | None) -> ExamDefinition:
-        raw = path.read_text(encoding="utf-8")
-        return self._definition_from_payload(
-            self._parse_json(raw),
-            exam_id,
-            str(path),
-            str(path),
-            StatementFormat.json,
-            original=raw,
-        )
-
-    def _from_pdf(self, path: Path, exam_id: str | None) -> ExamDefinition:
-        """RQ-EXM-002: the original PDF is preserved; text is normalized."""
-        try:
-            text = extract_text_file(path)
-        except (PdfTextExtractionError, OSError) as exc:
-            raise ExamDefinitionError(
-                f"could not read exam statement PDF {path}: {exc}"
-            ) from exc
-        limitations: list[str] = []
-        if not text.strip():
-            limitations.append(
-                f"no extractable text in {path.name}; normalized requirements "
-                "must be reviewed by the instructor"
-            )
-            text = ""
-        payload = self._parse_markdown(text)
-        definition = self._definition_from_payload(
-            payload,
-            exam_id,
-            str(path),
-            str(path),
-            StatementFormat.pdf,
-            original=text,
-        )
-        definition.limitations.extend(limitations)
-        return definition
-
-    # -- parsers ----------------------------------------------------------
+        return self._definition_from_json(text, exam_id, source, None)
 
     @staticmethod
-    def _parse_json(raw: str) -> dict:
+    def _schema() -> dict[str, Any]:
+        text = files("ada_sensei.exams").joinpath(_SCHEMA_PATH).read_text(
+            encoding="utf-8"
+        )
+        payload = json.loads(text)
+        if not isinstance(payload, dict):
+            raise ExamDefinitionError("bundled exam definition schema is invalid")
+        return payload
+
+    @classmethod
+    def _parse_json(cls, raw: str) -> dict[str, Any]:
         try:
             payload = json.loads(raw)
-        except ValueError as exc:
-            raise ExamDefinitionError(
-                f"exam statement is not valid JSON: {exc}"
+        except json.JSONDecodeError as exc:
+            raise ExamDefinitionValidationError(
+                [
+                    ExamDefinitionIssue(
+                        "/",
+                        "invalid_json",
+                        f"line {exc.lineno}, column {exc.colno}: {exc.msg}",
+                    )
+                ]
             ) from exc
         if not isinstance(payload, dict):
-            raise ExamDefinitionError(
-                "structured exam statements must be a JSON object"
+            raise ExamDefinitionValidationError(
+                [
+                    ExamDefinitionIssue(
+                        "/", "invalid_root", "exam definition must be a JSON object"
+                    )
+                ]
             )
         return payload
 
-    @staticmethod
-    def _parse_markdown(text: str) -> dict:
-        """Extract requirements, title, and limits from a Markdown statement.
-
-        Supports two formats:
-        - Format A: bullet list under a requirements heading.
-        - Format B: Markdown table under a criteria/evaluation heading.
-
-        Returns a dict with keys ``title``, ``requirements``,
-        ``allowed_duration_seconds``, ``allowed_ask_count``, and
-        ``limitations`` (a list of human-readable parse warnings).
-        """
-        lines = text.splitlines()
-        title = ""
-        front: list[str] = []
-        limitations: list[str] = []
-
-        # --- pass 1: collect title and determine section types -----------
-        # We need to scan all headings to find what sections exist and
-        # which section type (bullet vs table) each is.
-        sections: list[tuple[int, str, str]] = []  # (line_idx, section_type, heading_label)
-        for idx, raw_line in enumerate(lines):
-            heading = _HEADING_RE.match(raw_line)
-            if heading:
-                raw_label = heading.group("text").strip()
-                label = raw_label.lower().rstrip(":")
-                stripped = _strip_heading_number(label)
-                if not title:
-                    title = raw_label
-                if label in _REQUIREMENT_HEADINGS or stripped in _REQUIREMENT_HEADINGS:
-                    sections.append((idx, "bullets", raw_label))
-                elif label in _CRITERIA_HEADINGS or stripped in _CRITERIA_HEADINGS:
-                    sections.append((idx, "table", raw_label))
-
-        # --- pass 2: extract requirements --------------------------------
-        requirements: list[dict] = []
-
-        for sec_idx, (line_idx, sec_type, heading_label) in enumerate(sections):
-            end_idx = sections[sec_idx + 1][0] if sec_idx + 1 < len(sections) else len(lines)
-            section_lines = lines[line_idx + 1 : end_idx]
-
-            if sec_type == "bullets":
-                found = ExamDefinitionLoader._parse_bullet_requirements(
-                    section_lines, heading_label
-                )
-                requirements.extend(found)
-            elif sec_type == "table":
-                found, table_limitations = ExamDefinitionLoader._parse_table_requirements(
-                    section_lines, heading_label
-                )
-                requirements.extend(found)
-                limitations.extend(table_limitations)
-
-            if not requirements and not found:
-                limitations.append(
-                    f"section '{heading_label}' matched a known criteria heading "
-                    "but no parsable requirements were found in it; check the "
-                    "format (expected bullets or a table with ID and description columns)"
-                )
-
-        # Collect non-section lines for duration/ask scanning
-        # (everything outside the recognised sections)
-        in_section = set()
-        for sec_idx, (line_idx, _, _) in enumerate(sections):
-            end_idx = sections[sec_idx + 1][0] if sec_idx + 1 < len(sections) else len(lines)
-            in_section.update(range(line_idx, end_idx))
-
-        for idx, raw_line in enumerate(lines):
-            if idx not in in_section:
-                front.append(raw_line)
-
-        header = "\n".join(front)
-        return {
-            "title": title,
-            "requirements": requirements,
-            "allowed_duration_seconds": _scan_duration(header),
-            "allowed_ask_count": _scan_asks(header),
-            "limitations": limitations,
-        }
-
-    @staticmethod
-    def _parse_bullet_requirements(
-        section_lines: list[str], heading_label: str
-    ) -> list[dict]:
-        """Extract requirements from a bullet list section (Format A)."""
-        requirements: list[dict] = []
-        for raw_line in section_lines:
-            bullet = _BULLET_RE.match(raw_line)
-            if bullet is None:
-                continue
-            body = bullet.group("text").strip()
-            if not body or body.startswith("<!--"):
-                continue
-            requirements.append(
-                ExamDefinitionLoader._markdown_requirement(body, len(requirements))
-            )
-        return requirements
-
-    @staticmethod
-    def _parse_table_requirements(
-        section_lines: list[str], heading_label: str
-    ) -> tuple[list[dict], list[str]]:
-        """Extract requirements from a Markdown table section (Format B).
-
-        Returns ``(requirements, limitations)``. Limitations describe parse
-        warnings without raising an exception, so the caller can surface them
-        instead of silently returning an empty list.
-        """
-        limitations: list[str] = []
-        # Collect the table lines (must start with |)
-        table_lines = [l for l in section_lines if _TABLE_ROW_RE.match(l)]
-        if not table_lines:
-            return [], []
-
-        # First non-separator row is the header
-        header_row: list[str] | None = None
-        data_rows: list[list[str]] = []
-        for line in table_lines:
-            if _TABLE_SEP_RE.match(line):
-                continue
-            cells = [c.strip() for c in line.strip().strip("|").split("|")]
-            if header_row is None:
-                header_row = cells
-            else:
-                data_rows.append(cells)
-
-        if header_row is None:
-            limitations.append(
-                f"section '{heading_label}': table found but no header row could be parsed"
-            )
-            return [], limitations
-
-        # Locate relevant columns
-        header_lower = [h.lower().strip() for h in header_row]
-        id_col = next(
-            (i for i, h in enumerate(header_lower) if h in _ID_COL_NAMES), None
-        )
-        desc_col = next(
-            (i for i, h in enumerate(header_lower) if h in _DESC_COL_NAMES), None
-        )
-        # Weight column uses priority order: "peso funcional" wins over "puntaje".
-        weight_col: int | None = None
-        for col_name in _WEIGHT_COL_NAMES_ORDERED:
-            idx = next((i for i, h in enumerate(header_lower) if h == col_name), None)
-            if idx is not None:
-                weight_col = idx
-                break
-
-        if id_col is None:
-            limitations.append(
-                f"section '{heading_label}': table has no recognized ID column; "
-                f"headers found: {header_row}. Expected one of: {sorted(_ID_COL_NAMES)}"
-            )
-            return [], limitations
-        if desc_col is None:
-            limitations.append(
-                f"section '{heading_label}': table has no recognized description column; "
-                f"headers found: {header_row}. Expected one of: {sorted(_DESC_COL_NAMES)}"
-            )
-            return [], limitations
-
-        requirements: list[dict] = []
-        for row in data_rows:
-            if len(row) <= max(id_col, desc_col):
-                continue
-            req_id = _strip_md_bold(row[id_col]).strip()
-            description = _strip_md_bold(row[desc_col]).strip()
-            # Skip total/summary rows (bold id or empty description)
-            if not req_id or not description or req_id.startswith("*"):
-                continue
-            # Skip obviously non-requirement rows (totals)
-            if req_id.lower() in {"total", "totales", "subtotal", "suma"}:
-                continue
-            weight: float | None = None
-            if weight_col is not None and weight_col < len(row):
-                raw_w = _strip_md_bold(row[weight_col]).strip().rstrip("%")
-                try:
-                    weight = float(raw_w)
-                    # If column is in percentage points (e.g. 20), normalize to 0-1
-                    if weight > 1.0:
-                        weight = weight / 100.0
-                except (ValueError, TypeError):
-                    weight = None
-            requirements.append(
-                {
-                    "requirement_id": req_id,
-                    "description": description,
-                    "weight": weight,
-                }
-            )
-
-        if not requirements:
-            limitations.append(
-                f"section '{heading_label}': table parsed but contained no "
-                "valid requirement rows (all rows may be total/summary rows or "
-                "the id/description columns could not be matched)"
-            )
-        return requirements, limitations
-
-    @staticmethod
-    def _markdown_requirement(body: str, index: int) -> dict:
-        explicit = _WEIGHTED_RE.match(body)
-        if explicit:
-            return {
-                "requirement_id": explicit.group("id"),
-                "description": explicit.group("text").strip(),
-                "weight": (
-                    float(explicit.group("weight"))
-                    if explicit.group("weight")
-                    else None
-                ),
-            }
-        return {
-            "requirement_id": requirement_id_for(body, index),
-            "description": body,
-            "weight": None,
-        }
-
-    # -- normalization ----------------------------------------------------
-
-    def _definition_from_payload(
-        self,
-        payload: dict,
+    @classmethod
+    def _definition_from_json(
+        cls,
+        raw: str,
         exam_id: str | None,
         source: str,
         source_path: str | None,
-        statement_format: StatementFormat,
-        *,
-        original: str = "",
     ) -> ExamDefinition:
-        requirements = self._requirements(payload.get("requirements") or [])
-        title = str(payload.get("title") or "").strip()
-        version = str(payload.get("version") or "v1")
-        statement = original or str(payload.get("statement") or "")
-        resolved_exam_id = exam_id or self._exam_id_for(
-            title, statement, source_path or source
-        )
-        rules = self._documentation_rules(payload.get("documentation_rules"))
-        # Surface parse limitations (from table/bullet parsing) explicitly so
-        # the user can see why requirements may be absent rather than getting a
-        # silent empty list (RQ-EXM-002, spec.md §Exam definition and documentation).
-        parse_limitations: list[str] = [
-            str(lim) for lim in (payload.get("limitations") or [])
-        ]
-        return ExamDefinition(
-            exam_id=resolved_exam_id,
-            title=title or resolved_exam_id,
-            version=version,
-            statement_format=statement_format,
-            statement_source=source,
-            original_statement=statement,
-            original_source_path=source_path,
-            requirements=requirements,
-            allowed_duration_seconds=_as_optional_int(
-                payload.get("allowed_duration_seconds")
-            ),
-            allowed_ask_count=_as_optional_int(payload.get("allowed_ask_count")),
-            rubric_ref=str(payload.get("rubric_ref") or DEFAULT_EXAM_RUBRIC_REF),
-            documentation_rules=rules,
-            limitations=parse_limitations,
-        )
+        payload = cls._parse_json(raw)
+        issues = cls._validate(payload)
+        if issues:
+            raise ExamDefinitionValidationError(issues)
+        definition = cls._build_definition(payload, raw, exam_id, source, source_path)
+        try:
+            return ExamDefinition.model_validate(definition)
+        except ValueError as exc:
+            raise ExamDefinitionValidationError(
+                [ExamDefinitionIssue("/", "invalid_definition", str(exc))]
+            ) from exc
+
+    @classmethod
+    def _validate(cls, payload: dict[str, Any]) -> list[ExamDefinitionIssue]:
+        issues: list[ExamDefinitionIssue] = []
+        validator = Draft202012Validator(cls._schema())
+        for error in validator.iter_errors(payload):
+            issues.append(cls._schema_issue(error))
+        issues.extend(cls._validate_semantics(payload))
+        return issues
 
     @staticmethod
-    def _requirements(raw: object) -> list[ExamRequirement]:
-        """Normalize requirements and give them weights summing to 1.0.
+    def _schema_issue(error: Any) -> ExamDefinitionIssue:
+        pointer = ExamDefinitionLoader._pointer(error.absolute_path)
+        code = str(error.validator or "schema_error")
+        if error.validator == "required":
+            match = re.search(r"'([^']+)' is a required property", error.message)
+            if match:
+                pointer = ExamDefinitionLoader._pointer(
+                    list(error.absolute_path) + [match.group(1)]
+                )
+        return ExamDefinitionIssue(pointer, code, error.message)
 
-        An instructor who declares no weights gets equal shares; declared weights
-        are kept verbatim, so a malformed weighting surfaces as a validation error
-        rather than being silently repaired (spec.md §Functional requirements).
-        """
-        if not isinstance(raw, list):
-            raise ExamDefinitionError(
-                "exam requirements must be a list of requirement objects"
-            )
-        entries: list[dict] = []
-        for index, item in enumerate(raw):
-            if isinstance(item, str):
-                entries.append(
-                    {
-                        "requirement_id": requirement_id_for(item, index),
-                        "description": item,
-                        "weight": None,
-                    }
-                )
+    @staticmethod
+    def _pointer(path: Any) -> str:
+        parts = [str(part) for part in path]
+        if not parts:
+            return "/"
+        escaped = [part.replace("~", "~0").replace("/", "~1") for part in parts]
+        return "/" + "/".join(escaped)
+
+    @staticmethod
+    def _validate_semantics(payload: dict[str, Any]) -> list[ExamDefinitionIssue]:
+        issues: list[ExamDefinitionIssue] = []
+        requirements = payload.get("requirements")
+        if not isinstance(requirements, list):
+            return issues
+
+        seen_requirements: dict[str, int] = {}
+        seen_criteria: dict[str, str] = {}
+        functional_weights: list[float] = []
+        for index, raw_requirement in enumerate(requirements):
+            if not isinstance(raw_requirement, dict):
                 continue
-            if not isinstance(item, dict):
-                raise ExamDefinitionError(
-                    f"exam requirement #{index + 1} must be a string or an object, "
-                    f"got {type(item).__name__}"
+            requirement_id = str(raw_requirement.get("id") or "")
+            if requirement_id in seen_requirements:
+                issues.append(
+                    ExamDefinitionIssue(
+                        f"/requirements/{index}/id",
+                        "duplicate_id",
+                        f"duplicate requirement id {requirement_id!r} "
+                        f"(first used at index {seen_requirements[requirement_id]})",
+                    )
                 )
-            description = str(item.get("description") or item.get("text") or "").strip()
-            if not description:
-                raise ExamDefinitionError(
-                    f"exam requirement #{index + 1} has no description"
+            else:
+                seen_requirements[requirement_id] = index
+
+            if raw_requirement.get("type") == "functional":
+                try:
+                    functional_weights.append(float(raw_requirement.get("weight")))
+                except (TypeError, ValueError):
+                    pass
+
+            source = raw_requirement.get("source")
+            if not isinstance(source, dict) or not source.get("file") or not source.get(
+                "section"
+            ):
+                issues.append(
+                    ExamDefinitionIssue(
+                        f"/requirements/{index}/source",
+                        "missing_source",
+                        "source.file and source.section are required",
+                    )
                 )
-            entries.append(
-                {
-                    "requirement_id": str(
-                        item.get("requirement_id")
-                        or item.get("id")
-                        or requirement_id_for(description, index)
+
+            criteria = raw_requirement.get("acceptance_criteria")
+            if not isinstance(criteria, list):
+                continue
+            for criterion_index, criterion in enumerate(criteria):
+                if not isinstance(criterion, dict):
+                    continue
+                criterion_id = str(criterion.get("id") or "")
+                previous = seen_criteria.get(criterion_id)
+                pointer = (
+                    f"/requirements/{index}/acceptance_criteria/{criterion_index}/id"
+                )
+                if previous is not None:
+                    issues.append(
+                        ExamDefinitionIssue(
+                            pointer,
+                            "duplicate_id",
+                            f"duplicate acceptance criterion id {criterion_id!r} "
+                            f"(first used by {previous})",
+                        )
+                    )
+                else:
+                    seen_criteria[criterion_id] = requirement_id
+                verification = criterion.get("verification")
+                if not isinstance(verification, list) or not verification:
+                    issues.append(
+                        ExamDefinitionIssue(
+                            f"/requirements/{index}/acceptance_criteria/"
+                            f"{criterion_index}/verification",
+                            "missing_verification",
+                            "at least one verification method is required",
+                        )
+                    )
+
+        if functional_weights:
+            total = sum(functional_weights)
+            if abs(total - 1.0) > 1e-9:
+                issues.append(
+                    ExamDefinitionIssue(
+                        "/requirements",
+                        "invalid_functional_weights",
+                        f"functional requirement weights must sum to 1.0, got {total}",
+                    )
+                )
+
+        rubric_ref = payload.get("rubric_ref")
+        if rubric_ref != DEFAULT_EXAM_RUBRIC_REF:
+            issues.append(
+                ExamDefinitionIssue(
+                    "/rubric_ref",
+                    "incompatible_rubric",
+                    f"rubric_ref must be {DEFAULT_EXAM_RUBRIC_REF!r}",
+                )
+            )
+        return issues
+
+    @staticmethod
+    def _build_definition(
+        payload: dict[str, Any],
+        raw: str,
+        exam_id: str | None,
+        source: str,
+        source_path: str | None,
+    ) -> dict[str, Any]:
+        resolved_exam_id = str(exam_id or payload["exam_id"])
+        if exam_id is None and not _EXAM_ID_RE.fullmatch(resolved_exam_id):
+            raise ExamDefinitionValidationError(
+                [
+                    ExamDefinitionIssue(
+                        "/exam_id",
+                        "invalid_exam_id",
+                        "exam_id must match ^[a-z0-9][a-z0-9-]{2,63}$",
+                    )
+                ]
+            )
+        return {
+            "exam_id": resolved_exam_id,
+            "schema_version": str(payload["schema_version"]),
+            "title": str(payload["title"]),
+            "version": str(payload["version"]),
+            "description": str(payload.get("description") or ""),
+            "statement_language": payload.get("statement_language"),
+            "statement_format": StatementFormat.json,
+            "statement_source": source,
+            "original_statement": raw,
+            "original_source_path": source_path,
+            "definition_snapshot": raw,
+            "definition_sha256": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+            "requirements": [
+                ExamDefinitionLoader._build_requirement(item, index)
+                for index, item in enumerate(payload["requirements"])
+            ],
+            "allowed_duration_seconds": _as_optional_int(
+                payload.get("allowed_duration_seconds")
+            ),
+            "allowed_ask_count": _as_optional_int(payload.get("allowed_ask_count")),
+            "rubric_ref": str(payload["rubric_ref"]),
+            "documentation_rules": ExamDefinitionLoader._documentation_rules(
+                payload.get("documentation_rules")
+            ),
+            "project_constraints": dict(payload.get("project_constraints") or {}),
+            "limitations": [],
+        }
+
+    @staticmethod
+    def _build_requirement(item: dict[str, Any], index: int) -> dict[str, Any]:
+        requirement_type = RequirementType(str(item["type"]))
+        dimension = (
+            "functional_requirements"
+            if requirement_type is RequirementType.functional
+            else requirement_type.value
+        )
+        source = item.get("source")
+        return {
+            "requirement_id": str(item["id"]),
+            "requirement_type": requirement_type,
+            "title": str(item["title"]),
+            "description": str(item["description"]),
+            "dimension": dimension,
+            "weight": float(item["weight"]),
+            "source": (
+                RequirementSource(
+                    file=str(source["file"]),
+                    section=str(source["section"]),
+                    reference=(
+                        str(source["reference"]) if source.get("reference") else None
                     ),
-                    "description": description,
-                    "dimension": str(
-                        item.get("dimension") or "functional_requirements"
-                    ),
-                    "weight": item.get("weight"),
-                    "evidence_expectations": [
-                        str(e) for e in (item.get("evidence_expectations") or [])
+                )
+                if isinstance(source, dict)
+                else None
+            ),
+            "acceptance_criteria": [
+                AcceptanceCriterion(
+                    id=str(criterion["id"]),
+                    description=str(criterion["description"]),
+                    verification=list(criterion["verification"]),
+                    evidence_hints=[
+                        str(hint) for hint in (criterion.get("evidence_hints") or [])
                     ],
-                }
-            )
-        if not entries:
-            return []
-        declared = [e.get("weight") for e in entries]
-        if all(w is None for w in declared):
-            share = 1.0 / len(entries)
-            weights = [share] * len(entries)
-        else:
-            if any(w is None for w in declared):
-                raise ExamDefinitionError(
-                    "exam requirements must either all declare a weight or "
-                    "none of them"
                 )
-            weights = [float(w) for w in declared]
-        return [
-            ExamRequirement(
-                requirement_id=e["requirement_id"],
-                description=e["description"],
-                dimension=e.get("dimension", "functional_requirements"),
-                weight=weight,
-                evidence_expectations=e.get("evidence_expectations", []),
-            )
-            for e, weight in zip(entries, weights, strict=True)
-        ]
+                for criterion in item["acceptance_criteria"]
+            ],
+            "related_requirements": [
+                str(value) for value in (item.get("related_requirements") or [])
+            ],
+            "tags": [str(value) for value in (item.get("tags") or [])],
+            "evidence_expectations": [
+                hint
+                for criterion in item["acceptance_criteria"]
+                for hint in (criterion.get("evidence_hints") or [])
+            ],
+        }
 
     @staticmethod
     def _documentation_rules(raw: object) -> DocumentationRules:
@@ -614,9 +400,7 @@ class ExamDefinitionLoader:
             return DocumentationRules()
         defaults = DocumentationRules()
         return DocumentationRules(
-            accepted_globs=tuple(
-                raw.get("accepted_globs") or defaults.accepted_globs
-            ),
+            accepted_globs=tuple(raw.get("accepted_globs") or defaults.accepted_globs),
             required_files=tuple(raw.get("required_files") or ()),
             documentation_is_advisory=bool(
                 raw.get(
@@ -626,36 +410,6 @@ class ExamDefinitionLoader:
             ),
         )
 
-    @staticmethod
-    def _exam_id_for(title: str, statement: str, source: str) -> str:
-        """A stable id derived from the statement, never from a prompt."""
-        digest = hashlib.sha256(
-            f"{title}\n{statement}\n{source}".encode()
-        ).hexdigest()[:12]
-        return f"exam://{digest}"
-
-
-def _strip_md_bold(text: str) -> str:
-    """Remove Markdown bold markers (``**text**`` → ``text``)."""
-    return re.sub(r"\*{1,2}([^*]*)\*{1,2}", r"\1", text)
-
-
-def _scan_duration(text: str) -> int | None:
-    match = _DURATION_RE.search(text)
-    if match is None:
-        return None
-    value = float(match.group("value"))
-    # A bare number is read as minutes, matching how instructors write "60" for
-    # a one-hour exam. A spelled-out unit in the header (``allowed_duration_
-    # seconds: 5400``) is honoured before falling back to that default.
-    unit = (match.group("unit") or match.group("word") or "m").lower()
-    return int(value * _DURATION_UNITS.get(unit, 60))
-
-
-def _scan_asks(text: str) -> int | None:
-    match = _ASK_RE.search(text)
-    return int(match.group("value")) if match else None
-
 
 def _as_optional_int(value: object) -> int | None:
     if value is None or value == "":
@@ -663,9 +417,17 @@ def _as_optional_int(value: object) -> int | None:
     try:
         return int(value)
     except (TypeError, ValueError) as exc:
-        raise ExamDefinitionError(
-            f"expected an integer limit, got {value!r}"
+        raise ExamDefinitionValidationError(
+            [
+                ExamDefinitionIssue(
+                    "/", "invalid_limit", f"expected an integer limit, got {value!r}"
+                )
+            ]
         ) from exc
 
 
-__all__ = ["ExamDefinitionLoader"]
+__all__ = [
+    "ExamDefinitionIssue",
+    "ExamDefinitionLoader",
+    "ExamDefinitionValidationError",
+]

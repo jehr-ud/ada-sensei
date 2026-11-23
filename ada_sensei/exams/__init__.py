@@ -2,12 +2,16 @@
 
 ``exam-init`` adds an exam lifecycle, process evidence, an architecture report and a
 PDF on top of ``006-evaluate``. It reuses the same ``EvaluationEngine``,
-``RubricEngine`` and structured-output pipeline and supplies its own versioned
-``RubricDefinition`` (``exam-default:v1``), so project evaluation has exactly one
-implementation (ADR-022, ADR-023, ADR-024).
+``RubricEngine`` and structured-output pipeline and supplies the versioned
+``RubricDefinition`` (``unified-android:v1``), so project evaluation has exactly
+one implementation (ADR-022, ADR-023, ADR-024).
 """
 
-from .definition import ExamDefinitionLoader
+from .definition import (
+    ExamDefinitionIssue,
+    ExamDefinitionLoader,
+    ExamDefinitionValidationError,
+)
 from .docs import DocsWriteError, ExamDocs, ExamDocsWriter
 from .events import EVENT_MAP, ExamEventBridge, ExamEventLog
 from .lifecycle import TRANSITIONS, ExamLifecycle
@@ -71,7 +75,9 @@ __all__ = [
     "ExamAttemptNotFoundError",
     "ExamDefinition",
     "ExamDefinitionError",
+    "ExamDefinitionIssue",
     "ExamDefinitionLoader",
+    "ExamDefinitionValidationError",
     "ExamDocs",
     "ExamDocsWriter",
     "ExamError",

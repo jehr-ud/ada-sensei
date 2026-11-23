@@ -51,3 +51,11 @@ proyecto.
   `ExamReportGenerator` permanecen intactos.
 - El progreso y la apertura son aditivos: no cambian la puntuación ni el orden
   de ejecución de la evaluación.
+
+
+## Adenda 2026-11-20 — contenido y responsabilidad del informe
+
+El informe PDF se genera desde `EvaluationReport` estructurado por `EvaluatorAgent`.
+No se usa `ExamInterpretationAgent` para redactar contenido oficial ni calcular
+notas. `TeacherAgent` consume el mismo resultado para tutoría y no puede editarlo.
+El generador presenta las tablas R1–R12 definidas en la adenda normativa.

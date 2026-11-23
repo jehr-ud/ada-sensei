@@ -17,7 +17,7 @@ def _result() -> ExamResult:
     attempt = make_attempt(status=ExamStatus.completed)
     evidence = make_evidence()
     calculation = ScoreCalculation(
-        rubric_id="exam-default",
+        rubric_id="unified-android",
         rubric_version="v1",
         raw_score_50=44,
         max_raw_score=50,
@@ -36,7 +36,7 @@ def _result() -> ExamResult:
         exam_attempt_id=attempt.exam_attempt_id,
         attempt_id=attempt.attempt_id,
         exam_title=make_definition().title,
-        rubric_id="exam-default",
+        rubric_id="unified-android",
         rubric_version="v1",
         overall_score=88.2,
         evidence=list(evidence.evidence),

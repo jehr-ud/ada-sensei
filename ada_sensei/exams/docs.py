@@ -216,13 +216,15 @@ def render_rubric(definition: ExamDefinition) -> str:
     ]
     for dim in EXAM_RUBRIC.dimensions:
         lines.append(f"| `{dim.id}` | {dim.weight:.0%} | {dim.description} |")
-    process = EXAM_RUBRIC.dimension("exam_process")
-    lines += ["", "### Exam process subcriteria", ""]
-    for sub in process.subcriteria:
-        lines.append(
-            f"- `{sub.id}` — {sub.weight:.0%} of exam process "
-            f"({sub.weight * process.weight:.0%} of the exam): {sub.description}"
-        )
+    for dim in EXAM_RUBRIC.dimensions:
+        if not dim.subcriteria:
+            continue
+        lines += ["", f"### `{dim.id}` subcriteria", ""]
+        for sub in dim.subcriteria:
+            lines.append(
+                f"- `{sub.id}` — {sub.weight:.0%} of `{dim.id}` "
+                f"({sub.weight * dim.weight:.0%} of the exam): {sub.description}"
+            )
     lines += [
         "",
         "The raw score is computed as "

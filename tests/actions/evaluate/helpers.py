@@ -83,6 +83,11 @@ class Fixture:
         if wrapper:
             (proj / "gradlew").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
             (proj / "gradlew").chmod(0o755)
+        sdk = proj / ".android-sdk"
+        sdk.mkdir(exist_ok=True)
+        (proj / "local.properties").write_text(
+            f"sdk.dir={sdk}\n", encoding="utf-8"
+        )
         return proj
 
     @staticmethod

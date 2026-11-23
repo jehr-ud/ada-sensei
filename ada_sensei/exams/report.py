@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ..evaluation.models import EvaluationReport
 from ..urns import URN
 from .models import SUGGESTED_GRADE_LABEL, ExamDefinition, ExamResult
 from .pdf import SimplePdfWriter
@@ -39,6 +40,18 @@ SECTIONS = (
     "Limitations",
     "Suggested grade",
     "Methodology",
+    "R1 Identification",
+    "R2 Global summary",
+    "R3 Dimension result",
+    "R4 Functional requirements",
+    "R5 Unit tests",
+    "R6 Code quality",
+    "R7 MVVM",
+    "R8 Android practices",
+    "R9 Tool status",
+    "R10 Exam metrics",
+    "R11 Deterministic observations",
+    "R12 Limitations and traceability",
 )
 
 
@@ -207,7 +220,7 @@ class ExamReportGenerator:
 
     def _sections(self, result: ExamResult) -> list[tuple[str, str]]:
         """(heading, body) pairs; body uses blank-line-separated blocks."""
-        return [
+        sections = [
             ("Timing", self._timing(result)),
             ("Executive assessment", result.feedback or "No executive assessment."),
             ("Functional requirements", self._requirements(result)),
@@ -242,8 +255,229 @@ class ExamReportGenerator:
             ),
             ("Methodology", self._methodology(result)),
         ]
+        return sections + self._typed_sections(result)
 
     # -- section bodies ---------------------------------------------------
+
+    def _typed_sections(self, result: ExamResult) -> list[tuple[str, str]]:
+        report = result.evaluation_report
+        if report is None:
+            return []
+        return [
+            ("R1 Identification", self._r1(report)),
+            ("R2 Global summary", self._r2(report)),
+            ("R3 Dimension result", self._r3(report)),
+            ("R4 Functional requirements", self._r4(report)),
+            ("R5 Unit tests", self._r5(report)),
+            ("R6 Code quality", self._r6(report)),
+            ("R7 MVVM", self._r7(report)),
+            ("R8 Android practices", self._r8(report)),
+            ("R9 Tool status", self._r9(report)),
+            ("R10 Exam metrics", self._r10(result)),
+            ("R11 Deterministic observations", self._r11(report)),
+            ("R12 Limitations and traceability", self._r12(report)),
+        ]
+
+    @staticmethod
+    def _r1(report: EvaluationReport) -> str:
+        return "\n".join(
+            [
+                f"Report: {report.report_id}",
+                f"Student: {report.student_id or '(unknown)'}",
+                f"Project: {report.project_id or '(unknown)'}",
+                f"Exam: {report.exam_id or '(unknown)'}",
+                f"Attempt: {report.attempt_id or '(unknown)'}",
+                f"Generated: {_timestamp(report.generated_at)}",
+                f"Locale: {report.locale}",
+                f"Rubric: {report.rubric_id}:{report.rubric_version}",
+                f"Status: {report.overall_status.value}",
+            ]
+        )
+
+    @staticmethod
+    def _r2(report: EvaluationReport) -> str:
+        evaluated = sum(
+            1
+            for item in report.dimension_results
+            if item.score is not None
+        )
+        coverage = sum(
+            item.weight
+            for item in report.dimension_results
+            if item.score is not None
+        )
+        return "\n".join(
+            [
+                f"Score: {_or_not_evaluated(report.overall_score_5)} of 5.00",
+                f"Percentage: "
+                f"{_percentage(report.overall_score_5)}",
+                f"Dimensions evaluated: {evaluated}/{len(report.dimension_results)}",
+                f"Coverage: {coverage:.2f}",
+                f"Status: {report.overall_status.value}",
+            ]
+        )
+
+    @staticmethod
+    def _r3(report: EvaluationReport) -> str:
+        lines = ["ID | Dimension | Weight | Score | Contribution | Status | Coverage"]
+        for item in report.dimension_results:
+            lines.append(
+                f"{item.dimension_id} | {item.name} | {item.weight:.2f} | "
+                f"{_or_not_evaluated(item.score)} | "
+                f"{_or_not_evaluated(item.weighted_contribution)} | "
+                f"{item.status.value} | {item.coverage:.2f}"
+                + (
+                    f" | reason={item.reason_code}"
+                    if item.reason_code
+                    else ""
+                )
+            )
+        return "\n".join(lines)
+
+    @staticmethod
+    def _r4(report: EvaluationReport) -> str:
+        lines = ["ID | Requirement | Weight | Status | Score | Cases | Evidence"]
+        for item in report.requirement_results:
+            lines.append(
+                f"{item.requirement_id} | {item.description} | "
+                f"{item.functional_weight:.3f} | {item.status.value} | "
+                f"{_or_not_evaluated(item.score)} | "
+                f"{item.passed_cases}/{item.total_cases} | "
+                f"{', '.join(item.evidence_ids) or '-'}"
+            )
+        return "\n".join(lines) if len(lines) > 1 else "No requirements declared."
+
+    @staticmethod
+    def _r5(report: EvaluationReport) -> str:
+        summary = report.test_summary
+        return "\n".join(
+            [
+                f"Executed: {summary.executed}",
+                f"Passed: {summary.passed}",
+                f"Failed: {summary.failed}",
+                f"Skipped: {summary.skipped}",
+                f"Errors: {summary.errors}",
+                f"Requirements covered: {summary.covered_requirements}/"
+                f"{summary.total_requirements} ({summary.coverage_ratio:.2%})",
+                f"Threshold {summary.coverage_threshold:.0%} met: "
+                f"{'yes' if summary.threshold_met else 'no'}",
+                f"T1: {_or_not_evaluated(summary.t1_score)}",
+                f"T2: {_or_not_evaluated(summary.t2_score)}",
+                f"T3: {_or_not_evaluated(summary.t3_score)}",
+                f"Line coverage: {_or_not_evaluated(summary.line_coverage_percent)}",
+            ]
+        )
+
+    @staticmethod
+    def _r6(report: EvaluationReport) -> str:
+        quality = next(
+            (
+                item
+                for item in report.dimension_results
+                if item.dimension_id == "code_quality"
+            ),
+            None,
+        )
+        lines = ["Tool | Weight | Status | Score | Contribution"]
+        if quality is not None:
+            for item in quality.criteria:
+                lines.append(
+                    f"{item.criterion_id} | {item.weight:.2f} | "
+                    f"{item.status.value} | {_or_not_evaluated(item.score)} | "
+                    f"{_or_not_evaluated(item.weighted_score)}"
+                )
+        lines.append("Finding | Rule | Severity | Message | Evidence")
+        for item in report.findings:
+            lines.append(
+                f"{item.finding_id} | {item.rule_id} | {item.severity} | "
+                f"{item.message} | {', '.join(item.evidence_ids) or '-'}"
+            )
+        return "\n".join(lines)
+
+    @staticmethod
+    def _r7(report: EvaluationReport) -> str:
+        mvvm = next(
+            (
+                item
+                for item in report.dimension_results
+                if item.dimension_id == "mvvm"
+            ),
+            None,
+        )
+        lines = ["ID | Weight | Status | Score | Contribution | Evidence"]
+        if mvvm is not None:
+            for item in mvvm.criteria:
+                lines.append(
+                    f"{item.criterion_id} | {item.weight:.2f} | "
+                    f"{item.status.value} | {_or_not_evaluated(item.score)} | "
+                    f"{_or_not_evaluated(item.weighted_score)} | "
+                    f"{', '.join(item.evidence_ids) or '-'}"
+                )
+        return "\n".join(lines)
+
+    @staticmethod
+    def _r8(report: EvaluationReport) -> str:
+        android = next(
+            (
+                item
+                for item in report.dimension_results
+                if item.dimension_id == "android_practices"
+            ),
+            None,
+        )
+        lines = ["ID | Weight | Status | Score | Contribution | Evidence"]
+        if android is not None:
+            for item in android.criteria:
+                lines.append(
+                    f"{item.criterion_id} | {item.weight:.2f} | "
+                    f"{item.status.value} | {_or_not_evaluated(item.score)} | "
+                    f"{_or_not_evaluated(item.weighted_score)} | "
+                    f"{', '.join(item.evidence_ids) or '-'}"
+                )
+        return "\n".join(lines)
+
+    @staticmethod
+    def _r9(report: EvaluationReport) -> str:
+        lines = ["Tool | Version | Preparation | Execution | Artifact | Limitation"]
+        for item in report.tool_runs:
+            lines.append(
+                f"{item.tool_id} | {item.version or '-'} | "
+                f"{item.preparation_status} | {item.execution_status} | "
+                f"{item.output_artifact or '-'} | {item.limitation or '-'}"
+            )
+        return "\n".join(lines) if len(lines) > 1 else "No tool runs recorded."
+
+    def _r10(self, result: ExamResult) -> str:
+        return self._timing(result) + "\nInformational only; not part of the rubric."
+
+    @staticmethod
+    def _r11(report: EvaluationReport) -> str:
+        lines = ["Observation | Rule | Severity | Template | Evidence"]
+        for item in report.observations:
+            lines.append(
+                f"{item.observation_id} | {item.trigger_rule_id} | "
+                f"{item.severity} | {item.message_template_id} | "
+                f"{', '.join(item.evidence_ids) or '-'}"
+            )
+        return "\n".join(lines) if len(lines) > 1 else "No rule-coded observations."
+
+    @staticmethod
+    def _r12(report: EvaluationReport) -> str:
+        lines = ["Criterion | Tool state | Reason | Impact | Action"]
+        for item in report.limitations:
+            lines.append(
+                f"{item.dimension} | {item.tool_state or '-'} | "
+                f"{item.reason_code} | {item.coverage_impact} | "
+                f"{item.required_action}"
+            )
+        lines.append("")
+        lines.append("Rulesets: " + ", ".join(
+            f"{key}={value}" for key, value in sorted(report.ruleset_versions.items())
+        ))
+        lines.append("Trace: " + " -> ".join(
+            item.step_id for item in report.calculation_trace
+        ))
+        return "\n".join(lines)
 
     def _timing(self, result: ExamResult) -> str:
         return "\n".join(
@@ -414,6 +648,10 @@ def _score_text(score: float | int | None, reason) -> str:
 
 def _or_not_evaluated(value: object) -> str:
     return "not evaluated" if value is None else str(value)
+
+
+def _percentage(score_5: float | None) -> str:
+    return "not evaluated" if score_5 is None else f"{score_5 / 5.0:.1%}"
 
 
 def _contribution_text(contribution: float | None) -> str:

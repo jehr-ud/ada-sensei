@@ -344,7 +344,7 @@ class TeacherAgent:
     def _execute_action(
         self, command: Command, session_ctx: SessionContext
     ) -> tuple[Any, str | None]:
-        """Run the existing action service for the command. Returns (result, error_str)."""
+        """Run the action service; return ``(result, error_str)``."""
         from ..cli.router import CommandRouter
 
         try:
@@ -355,28 +355,57 @@ class TeacherAgent:
             return None, f"{type(exc).__name__}: {exc}"
 
     @staticmethod
+    def _append_report_explanations(
+        parts: list[str], action_result: Any, locale: str
+    ) -> None:
+        """Explain official-report IDs without recomputing any score."""
+        nested = getattr(action_result, "result", None)
+        report = getattr(action_result, "evaluation_report", None) or getattr(
+            nested, "evaluation_report", None
+        )
+        if report is None:
+            return
+        if getattr(report, "overall_status", None) == "INCOMPLETE_INFRASTRUCTURE":
+            parts.append(
+                "El informe está incompleto por infraestructura; no hay nota final."
+                if locale == "es-CO"
+                else "The report is incomplete due to infrastructure; no final score."
+            )
+        for finding in list(getattr(report, "findings", []))[:3]:
+            parts.append(
+                f"{finding.finding_id}: {finding.message}"
+            )
+        for limitation in list(getattr(report, "limitations", []))[:2]:
+            parts.append(
+                f"{limitation.reason_code}: {limitation.description}"
+            )
+
+    @staticmethod
     def _compose_response(
         action_result: Any,
         specialist_results: list[SpecialistResult],
         locale: str,
     ) -> str:
-        """Compose the final student-facing response from action + specialist outputs."""
+        """Compose the final response from action and specialist outputs."""
         parts: list[str] = []
 
         # Lead with the action result
         if action_result is not None and hasattr(action_result, "present"):
-            try:
+            with contextlib.suppress(Exception):
                 parts.append(action_result.present())
-            except Exception:  # noqa: BLE001
-                pass
+
+        TeacherAgent._append_report_explanations(parts, action_result, locale)
 
         # Trainer explanation (if any and not a duplicate of action result)
         for r in specialist_results:
             if r.agent_id == AgentRole.TRAINER and r.status == AgentStatus.OK:
                 pl = r.structured_payload
-                if hasattr(pl, "explanation") and pl.explanation:
-                    if pl.explanation not in " ".join(parts):
-                        parts.append(pl.explanation)
+                if (
+                    hasattr(pl, "explanation")
+                    and pl.explanation
+                    and pl.explanation not in " ".join(parts)
+                ):
+                    parts.append(pl.explanation)
                 break
 
         # Planner recommendation (show gaps/next activity if something useful)

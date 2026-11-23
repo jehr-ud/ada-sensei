@@ -34,6 +34,17 @@ Screen {
     width: 1fr;
 }
 
+#confirm-bar {
+    display: none;
+    height: 3;
+    padding: 0 1;
+}
+
+#confirm-bar Button {
+    width: auto;
+    margin-right: 1;
+}
+
 #action-guide {
     height: 2;
     min-height: 2;

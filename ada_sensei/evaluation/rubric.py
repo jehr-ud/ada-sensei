@@ -2,9 +2,8 @@
 
 ``RubricDefinition`` is versioned *data*: ids, dimensions, weights, subcriteria,
 score scale, and the evidence policy. ``RubricEngine`` is stateless mechanics
-that consume any validated definition. ``/evaluate`` ships ``evaluate-default:v1``
-and no other workflow may mutate it; ``007-examine`` ships its own
-``exam-default:v1`` against the same engine.
+that consume any validated definition. ``/evaluate`` and ``/exam`` both consume
+the single published ``unified-android:v1`` definition.
 """
 
 from __future__ import annotations
@@ -180,40 +179,229 @@ class RubricDefinition(BaseModel):
             )
 
 
-#: ``evaluate-default:v1`` — the ``/evaluate`` rubric (RQ-EVA-022, ADR-017).
-EVALUATE_RUBRIC = RubricDefinition(
-    id="evaluate-default",
+#: The single published rubric, shared by ``/evaluate`` and ``/exam``.
+UNIFIED_RUBRIC_REF = "unified-android:v1"
+
+#: Persisted references from earlier versions are migrated on read; they are not
+#: registered as aliases of a second definition.
+LEGACY_RUBRIC_REFS = frozenset(
+    {
+        "exam-default:v1",
+        "evaluate-default:v1",
+        "exam-default",
+        "evaluate-default",
+    }
+)
+
+UNIFIED_RUBRIC = RubricDefinition(
+    id="unified-android",
     version="v1",
-    title="Default exercise/project evaluation",
+    title="Unified Android evaluation rubric",
     dimensions=(
         RubricDimension(
             id="functional_requirements",
             weight=0.40,
             description="Exercise functional requirements",
-            subcriteria=(),
         ),
         RubricDimension(
             id="tests",
             weight=0.20,
-            description="Unit-test evidence and coverage of behaviour",
+            description="Unit tests and requirement-to-test traceability",
+            subcriteria=(
+                RubricSubcriterion(
+                    id="T1",
+                    weight=0.50,
+                    description=(
+                        "Requisitos con al menos una prueba unitaria asociada / "
+                        "total de requisitos funcionales"
+                    ),
+                ),
+                RubricSubcriterion(
+                    id="T2",
+                    weight=0.35,
+                    description=(
+                        "Pruebas aprobadas / (aprobadas + fallidas); errores de "
+                        "infraestructura se excluyen"
+                    ),
+                ),
+                RubricSubcriterion(
+                    id="T3",
+                    weight=0.15,
+                    description=(
+                        "Cada asociación debe apuntar a test real y requisito "
+                        "existente; se puntúa la proporción de asociaciones válidas"
+                    ),
+                ),
+            ),
         ),
         RubricDimension(
             id="code_quality",
             weight=0.15,
-            description="Detekt and source-quality findings",
+            description="Detekt, Android Lint and KtLint findings",
+            subcriteria=(
+                RubricSubcriterion(
+                    id="detekt",
+                    weight=0.40,
+                    description=(
+                        "Complejidad, code smells, tamaño de métodos/clases y "
+                        "reglas Kotlin"
+                    ),
+                ),
+                RubricSubcriterion(
+                    id="android_lint",
+                    weight=0.35,
+                    description=(
+                        "Problemas estáticos Android, recursos, manifest, APIs, "
+                        "seguridad, accesibilidad y rendimiento"
+                    ),
+                ),
+                RubricSubcriterion(
+                    id="ktlint",
+                    weight=0.25,
+                    description="Convenciones y formato del código Kotlin",
+                ),
+            ),
         ),
         RubricDimension(
-            id="architecture",
+            id="mvvm",
             weight=0.15,
-            description="Structure, layering, and boundaries",
+            description="Arquitectura MVVM (no Clean Architecture)",
+            subcriteria=(
+                RubricSubcriterion(
+                    id="M1",
+                    weight=0.30,
+                    description=(
+                        "Identifica componentes y verifica responsabilidades; la "
+                        "UI no concentra lógica de dominio"
+                    ),
+                ),
+                RubricSubcriterion(
+                    id="M2",
+                    weight=0.25,
+                    description=(
+                        "ViewModel no importa ni referencia Activities, Fragments, "
+                        "Views o composables concretos"
+                    ),
+                ),
+                RubricSubcriterion(
+                    id="M3",
+                    weight=0.20,
+                    description=(
+                        "Estado observable expuesto por ViewModel; eventos de UI "
+                        "enviados como acciones; no duplicación inconsistente de "
+                        "estado"
+                    ),
+                ),
+                RubricSubcriterion(
+                    id="M4",
+                    weight=0.15,
+                    description=(
+                        "ViewModel depende de abstracciones/repositorios y no "
+                        "implementa directamente acceso de bajo nivel cuando el "
+                        "proyecto requiere repositorio"
+                    ),
+                ),
+                RubricSubcriterion(
+                    id="M5",
+                    weight=0.10,
+                    description=(
+                        "ViewModels con lógica comprobable y pruebas unitarias "
+                        "asociadas"
+                    ),
+                ),
+            ),
         ),
         RubricDimension(
             id="android_practices",
             weight=0.10,
-            description="Android Lint and platform practices",
+            description="Buenas prácticas Android",
+            subcriteria=(
+                RubricSubcriterion(
+                    id="A1",
+                    weight=0.15,
+                    description=(
+                        "Uso correcto de lifecycle; ViewModel asociado al ciclo de "
+                        "vida; ausencia de referencias a Activity/Context retenidas "
+                        "indebidamente; manejo de estado ante recreación"
+                    ),
+                ),
+                RubricSubcriterion(
+                    id="A2",
+                    weight=0.20,
+                    description=(
+                        "State hoisting; flujo unidireccional; estado observable; "
+                        "composables con responsabilidades acotadas; efectos "
+                        "(`LaunchedEffect`, `DisposableEffect`) usados con claves "
+                        "apropiadas"
+                    ),
+                ),
+                RubricSubcriterion(
+                    id="A3",
+                    weight=0.10,
+                    description=(
+                        "Strings/dimensiones/colores externalizados; manifest "
+                        "coherente; configuración por variantes; soporte de "
+                        "configuración/localización"
+                    ),
+                ),
+                RubricSubcriterion(
+                    id="A4",
+                    weight=0.15,
+                    description=(
+                        "Coroutines/Flow apropiados; `viewModelScope`/"
+                        "lifecycle-aware collection; cancelación; no bloquear main "
+                        "thread"
+                    ),
+                ),
+                RubricSubcriterion(
+                    id="A5",
+                    weight=0.15,
+                    description=(
+                        "Permisos mínimos; runtime permissions cuando aplican; no "
+                        "secretos hardcoded; almacenamiento y comunicaciones "
+                        "seguras; validación de entradas"
+                    ),
+                ),
+                RubricSubcriterion(
+                    id="A6",
+                    weight=0.15,
+                    description=(
+                        "Content descriptions; contraste; escalado de texto; "
+                        "targets táctiles; layouts adaptables; navegación accesible"
+                    ),
+                ),
+                RubricSubcriterion(
+                    id="A7",
+                    weight=0.10,
+                    description=(
+                        "minSdk/targetSdk coherentes; APIs disponibles para SDK "
+                        "objetivo; manejo de deprecated APIs; compatibilidad de "
+                        "dependencias"
+                    ),
+                ),
+            ),
         ),
     ),
+    evidence_policy=EvidencePolicy(
+        renormalize=True,
+        allow_empty_score=False,
+        build_dependent=("functional_requirements",),
+        not_evaluated_label="not evaluated",
+    ),
+    functional_dimension="functional_requirements",
 )
+
+#: Compatibility names. Both point to the *same* definition object: there is no
+#: second rubric definition and no alias accepted on persisted references.
+EVALUATE_RUBRIC = UNIFIED_RUBRIC
+
+
+def normalize_rubric_ref(ref: str | None) -> str:
+    """Map a persisted legacy reference onto the published rubric reference."""
+    if not ref:
+        return UNIFIED_RUBRIC_REF
+    value = ref.strip()
+    return UNIFIED_RUBRIC_REF if value in LEGACY_RUBRIC_REFS else value
 
 
 class DimensionScorer:
@@ -230,8 +418,8 @@ class DimensionScorer:
         self._rules = {
             "tests": self._score_tests,
             "code_quality": self._score_static_quality,
+            "mvvm": self._score_mvvm,
             "android_practices": self._score_static_practices,
-            "architecture": self._score_architecture,
         }
 
     def score(
@@ -254,7 +442,8 @@ class DimensionScorer:
         ev = [e for e in evidence if e.type in {"unit_test", "test_report"}]
         if not ev:
             return None, NotEvaluatedReason.no_evidence
-        if any(e.status == "missing" for e in ev):
+        infra = {"missing", "unavailable", "error", "execution_error"}
+        if any(e.status in infra for e in ev):
             return None, NotEvaluatedReason.tool_unavailable
         failures = sum(1 for e in ev if e.status == "fail")
         passes = sum(1 for e in ev if e.status == "pass")
@@ -270,7 +459,8 @@ class DimensionScorer:
     ) -> tuple[int | None, NotEvaluatedReason | None]:
         if not evidence:
             return None, NotEvaluatedReason.no_evidence
-        if any(e.status == "missing" for e in evidence):
+        infra = {"missing", "unavailable", "error", "execution_error"}
+        if any(e.status in infra for e in evidence):
             return None, NotEvaluatedReason.tool_unavailable
         findings = [e for e in evidence if e.severity in SEVERITIES]
         if not findings:
@@ -289,20 +479,45 @@ class DimensionScorer:
     def _score_static_quality(
         self, evidence: list[Evidence]
     ) -> tuple[int | None, NotEvaluatedReason | None]:
-        return self._score_static([e for e in evidence if e.source == "detekt"])
+        sources = {
+            sub.id for sub in self.definition.dimension("code_quality").subcriteria
+        }
+        weights = {
+            sub.id: sub.weight
+            for sub in self.definition.dimension("code_quality").subcriteria
+        }
+        scores: list[tuple[float, int]] = []
+        for source in sources:
+            value, _ = self._score_static(
+                [e for e in evidence if e.source == source or e.type == source]
+            )
+            if value is not None:
+                scores.append((weights[source], value))
+        if not scores:
+            return None, NotEvaluatedReason.tool_unavailable
+        denominator = sum(weight for weight, _ in scores)
+        return (
+            round(sum(weight * value for weight, value in scores) / denominator),
+            None,
+        )
 
     def _score_static_practices(
         self, evidence: list[Evidence]
     ) -> tuple[int | None, NotEvaluatedReason | None]:
-        return self._score_static([e for e in evidence if e.source == "lint"])
+        return self._score_static(
+            [e for e in evidence if e.source in {"lint", "android_lint"}]
+        )
 
     @staticmethod
-    def _score_architecture(
+    def _score_mvvm(
         evidence: list[Evidence],
     ) -> tuple[int | None, NotEvaluatedReason | None]:
-        ev = [e for e in evidence if e.type == "structure"]
+        ev = [e for e in evidence if e.type in {"structure", "mvvm"}]
         if not ev:
             return None, NotEvaluatedReason.no_evidence
+        infra = {"missing", "unavailable", "error", "execution_error"}
+        if any(e.status in infra for e in ev):
+            return None, NotEvaluatedReason.tool_unavailable
         # "info" status means an optional convention file was absent; it must
         # not count as a deficiency (RQ-EXM-010, spec.md §ArchitectureAnalyzer).
         missing = sum(1 for e in ev if e.status == "missing")
@@ -513,6 +728,7 @@ __all__ = [
     "DimensionScore",
     "EVALUATE_RUBRIC",
     "EvidencePolicy",
+    "LEGACY_RUBRIC_REFS",
     "MAX_SCORE",
     "MIN_SCORE",
     "RubricDefinition",
@@ -521,7 +737,10 @@ __all__ = [
     "RubricSubcriterion",
     "SEVERITIES",
     "ScoreBreakdown",
+    "UNIFIED_RUBRIC",
+    "UNIFIED_RUBRIC_REF",
     "evaluate_engine",
+    "normalize_rubric_ref",
     "requirement_not_evaluated_reason",
     "score_requirement",
 ]

@@ -82,7 +82,7 @@ def test_result_weights_are_carried_by_criteria():
     assert top_level == {
         "tests": 0.20,
         "code_quality": 0.15,
-        "architecture": 0.15,
+        "mvvm": 0.15,
         "android_practices": 0.10,
     }
 

@@ -55,6 +55,7 @@ from ..llm.ollama import OllamaProvider
 from ..locale.service import LocaleService
 from ..locale.store import LocalePreferenceStore
 from ..models import Timestamps
+from ..toolchain.manager import ToolchainManager
 from ..urns import URN
 from .commands import (
     AskCommand,
@@ -120,6 +121,7 @@ class CommandRouter:
         config_file: str | Path | None = None,
         env: dict[str, str] | None = None,
         client: Any = None,
+        toolchain: Any | None = None,
     ) -> None:
         if config is None:
             loader = ConfigLoader(env=env)
@@ -138,6 +140,9 @@ class CommandRouter:
         #: in one dispatch and must still receive them in later dispatches, so
         #: the bus cannot be rebuilt per action invocation (RQ-EXM-005/031).
         self.event_bus = AppEventBus()
+        self.toolchain = (
+            toolchain if toolchain is not None else ToolchainManager()
+        )
         self._teacher = None
         #: Optional localized progress sink set by the TUI for long-running
         #: actions (RQ-EXM-048). ``None`` outside an interactive session.
@@ -316,7 +321,7 @@ class CommandRouter:
             selected = self._set_instructions(cmd.statement)
             if isinstance(selected, ErrorResponse):
                 return selected
-        return ExamineAction(self.services()).start(
+        return ExamineAction(self.services(), toolchain=self.toolchain).start(
             ExamStartInput(
                 statement=cmd.statement,
                 student_id=cmd.student_id,
@@ -327,7 +332,9 @@ class CommandRouter:
         )
 
     def _examine_finish(self, cmd: ExamineFinishCommand) -> CommandResult:
-        return ExamineAction(self.services(), progress=self.progress).finish(
+        return ExamineAction(
+            self.services(), progress=self.progress, toolchain=self.toolchain
+        ).finish(
             ExamFinishInput(
                 confirmed=cmd.confirmed,
                 instrumented=cmd.instrumented,
@@ -516,9 +523,9 @@ class CommandRouter:
 
     def _set_instructions(self, value: str) -> InstructionsResult | ErrorResponse:
         path = Path(value).expanduser().resolve()
-        if path.suffix.lower() != ".md":
+        if path.suffix.lower() != ".json":
             return ErrorResponse(
-                message="exam instructions must be a Markdown (.md) file"
+                message="exam instructions must be a JSON (.json) file"
             )
         if not path.exists() or not path.is_file():
             return ErrorResponse(message=f"instructions file does not exist: {path}")
@@ -545,7 +552,9 @@ class CommandRouter:
         """Read-only status used by the compact preparation panel."""
         from ..exams.preparation import ExamPreparationService
 
-        return ExamPreparationService(self.services(), env=self.env).validate()
+        return ExamPreparationService(
+            self.services(), env=self.env, toolchain=self.toolchain
+        ).validate()
 
     def _assist(self, cmd: Command) -> CommandResult:
         name = {
@@ -575,7 +584,8 @@ class CommandRouter:
 
         if cmd.locale is None:
             current = locale_svc.get_or_prompt_locale(student_id)
-            msg = f"Current language: {current or 'not set (will be asked on first use)'}."
+            value = current or "not set (will be asked on first use)"
+            msg = f"Current language: {value}."
             return MetaResult(message=msg)
 
         try:
@@ -585,9 +595,10 @@ class CommandRouter:
                 return MetaResult(
                     message="Idioma cambiado a Español. Tu progreso no se vio afectado."
                 )
+            label = LOCALE_LABELS.get(pref.locale, pref.locale)
             return MetaResult(
-                message=f"Language changed to {LOCALE_LABELS.get(pref.locale, pref.locale)}. "
-                f"Learning progress is not affected."
+                message=f"Language changed to {label}. "
+                "Learning progress is not affected."
             )
         except ValueError:
             supported = ", ".join(SUPPORTED_LOCALES)

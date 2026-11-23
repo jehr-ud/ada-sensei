@@ -289,7 +289,7 @@ def test_result_persisted(tmp_path):
     assert persisted is not None
     assert persisted.id == outcome.result.id
     assert persisted.overall_score == outcome.result.overall_score
-    assert persisted.rubric_ref == "evaluate-default:v1"
+    assert persisted.rubric_ref == "unified-android:v1"
 
 
 def test_exercise_resolution(tmp_path):

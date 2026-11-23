@@ -31,21 +31,24 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
         "error": "Error",
         "cancelled": "Cancelled",
         "busy_blocked": "An action is already running. Wait or press Ctrl+C to cancel.",
-        "prereq_project": "Requires an active project. Set one with /project <path> or --project <path>.",
+        "prereq_project": (
+            "Requires an active project. Set one with /project <path> or "
+            "--project <path>."
+        ),
         "prereq_topic": "Enter a topic to continue.",
         "prereq_question": "Enter a question to continue.",
         "prereq_statement": (
-            "Enter the exam statement: a Markdown .md/.txt file path, a JSON "
-            "definition, or a PDF. It must include a title and the functional "
-            "requirements. Example: /exam-init ~/exams/midterm.md"
+            "Enter the exam statement as a validated .json file path or inline "
+            "JSON. It must include a title and functional requirements. "
+            "Example: /exam-init ~/exams/midterm.json"
         ),
         "exam_start_blocked": "The exam cannot start yet:",
         "exam_start_no_student": (
             "The student name is not configured. Use /name followed by your name."
         ),
         "exam_statement_not_found": (
-            "Exam instructions not found: {detail}. Pass an existing .md/.txt, "
-            "JSON, or PDF file path, or paste the statement as multiple lines."
+            "Exam definition not found: {detail}. Pass an existing .json file "
+            "path or paste a valid JSON definition."
         ),
         "exam_statement_invalid": (
             "The exam instructions are not valid: {detail}"
@@ -53,16 +56,15 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
         "exam_start_confirm": (
             "Start exam — review before confirming.\n\n"
             "How to configure the exam:\n"
-            "1. Create a statement file: Markdown (.md/.txt), JSON, or PDF.\n"
-            "2. Include a title and the functional requirements as a list.\n"
-            "3. Optionally set limits (keys in English): "
-            "'Allowed duration: 60 minutes' and 'Allowed /ask count: 4'.\n\n"
-            "Example:\n"
-            "# Midterm Android Exam\n"
-            "Allowed duration: 60 minutes\n"
-            "Allowed /ask count: 4\n"
-            "## Requirements\n"
-            "- Implement a repository with CRUD operations\n\n"
+            "1. Create an exam definition file with a .json extension.\n"
+            "2. Include schema_version, exam_id, title, and functional "
+            "requirements with stable ids, weights, provenance, and acceptance "
+            "criteria.\n"
+            "3. Optionally set limits: Allowed duration "
+            "(allowed_duration_seconds) and Allowed /ask count "
+            "(allowed_ask_count).\n"
+            "4. The JSON is validated against the published schema before the "
+            "exam starts; errors include the JSON Pointer.\n\n"
             "Starting records the duration and every /ask, and writes "
             "docs/ada-sensei/ into the project.\n\n"
             "To confirm, type yes (or y) and press Enter. To cancel, type no."
@@ -120,7 +122,7 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
             "/instructions <path>."
         ),
         "preflight_instructions_not_markdown": (
-            "The exam instructions must be a Markdown (.md) file."
+            "The exam definition must be a JSON (.json) file."
         ),
         "preflight_instructions_missing": (
             "The exam instructions file was not found. Check the path set with "
@@ -142,21 +144,41 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
             "An exam is already active. Finish it with /exam-finish before "
             "starting another."
         ),
+        "preflight_toolchain_not_ready": (
+            "The required static analysis toolchain is not ready: {detail}. No "
+            "exam attempt or timer was created."
+        ),
         "prereq_locale": "Enter a locale: es-CO or en-US.",
         "activation_hint": "Navigate with Up/Down and press Enter to run.",
         "lang_list_title": "Select language / Selecciona el idioma",
         "lang_list_hints": "Up/Down Move · Enter Select · Esc Cancel",
         "lang_cancelled": "Language change cancelled.",
         "lang_first_run_blocked": "Please choose a language to continue.",
-        "lang_changed": "Language changed to English. Learning progress is not affected.",
+        "lang_changed": (
+            "Language changed to English. Learning progress is not affected."
+        ),
         "next_step_prefix": "Suggested next step",
-        "next_step_how": "Select the action and press Enter to run it. Ignoring this does not affect your progress.",
+        "next_step_how": (
+            "Select the action and press Enter to run it. Ignoring this does "
+            "not affect your progress."
+        ),
         "no_next_step": "Choose another action from the selector when you are ready.",
-        "onboard_title": "Learn to design, build, explain, test, and improve Android applications — not merely copy generated code.",
+        "onboard_title": (
+            "Learn to design, build, explain, test, and improve Android "
+            "applications — not merely copy generated code."
+        ),
         "onboard_stages": "Learning stages:",
-        "onboard_choice": "Reply with 'diagnose' for an initial diagnostic, a stage number or id to start there, or 'skip' to begin at the default stage.",
-        "onboard_unknown": "Unknown stage choice. Please use a stage number or id from the list.",
-        "onboard_prereqs": "Note: stage {stage} lists unmet prerequisites: {prereqs}. Skipped stages are NOT marked as mastered.",
+        "onboard_choice": (
+            "Reply with 'diagnose' for an initial diagnostic, a stage number "
+            "or id to start there, or 'skip' to begin at the default stage."
+        ),
+        "onboard_unknown": (
+            "Unknown stage choice. Please use a stage number or id from the list."
+        ),
+        "onboard_prereqs": (
+            "Note: stage {stage} lists unmet prerequisites: {prereqs}. Skipped "
+            "stages are NOT marked as mastered."
+        ),
         "onboard_started": "Starting stage set to {number} — {title}.",
         "onboard_diagnostic": "Starting with an initial diagnostic at {title}.",
         "onboard_config_error": "Learning configuration error: {detail}",
@@ -182,14 +204,18 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
         "ready": "Listo",
         "error": "Error",
         "cancelled": "Cancelado",
-        "busy_blocked": "Ya hay una acción en curso. Espere o pulse Ctrl+C para cancelar.",
-        "prereq_project": "Requiere un proyecto activo. Use /project <ruta> o --project <ruta>.",
+        "busy_blocked": (
+            "Ya hay una acción en curso. Espere o pulse Ctrl+C para cancelar."
+        ),
+        "prereq_project": (
+            "Requiere un proyecto activo. Use /project <ruta> o --project <ruta>."
+        ),
         "prereq_topic": "Ingrese un tema para continuar.",
         "prereq_question": "Ingrese una pregunta para continuar.",
         "prereq_statement": (
-            "Ingrese el enunciado: ruta de un archivo Markdown .md/.txt, una "
-            "definición JSON o un PDF. Debe incluir título y requisitos "
-            "funcionales. Ejemplo: /exam-init ~/exams/midterm.md"
+            "Ingrese la definición del examen: ruta .json validada o JSON "
+            "en línea. Debe incluir título y requisitos funcionales. "
+            "Ejemplo: /exam-init ~/exams/midterm.json"
         ),
         "exam_start_blocked": "El examen aún no puede comenzar:",
         "exam_start_no_student": (
@@ -197,9 +223,8 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
             "de tu nombre."
         ),
         "exam_statement_not_found": (
-            "No se encontraron las instrucciones del examen: {detail}. Indica "
-            "una ruta existente .md/.txt, JSON o PDF, o pega el enunciado en "
-            "varias líneas."
+            "No se encontró la definición del examen: {detail}. Indica una ruta "
+            ".json existente o pega una definición JSON válida."
         ),
         "exam_statement_invalid": (
             "Las instrucciones del examen no son válidas: {detail}"
@@ -207,16 +232,13 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
         "exam_start_confirm": (
             "Iniciar examen — revisa antes de confirmar.\n\n"
             "Cómo configurar el examen:\n"
-            "1. Crea un archivo de enunciado: Markdown (.md/.txt), JSON o PDF.\n"
-            "2. Incluye un título y los requisitos funcionales en una lista.\n"
-            "3. Opcionalmente define límites (claves en inglés): "
-            "'Allowed duration: 60 minutes' y 'Allowed /ask count: 4'.\n\n"
-            "Ejemplo:\n"
-            "# Examen parcial de Android\n"
-            "Allowed duration: 60 minutes\n"
-            "Allowed /ask count: 4\n"
-            "## Requisitos\n"
-            "- Implementar un repositorio con operaciones CRUD\n\n"
+            "1. Crea un archivo de definición con extensión .json.\n"
+            "2. Incluye Requisitos funcionales con IDs, pesos, procedencia y "
+            "criterios de aceptación, además de schema_version, exam_id y título.\n"
+            "3. Opcionalmente define allowed_duration_seconds y "
+            "allowed_ask_count.\n"
+            "4. El JSON se valida contra el esquema publicado antes de iniciar; "
+            "los errores incluyen el JSON Pointer.\n\n"
             "Al iniciar se registran la duración y cada /ask, y se escribe "
             "docs/ada-sensei/ en el proyecto.\n\n"
             "Para confirmar, escribe yes (o y) y pulsa Enter. "
@@ -286,7 +308,7 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
             "Configúralo con /instructions <ruta>."
         ),
         "preflight_instructions_not_markdown": (
-            "Las instrucciones del examen deben ser un archivo Markdown (.md)."
+            "La definición del examen debe ser un archivo JSON (.json)."
         ),
         "preflight_instructions_missing": (
             "No se encontró el archivo de instrucciones del examen. Revisa la "
@@ -308,21 +330,42 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
             "Ya hay un examen activo. Finalízalo con /exam-finish antes de "
             "iniciar otro."
         ),
+        "preflight_toolchain_not_ready": (
+            "El toolchain de análisis estático requerido no está listo: {detail}. "
+            "No se creó ningún intento ni temporizador."
+        ),
         "prereq_locale": "Ingrese un idioma: es-CO o en-US.",
         "activation_hint": "Navegue con Arriba/Abajo y pulse Enter para ejecutar.",
         "lang_list_title": "Select language / Selecciona el idioma",
         "lang_list_hints": "Arriba/Abajo Mover · Enter Elegir · Esc Cancelar",
         "lang_cancelled": "Cambio de idioma cancelado.",
         "lang_first_run_blocked": "Elija un idioma para continuar.",
-        "lang_changed": "Idioma cambiado a Español. Tu progreso no se vio afectado.",
+        "lang_changed": (
+            "Idioma cambiado a Español. Tu progreso no se vio afectado."
+        ),
         "next_step_prefix": "Siguiente paso sugerido",
-        "next_step_how": "Seleccione la acción y pulse Enter para ejecutarla. Ignorar esto no afecta su progreso.",
+        "next_step_how": (
+            "Seleccione la acción y pulse Enter para ejecutarla. Ignorar esto "
+            "no afecta su progreso."
+        ),
         "no_next_step": "Elija otra acción del selector cuando esté listo.",
-        "onboard_title": "Aprende a diseñar, construir, explicar, probar y mejorar aplicaciones Android, no solo a copiar código generado.",
+        "onboard_title": (
+            "Aprende a diseñar, construir, explicar, probar y mejorar "
+            "aplicaciones Android, no solo a copiar código generado."
+        ),
         "onboard_stages": "Etapas de aprendizaje:",
-        "onboard_choice": "Responda con 'diagnosticar' para un diagnóstico inicial, un número o id de etapa para empezar ahí, u 'omitir' para empezar en la etapa predeterminada.",
-        "onboard_unknown": "Opción de etapa desconocida. Use un número o id de la lista.",
-        "onboard_prereqs": "Nota: la etapa {stage} tiene prerrequisitos no cumplidos: {prereqs}. Las etapas omitidas NO se marcan como dominadas.",
+        "onboard_choice": (
+            "Responda con 'diagnosticar' para un diagnóstico inicial, un número "
+            "o id de etapa para empezar ahí, u 'omitir' para empezar en la etapa "
+            "predeterminada."
+        ),
+        "onboard_unknown": (
+            "Opción de etapa desconocida. Use un número o id de la lista."
+        ),
+        "onboard_prereqs": (
+            "Nota: la etapa {stage} tiene prerrequisitos no cumplidos: {prereqs}. "
+            "Las etapas omitidas NO se marcan como dominadas."
+        ),
         "onboard_started": "Etapa inicial: {number} — {title}.",
         "onboard_diagnostic": "Comenzando con un diagnóstico inicial en {title}.",
         "onboard_config_error": "Error de configuración de aprendizaje: {detail}",
@@ -355,6 +398,7 @@ _BLOCKER_UI_KEYS: dict[str, str] = {
     "instructions_empty": "preflight_instructions_empty",
     "instructions_invalid": "preflight_instructions_invalid",
     "active_exam": "preflight_active_exam",
+    "toolchain_not_ready": "preflight_toolchain_not_ready",
 }
 
 

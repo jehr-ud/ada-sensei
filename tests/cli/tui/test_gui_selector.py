@@ -102,7 +102,7 @@ def test_each_action_routes_to_correct_workflow(tmp_path):
             "practice": (PracticeCommand, "compose-state"),
             "examples": (ExamplesCommand, "ViewModel"),
             "evaluate": (EvaluateCommand, ""),
-            "exam-init": (ExamineStartCommand, "docs/exam.md"),
+            "exam-init": (ExamineStartCommand, "docs/exam.json"),
             "exam-finish": (ExamineFinishCommand, ""),
             "learn": (LearnCommand, ""),
             "diagnose": (DiagnoseCommand, ""),

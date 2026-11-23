@@ -17,23 +17,14 @@ from ada_sensei.exams.rubric import EXAM_RUBRIC, resolve_rubric
 from ada_sensei.exams.scoring import ExamScorer
 from ada_sensei.llm.base import LLMClient
 from exams_helpers import (
+    STATEMENT_JSON,
     OkRunner,
     make_context,
     make_definition,
     make_evidence,
     make_project,
 )
-
-STATEMENT = (
-    "# Midterm Android Exam\n"
-    "\n"
-    "Allowed duration: 60 minutes\n"
-    "Allowed /ask count: 4\n"
-    "\n"
-    "## Requirements\n"
-    "\n"
-    "- Repository with CRUD operations\n"
-)
+from tests.toolchain.helpers import ReadyToolchainManager
 
 
 def test_engine_reuse_without_duplication():
@@ -41,14 +32,16 @@ def test_engine_reuse_without_duplication():
     first = ExamScorer(engine=shared)
     second = ExamScorer(engine=shared)
     assert first.engine is second.engine is shared
-    assert EXAM_RUBRIC.ref == "exam-default:v1"
+    assert EXAM_RUBRIC.ref == "unified-android:v1"
     with pytest.raises(ExamDefinitionError):
         resolve_rubric("evaluate-default:v1")
 
 
 def test_instrumented_rejected(tmp_path):
     services = make_context(tmp_path, make_project(tmp_path))
-    action = ExamineAction(services, runner=OkRunner())
+    action = ExamineAction(
+        services, runner=OkRunner(), toolchain=ReadyToolchainManager()
+    )
     with pytest.raises(InstrumentedNotSupportedError):
         action.finish(ExamFinishInput(confirmed=True, instrumented=True))
 
@@ -66,10 +59,12 @@ def test_functional_requirements_scored():
 
 def test_no_source_modification(tmp_path):
     proj = make_project(tmp_path)
-    statement = tmp_path / "exam.md"
-    statement.write_text(STATEMENT, encoding="utf-8")
+    statement = tmp_path / "exam.json"
+    statement.write_text(STATEMENT_JSON, encoding="utf-8")
     services = make_context(tmp_path, proj)
-    action = ExamineAction(services, runner=OkRunner())
+    action = ExamineAction(
+        services, runner=OkRunner(), toolchain=ReadyToolchainManager()
+    )
 
     start = action.start(
         ExamStartInput(
@@ -112,10 +107,12 @@ class BuildFailRunner:
 
 def test_build_failure_marks_dependencies_not_evaluated(tmp_path):
     proj = make_project(tmp_path)
-    statement = tmp_path / "exam.md"
-    statement.write_text(STATEMENT, encoding="utf-8")
+    statement = tmp_path / "exam.json"
+    statement.write_text(STATEMENT_JSON, encoding="utf-8")
     services = make_context(tmp_path, proj)
-    action = ExamineAction(services, runner=BuildFailRunner())
+    action = ExamineAction(
+        services, runner=BuildFailRunner(), toolchain=ReadyToolchainManager()
+    )
     action.start(
         ExamStartInput(
             statement=str(statement), project_id="project://p1", confirmed=True
@@ -174,19 +171,15 @@ class InferenceClient(LLMClient):
 
 
 def test_inline_statement_starts_an_exam(tmp_path):
-    """The CLI advertises an inline statement, so ``start`` must accept one.
-
-    RQ-EXM-002 only requires a file-backed statement; this proves the advertised
-    convenience works and that the resolved definition is persisted, so the
-    finish path still scores against the statement that was issued.
-    """
     proj = make_project(tmp_path)
     services = make_context(tmp_path, proj)
-    action = ExamineAction(services, runner=OkRunner())
+    action = ExamineAction(
+        services, runner=OkRunner(), toolchain=ReadyToolchainManager()
+    )
 
     started = action.start(
         ExamStartInput(
-            statement=STATEMENT, project_id="project://p1", confirmed=True
+            statement=STATEMENT_JSON, project_id="project://p1", confirmed=True
         )
     )
     assert started.definition.title == "Midterm Android Exam"
@@ -201,7 +194,9 @@ def test_unresolvable_statement_reports_both_accepted_forms(tmp_path):
     """A single-line non-path statement is refused, and says what is accepted."""
     proj = make_project(tmp_path)
     services = make_context(tmp_path, proj)
-    action = ExamineAction(services, runner=OkRunner())
+    action = ExamineAction(
+        services, runner=OkRunner(), toolchain=ReadyToolchainManager()
+    )
 
     with pytest.raises(ExamDefinitionError) as excinfo:
         action.start(
@@ -210,8 +205,7 @@ def test_unresolvable_statement_reports_both_accepted_forms(tmp_path):
             )
         )
     message = str(excinfo.value)
-    assert "multi-line text" in message
-    assert "PDF" in message
+    assert "JSON" in message
 
 
 def test_inferred_architecture_claims_reach_the_report(tmp_path):
@@ -223,12 +217,14 @@ def test_inferred_architecture_claims_reach_the_report(tmp_path):
     unchanged by the presence of inferences.
     """
     proj = make_project(tmp_path)
-    statement = tmp_path / "exam.md"
-    statement.write_text(STATEMENT, encoding="utf-8")
+    statement = tmp_path / "exam.json"
+    statement.write_text(STATEMENT_JSON, encoding="utf-8")
 
     def finish_with(client):
         services = make_context(tmp_path / f"run-{id(client)}", proj, client=client)
-        action = ExamineAction(services, runner=OkRunner())
+        action = ExamineAction(
+            services, runner=OkRunner(), toolchain=ReadyToolchainManager()
+        )
         action.start(
             ExamStartInput(
                 statement=str(statement), project_id="project://p1", confirmed=True
