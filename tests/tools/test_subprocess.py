@@ -15,6 +15,12 @@ def test_success():
     assert result.status == "pass"
 
 
+def test_string_cwd_is_supported(tmp_path):
+    result = SubprocessRunner().run(["pwd"], cwd=str(tmp_path))
+    assert result.exit_code == 0
+    assert str(tmp_path.resolve()) in result.stdout
+
+
 def test_failure():
     result = SubprocessRunner().run(["bash", "-c", "echo oops >&2; exit 3"])
     assert result.exit_code == 3

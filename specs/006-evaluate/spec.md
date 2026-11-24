@@ -302,3 +302,60 @@ that decision belongs to `PlannerAgent` using the `ProgressionPolicy` in
 ## Agent Orchestration Contract
 
 Every `/evaluate` request SHALL be orchestrated by `TeacherAgent` and include PlannerAgent, EvaluatorAgent, and TrainerAgent participation as specified by `009-agent-orchestration`. EvaluatorAgent owns evidence interpretation; PlannerAgent records evidence but does not advance the stage unless this is explicitly a mastery assessment; TrainerAgent explains findings and remediation. The existing default evaluation rubric and confirmation rules remain unchanged.
+
+
+---
+
+# Adenda normativa — Evaluación semántica asistida por LLM y evidencia trazable (v2)
+
+**Estado:** propuesta de actualización. **Modelo objetivo:** `qwen2.5-coder:7b` mediante Ollama.
+
+Esta adenda complementa y reemplaza únicamente las reglas incompatibles sobre la responsabilidad del LLM, la evidencia, el contrato del resultado y la interpretación de requisitos. Se conservan el límite reutilizable, la confirmación de Gradle, el alcance de herramientas, la persistencia y la política de no modificar el código del estudiante.
+
+## A. Objetivo
+
+`006-evaluate` debe producir un único `EvaluationResult` estructurado por ejecución. Cada decisión de cumplimiento debe poder rastrearse hasta evidencia real del proyecto. El LLM interpreta semánticamente el código y las pruebas; las fórmulas de puntuación siguen siendo deterministas.
+
+## B. Responsabilidades
+
+- `EvidenceCollector` / `AndroidProjectAnalyzer`: recopilan archivos, símbolos, rangos de líneas, imports, dependencias, resultados de build/tests y reportes de analizadores. No califican por sí solos.
+- `LLMRequirementEvaluator`: evalúa cada criterio funcional y técnico suministrado por el caller, con base exclusiva en la evidencia recibida. Emite estado, explicación breve, evidencia citada y limitaciones.
+- `LLMArchitectureEvaluator`: evalúa Clean Architecture y MVVM cuando la rúbrica del caller lo solicite.
+- `RubricEngine` / `ScoreCalculator`: valida estados, aplica pesos y calcula las notas. No interpreta código.
+- `EvaluationResult`: almacena la evaluación única, con versión de modelo, prompts, rúbrica, evidencias y cálculos.
+
+El LLM SÍ puede decidir semánticamente `PASS`, `PARTIAL`, `FAIL` o `NOT_EVALUATED` para criterios funcionales y arquitectónicos. No puede crear evidencias, ejecutar comandos, alterar resultados de herramientas ni calcular o modificar la nota final.
+
+## C. Modelo y reproducibilidad
+
+Configuración por defecto: `provider=ollama`, `model_id=qwen2.5-coder:7b`, `temperature=0` (o mínimo soportado), salida JSON validada. Persistir `model_id`, digest si está disponible, versión del prompt, temperatura, fecha, duración, intentos y estado de validación. No sustituir silenciosamente el modelo. Si no está disponible o falla el esquema después de tres intentos, los criterios dependientes del LLM quedan `NOT_EVALUATED` con `LLM_UNAVAILABLE` o `LLM_INVALID_OUTPUT`; nunca reciben cero por fallo de infraestructura.
+
+## D. Contrato de evidencia
+
+Cada `EvidenceItem` debe incluir: `evidence_id`, `kind`, `artifact_path` relativo, `symbol` opcional, `line_start`/`line_end` cuando aplique, `excerpt` breve, `content_hash`, `collector`, herramienta/versión/comando cuando corresponda, `timestamp` y `reliability`. Las rutas y líneas deben existir en el snapshot inspeccionado. No se aceptan rutas absolutas ni referencias fabricadas.
+
+Reglas de interpretación:
+
+1. La presencia de una clase, carpeta, dependencia, comentario o nombre no demuestra comportamiento.
+2. Un test solo acredita el escenario que ejecuta y verifica; no acredita automáticamente todo el requisito.
+3. La documentación acredita lo declarado, no la implementación.
+4. Una decisión `PASS`, `PARTIAL` o `FAIL` debe citar al menos una evidencia. `NOT_EVALUATED` debe incluir razón y limitación.
+5. Separar hechos observados, inferencias del LLM y aspectos no verificables. Una inferencia nunca se presenta como hecho.
+
+## E. Evaluación de criterios funcionales
+
+El LLM evalúa cada `acceptance_criteria` del JSON, no solamente el requisito completo. La salida por criterio incluye `criterion_id`, `status`, `reason`, `evidence_ids`, `confidence`, `limitations` y `recommended_action`. El estado del requisito se deriva: todos los criterios evaluables PASS → PASS; mezcla de PASS y PARTIAL/FAIL → PARTIAL; evidencia directa de incumplimiento en todos los criterios relevantes → FAIL; evidencia insuficiente → NOT_EVALUATED. No se puede declarar PASS por inspección de nombres o por evidencia indirecta insuficiente.
+
+Para autenticación, sincronización remota, navegación y comportamiento visual, la inspección estática puede demostrar integración o intención, pero no necesariamente el comportamiento en ejecución. Si no existe prueba runtime, test de integración o evidencia manual válida, declarar `PARTIAL` solo si el criterio admite una parte demostrada; en otro caso `NOT_EVALUATED`, explicando el límite.
+
+## F. Estados comunes
+
+`PASS`, `PARTIAL`, `FAIL`, `NOT_EVALUATED`, `NOT_CONFIGURED`, `NOT_AVAILABLE`, `EXECUTION_ERROR`, `INFO`. Los cuatro últimos estados técnicos no se convierten automáticamente en cero. `NOT_EVALUATED` se excluye del denominador y el reporte muestra el peso excluido.
+
+## G. Contrato de salida
+
+El resultado persistido debe ser una única instancia versionada `EvaluationResult` / `EvaluationReport`, con: identidad de intento; rubric id/version; modelo y prompt; dimensiones; criterios; evidencias; findings; limitaciones; desglose matemático; cobertura; estado global; fortalezas y acciones de mejora. El PDF y cualquier resumen de TUI consumen este objeto. No deben volver a evaluar ni construir una segunda nota.
+
+## H. Validación
+
+Antes de persistir, validar: todos los IDs de evidencia existen; los rangos de línea son válidos; cada decisión tiene evidencia o razón de no evaluación; pesos válidos; estados y puntuaciones compatibles; la nota recalculada coincide con el desglose; no hay criterios duplicados ni huérfanos. Si falla una validación, no emitir resultado oficial como completo.

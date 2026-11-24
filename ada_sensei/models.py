@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .urns import URN
 
@@ -65,10 +65,27 @@ class Evidence(BaseModel):
     message: str = ""
     file: str | None = None
     line: int | None = None
+    line_start: int | None = None
+    line_end: int | None = None
+    symbol: str | None = None
+    excerpt: str = ""
+    content_hash: str | None = None
+    collector: str | None = None
+    reliability: str = "observed"
     command: str | None = None
     #: Stable provenance handle (``ev://<n>``) assigned by ``EvidenceContext``
     #: so LLM claims can reference evidence without restating it (RQ-EVA-035).
     id: str | None = None
+
+    @model_validator(mode="after")
+    def _valid_line_range(self) -> Evidence:
+        start = self.line_start if self.line_start is not None else self.line
+        end = self.line_end if self.line_end is not None else self.line
+        if start is not None and end is not None and start > end:
+            raise ValueError(
+                f"evidence line range is inverted: {start}-{end}"
+            )
+        return self
 
 
 class NotEvaluatedReason(StrEnum):

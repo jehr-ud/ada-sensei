@@ -25,7 +25,7 @@ VALID_DEFINITION = {
     "allowed_duration_seconds": 3600,
     "allowed_ask_count": 4,
     "documentation_rules": {"accepted_globs": ["docs/**/*.md"]},
-    "rubric_ref": "unified-android:v1",
+    "rubric_ref": "unified-android:v2",
     "requirements": [
         {
             "id": "REQ-AND-001",
@@ -69,7 +69,7 @@ VALID_DEFINITION = {
 
 EXAMPLE = (
     Path(__file__).parents[2]
-    / "specs/007-examine/examples/domino-conquista.exam.json"
+    / "specs/007-examine/examples/domino-conquista.exam.v2.json"
 )
 
 
@@ -98,7 +98,7 @@ def test_loads_valid_json_definition_with_typed_requirements(tmp_path):
     assert definition.statement_format is StatementFormat.json
     assert definition.exam_id == "android-midterm"
     assert definition.title == "Android Midterm"
-    assert definition.rubric_ref == "unified-android:v1"
+    assert definition.rubric_ref == "unified-android:v2"
     assert definition.statement_language == "es-CO"
     assert definition.allowed_duration_seconds == 3600
     assert definition.allowed_ask_count == 4
@@ -122,8 +122,8 @@ def test_loads_domino_example():
     definition = ExamDefinitionLoader().load(str(EXAMPLE))
 
     assert definition.exam_id == "domino-conquista"
-    assert definition.rubric_ref == "unified-android:v1"
-    assert len(definition.requirements) == 3
+    assert definition.rubric_ref == "unified-android:v2"
+    assert len(definition.requirements) == 14
     functional = [
         requirement
         for requirement in definition.requirements

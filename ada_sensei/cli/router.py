@@ -321,7 +321,9 @@ class CommandRouter:
             selected = self._set_instructions(cmd.statement)
             if isinstance(selected, ErrorResponse):
                 return selected
-        return ExamineAction(self.services(), toolchain=self.toolchain).start(
+        return ExamineAction(
+            self.services(), progress=self.progress, toolchain=self.toolchain
+        ).start(
             ExamStartInput(
                 statement=cmd.statement,
                 student_id=cmd.student_id,
@@ -553,8 +555,11 @@ class CommandRouter:
         from ..exams.preparation import ExamPreparationService
 
         return ExamPreparationService(
-            self.services(), env=self.env, toolchain=self.toolchain
-        ).validate()
+            self.services(),
+            env=self.env,
+            toolchain=self.toolchain,
+            progress=self.progress,
+        ).validate(locale=self.current_locale())
 
     def _assist(self, cmd: Command) -> CommandResult:
         name = {

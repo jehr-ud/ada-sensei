@@ -10,6 +10,7 @@ from ada_sensei.toolchain import (
     ToolchainManager,
     ToolId,
     ToolStatus,
+    detect_project_profile,
     hash_project,
     load_policy,
 )
@@ -17,15 +18,24 @@ from ada_sensei.tools.subprocess import SubprocessResult
 
 
 class FakeRunner:
-    def __init__(self, *, exit_code: int = 0, write_reports: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        exit_code: int = 0,
+        write_reports: bool = True,
+        write_reports_on_failure: bool = False,
+    ) -> None:
         self.exit_code = exit_code
         self.write_reports = write_reports
+        self.write_reports_on_failure = write_reports_on_failure
         self.calls: list[tuple[list[str], str, int | None]] = []
 
     def run(self, cmd, *, cwd=None, timeout=None):
         self.calls.append((list(cmd), str(cwd), timeout))
         root = Path(cwd)
-        if self.exit_code == 0 and self.write_reports:
+        if self.write_reports and (
+            self.exit_code == 0 or self.write_reports_on_failure
+        ):
             lint_dir = root / "app" / "build" / "reports"
             detekt_dir = root / "build" / "reports" / "detekt"
             ktlint_dir = root / "build" / "reports" / "ktlint"
@@ -72,6 +82,22 @@ def make_project(tmp_path: Path) -> Path:
     (project / "local.properties").write_text("sdk.dir=/secret\n", encoding="utf-8")
     (project / ".git" / "config").write_text("[core]\n", encoding="utf-8")
     (project / "app" / "build" / "stale.txt").write_text("old\n", encoding="utf-8")
+    return project
+
+
+def make_modern_project(tmp_path: Path) -> Path:
+    project = make_project(tmp_path)
+    (project / ".java-version").unlink()
+    (project / "gradle" / "wrapper" / "gradle-wrapper.properties").write_text(
+        "distributionUrl=https\\://services.gradle.org/distributions/gradle-9.5.0-bin.zip\n",
+        encoding="utf-8",
+    )
+    (project / "app" / "build.gradle.kts").write_text(
+        'plugins {\n  id("com.android.application") version "9.3.3"\n'
+        '  id("org.jetbrains.kotlin.android") version "2.2.10"\n}\n'
+        "android { compileOptions { sourceCompatibility = JavaVersion.VERSION_11 } }\n",
+        encoding="utf-8",
+    )
     return project
 
 
@@ -130,8 +156,10 @@ def test_empty_matrix_blocks_without_execution_or_attempt(tmp_path: Path) -> Non
     project = make_project(tmp_path)
     before = hash_project(project)
     runner = FakeRunner()
+    empty_policy = pinned_policy()
+    empty_policy["compatibility_matrix"] = []
     manager = ToolchainManager(
-        policy=load_policy(), runner=runner, workspace_root=tmp_path / "ws"
+        policy=empty_policy, runner=runner, workspace_root=tmp_path / "ws"
     )
 
     result = manager.prepare(project)
@@ -197,6 +225,38 @@ def test_pinned_policy_with_fake_runner_marks_all_tools_ready(tmp_path: Path) ->
     )
 
 
+def test_default_policy_prepares_a_supported_project(tmp_path: Path) -> None:
+    project = make_project(tmp_path)
+    runner = FakeRunner()
+    policy = load_policy()
+    manager = ToolchainManager(
+        policy=policy, runner=runner, workspace_root=tmp_path / "ws"
+    )
+
+    result = manager.prepare(project)
+
+    assert policy.compatibility_matrix, "default policy must pin a combination"
+    assert result.ready is True, result.blockers
+    assert result.blockers == []
+    assert {item.tool_id for item in result.executions} == set(ToolId)
+    assert all(item.status is ToolStatus.READY for item in result.executions)
+    assert all(
+        item.health_check.status is HealthCheckStatus.PASS for item in result.executions
+    )
+    versions = {item.tool_id: item.version for item in result.executions}
+    assert versions == {
+        ToolId.android_lint: "8.1.4",
+        ToolId.detekt: "1.23.6",
+        ToolId.ktlint: "1.1.1",
+    }
+    assert [call[0][1] for call in runner.calls] == [
+        "lintDebug",
+        "detekt",
+        "ktlintCheck",
+    ]
+    assert all(call[1] != str(project) for call in runner.calls)
+
+
 def test_failed_health_check_produces_execution_error_and_no_ready(
     tmp_path: Path,
 ) -> None:
@@ -219,6 +279,25 @@ def test_failed_health_check_produces_execution_error_and_no_ready(
     )
     assert all(not item.report_paths for item in result.executions)
     assert all(item.exit_code == 1 for item in result.executions)
+
+
+def test_analysis_findings_do_not_block_exam_start(tmp_path: Path) -> None:
+    project = make_project(tmp_path)
+    runner = FakeRunner(exit_code=1, write_reports_on_failure=True)
+    manager = ToolchainManager(
+        policy=pinned_policy(), runner=runner, workspace_root=tmp_path / "ws"
+    )
+
+    result = manager.prepare(project)
+
+    assert result.ready is True
+    assert result.blockers == []
+    assert all(
+        item.status is ToolStatus.ISSUES_FOUND for item in result.executions
+    )
+    assert all(
+        item.health_check.status is HealthCheckStatus.PASS for item in result.executions
+    )
 
 
 def test_missing_report_with_zero_exit_is_not_ready(tmp_path: Path) -> None:
@@ -263,7 +342,9 @@ def test_original_project_is_never_mutated(tmp_path: Path) -> None:
     assert workspace != project
     assert (workspace / "gradlew").is_file()
     assert not (workspace / ".git").exists()
-    assert not (workspace / "local.properties").exists()
+    assert (workspace / "local.properties").read_text(encoding="utf-8") == (
+        "sdk.dir=/secret\n"
+    )
     assert not (workspace / "app" / "build" / "stale.txt").exists()
     assert all(call[0][1] != str(project) for call in runner.calls)
 
@@ -318,3 +399,65 @@ def test_no_auto_correct_tasks_are_generated(tmp_path: Path) -> None:
     commands = [part.lower() for call in runner.calls for part in call[0]]
     assert not any("format" in part or "autocorrect" in part for part in commands)
     assert all(item.status is ToolStatus.READY for item in result.executions)
+
+
+def test_source_compatibility_is_not_runtime_jdk(tmp_path: Path) -> None:
+    project = make_modern_project(tmp_path)
+    profile = detect_project_profile(project)
+
+    assert profile.jdk is None
+    assert profile.gradle == "9.5.0"
+    assert profile.kotlin == "2.2.10"
+    assert profile.agp == "9.3.3"
+
+
+def test_default_policy_auto_configures_missing_static_tools(tmp_path: Path) -> None:
+    project = make_modern_project(tmp_path)
+    runner = FakeRunner()
+    manager = ToolchainManager(runner=runner, workspace_root=tmp_path / "ws")
+
+    result = manager.prepare(project)
+
+    assert result.ready is True
+    assert [call[0][-1] for call in runner.calls] == [
+        "lintDebug",
+        "detekt",
+        "ktlintCheck",
+    ]
+    assert "--init-script" not in runner.calls[0][0]
+    assert all("--init-script" in call[0] for call in runner.calls[1:])
+    assert result.manifest.tools == {
+        ToolId.android_lint: "9.3.3",
+        ToolId.detekt: "2.0.0-alpha.5",
+        ToolId.ktlint: "1.6.0",
+    }
+    detekt_script = Path(runner.calls[1][0][2])
+    ktlint_script = Path(runner.calls[2][0][2])
+    assert "dev.detekt:dev.detekt.gradle.plugin:2.0.0-alpha.5" in (
+        detekt_script.read_text(encoding="utf-8")
+    )
+    ktlint_marker = (
+        "org.jlleitschuh.gradle.ktlint:"
+        "org.jlleitschuh.gradle.ktlint.gradle.plugin:14.2.0"
+    )
+    assert ktlint_marker in ktlint_script.read_text(encoding="utf-8")
+    assert "reporter 'checkstyle'" in ktlint_script.read_text(encoding="utf-8")
+    assert all(call[1] != str(project) for call in runner.calls)
+    assert all(
+        item.health_check.status is HealthCheckStatus.PASS
+        for item in result.executions
+    )
+
+
+def test_successful_preparation_is_cached_for_repeated_panel_validation(
+    tmp_path: Path,
+) -> None:
+    project = make_modern_project(tmp_path)
+    runner = FakeRunner()
+    manager = ToolchainManager(runner=runner, workspace_root=tmp_path / "ws")
+
+    first = manager.prepare(project)
+    second = manager.prepare(project)
+
+    assert len(runner.calls) == 3
+    assert second.model_dump() == first.model_dump()

@@ -83,6 +83,13 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
         "evaluate_aborted": "Evaluation aborted before running any Gradle task.",
         "exam_start_aborted": "Exam start aborted; no attempt was created.",
         "exam_finish_aborted": "Exam finish aborted; the attempt is still active.",
+        "exam_preparing": "Preparing the exam. This can take a few minutes…",
+        "exam_start_progress_validating": "Validating exam requirements…",
+        "exam_start_progress_toolchain": (
+            "Preparing static analysis tools (Gradle, Android Lint, Detekt, "
+            "KtLint)…"
+        ),
+        "exam_start_progress_ready": "Tools ready. Creating the exam attempt…",
         "exam_progress_inspecting": "Inspecting the project…",
         "exam_progress_build": "Running Gradle build…",
         "exam_progress_unit_tests": "Running unit tests…",
@@ -266,6 +273,15 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
         ),
         "exam_finish_aborted": (
             "Finalización cancelada; el intento de examen sigue activo."
+        ),
+        "exam_preparing": "Preparando el examen. Puede tardar unos minutos…",
+        "exam_start_progress_validating": "Validando requisitos del examen…",
+        "exam_start_progress_toolchain": (
+            "Preparando herramientas de análisis estático (Gradle, Android "
+            "Lint, Detekt, KtLint)…"
+        ),
+        "exam_start_progress_ready": (
+            "Herramientas listas. Creando el intento del examen…"
         ),
         "exam_progress_inspecting": "Inspeccionando el proyecto…",
         "exam_progress_build": "Ejecutando build de Gradle…",

@@ -17,10 +17,15 @@ from pathlib import Path
 from typing import Any
 
 from ..evaluation import (
+    DEFAULT_MODEL,
+    PROMPT_VERSION,
+    EvaluationCriterionInput,
     EvaluationEngine,
     EvaluationExecutionPolicy,
     EvaluatorAgent,
     EvidenceContext,
+    LLMArchitectureEvaluator,
+    LLMRequirementEvaluator,
     ProjectContext,
     RubricDefinition,
     unsupported_claim_summary,
@@ -36,6 +41,7 @@ from ..exams.docs import REPORT_NAME, ExamDocsWriter
 from ..exams.lifecycle import ExamLifecycle
 from ..exams.models import (
     ASK_SUCCESS_EVENTS,
+    AcceptanceCriterion,
     ExamAttempt,
     ExamDefinition,
     ExamDefinitionError,
@@ -146,10 +152,15 @@ class ExamFinishResult(ActionResult):
     def present(self) -> str:
         result = self.result
         calculation = result.score_calculation
+        report = result.evaluation_report
         max_raw = calculation.max_raw_score if calculation else 50
         max_grade = calculation.max_grade if calculation else 5.0
-        raw = _or_not_evaluated(result.raw_score_50)
-        grade = _or_not_evaluated(result.suggested_grade)
+        raw = _or_not_evaluated(
+            report.overall_score_50 if report is not None else result.raw_score_50
+        )
+        grade = _or_not_evaluated(
+            report.suggested_grade if report is not None else result.suggested_grade
+        )
         parts = [f"Exam finished: {result.exam_title or result.exam_id}"]
         parts.append(f"Exam attempt: {result.exam_attempt_id}")
         parts.append(f"Student: {result.student_id}")
@@ -164,6 +175,15 @@ class ExamFinishResult(ActionResult):
         parts.append(f"/ask usage: {result.ask_count}{allowed}")
         parts.append(f"Raw score: {raw}/{max_raw}")
         parts.append(f"Suggested grade: {grade}/{max_grade}")
+        if report is not None:
+            parts.append(f"Evaluation status: {report.overall_status.value}")
+            if report.coverage_summary is not None:
+                parts.append(
+                    "Coverage: "
+                    f"{report.coverage_summary.evaluated_criteria}/"
+                    f"{report.coverage_summary.total_criteria} criteria, "
+                    f"excluded weight {report.coverage_summary.excluded_weight:g}"
+                )
         for dimension, score in result.dimension_scores.items():
             parts.append(f"- {dimension}: {_or_not_evaluated(score)}")
         if result.not_evaluated:
@@ -259,15 +279,17 @@ class ExamineAction:
         # The application boundary repeats the preparation check.  The TUI is
         # only a presenter and cannot be trusted to keep a preflight fresh.
         configured_instructions = self.services.context.instructions_path
+        locale = (
+            self._active_locale(self.services.context.student_id)
+            if self.services.context.student_id
+            else None
+        )
         status = ExamPreparationService(
-            self.services, toolchain=self.toolchain
-        ).validate(require_instructions=bool(configured_instructions))
+            self.services, toolchain=self.toolchain, progress=self._progress_callback
+        ).validate(
+            require_instructions=bool(configured_instructions), locale=locale
+        )
         if not status.ready_to_start:
-            locale = (
-                self._active_locale(self.services.context.student_id)
-                if self.services.context.student_id
-                else None
-            )
             reasons = "; ".join(
                 describe_blocker(
                     code,
@@ -302,6 +324,7 @@ class ExamineAction:
         student_id = self._require_student(inp.student_id)
         project_id = self._require_project(inp.project_id)
         preparation = status.toolchain_preparation
+        self._progress("exam_start_progress_ready", locale)
         attempt = self.lifecycle.start(
             definition,
             student_id=student_id,
@@ -403,45 +426,59 @@ class ExamineAction:
         definition: ExamDefinition,
         evidence: EvidenceContext,
     ) -> ExamResult:
-        """Deterministic score plus grounded qualitative interpretation.
+        """Build one official report from LLM decisions and deterministic evidence.
 
-        Ordering matters: architecture is analysed from observed evidence, the
-        score is computed, and only then does the model interpret that score. The
-        model never supplies a number (spec.md §Structured LLM output).
+        The LLM only returns statuses tied to real evidence ids. Every number,
+        weight and denominator is computed here by ``ExamScorer`` and then
+        projected once into ``EvaluationReport`` for the CLI and the PDF.
         """
-        self._require_exam_rubric(attempt.rubric_ref)
+        rubric = self._require_exam_rubric(attempt.rubric_ref)
+        scorer = ExamScorer(rubric)
+        if evidence.project_path is None:
+            evidence.project_path = str(self._project_path())
         build_failed = self.engine.build_failed(evidence)
         analyzer = ArchitectureAnalyzer(self._project_path())
-        report = analyzer.analyze(evidence, definition)
+        architecture = analyzer.analyze(evidence, definition)
         documentation = [
             str(path.relative_to(self._project_path()))
             for path in definition.documentation_paths(self._project_path())
         ]
-        calculation = self.scorer.score(
+        requirement_inputs = self._criterion_inputs(definition)
+        model = self.services.config.llm.model or DEFAULT_MODEL
+        prompt_version = PROMPT_VERSION
+        requirement_batch = LLMRequirementEvaluator(
+            self.services.client, model=model, prompt_version=prompt_version
+        ).evaluate(requirement_inputs, evidence)
+        architecture_batch = LLMArchitectureEvaluator(
+            self.services.client, model=model, prompt_version=prompt_version
+        ).evaluate(evidence)
+        requirement_decisions = {
+            item.criterion_id: item for item in requirement_batch.decisions
+        }
+        architecture_decisions = {
+            item.criterion_id: item for item in architecture_batch.decisions
+        }
+        calculation = scorer.score(
             definition,
             evidence,
             attempt=attempt,
-            architecture=report,
+            architecture=architecture,
             build_failed=build_failed,
             extra_limitations=list(definition.limitations),
+            requirement_decisions=requirement_decisions,
+            architecture_decisions=architecture_decisions,
         )
-        metrics = self.scorer.process_criteria(attempt)
+        metrics = scorer.process_criteria(attempt)
         agent = ExamInterpretationAgent(
             self.services.client,
-            model=self.services.config.llm.model,
+            model=model,
             temperature=self.services.config.llm.temperature,
             max_attempts=self.services.config.llm.max_attempts,
         )
         interpretation = self._interpret(
             agent, definition, evidence, metrics, calculation, documentation
         )
-        # Ground the model's architecture inferences into the report now that they
-        # exist. This cannot move the score: ``architecture_score`` reads observed
-        # claims only, and those are already fixed above (RQ-EXM-014, RQ-EXM-030).
-        # Re-analysing here is what lets inferred claims reach the narrative and
-        # the PDF report, which RQ-EXM-023/030 require, while the model still
-        # never influences a number.
-        report = analyzer.analyze(
+        architecture = analyzer.analyze(
             evidence,
             definition,
             inferred_claims=interpretation.architecture_claims,
@@ -452,21 +489,58 @@ class ExamineAction:
             evidence,
             calculation,
             metrics,
-            report,
+            architecture,
             interpretation,
             documentation,
             build_failed,
+            scorer=scorer,
         )
-        result.evaluation_report = self.evaluator.build_report(
+        official_report = self.evaluator.build_report(
             result=result,
             definition=definition,
             evidence=evidence,
             build_failed=build_failed,
             toolchain_preparation=self._toolchain_preparation(attempt),
+            requirement_decisions=requirement_decisions,
+            architecture_decisions=architecture_decisions,
+            llm_runs=[requirement_batch.run, architecture_batch.run],
+            rubric_definition=rubric,
         )
+        result.evaluation_report = official_report
+        result.strengths = official_report.strengths or interpretation.strengths()
+        result.recommendations = [
+            item.text for item in official_report.priority_actions
+        ] or interpretation.recommendations()
+        result.feedback = "\n".join(result.strengths + result.recommendations)
         result.toolchain_manifest = attempt.toolchain_manifest
         result.toolchain_evidence = list(attempt.toolchain_evidence)
         return result
+
+    @staticmethod
+    def _criterion_inputs(
+        definition: ExamDefinition,
+    ) -> list[EvaluationCriterionInput]:
+        inputs: list[EvaluationCriterionInput] = []
+        for requirement in definition.requirements:
+            acceptance = list(requirement.acceptance_criteria)
+            if not acceptance:
+                acceptance = [
+                    AcceptanceCriterion(
+                        id=requirement.requirement_id,
+                        description=requirement.description,
+                        verification=["source_inspection"],
+                    )
+                ]
+            for item in acceptance:
+                inputs.append(
+                    EvaluationCriterionInput(
+                        criterion_id=item.id,
+                        description=item.description,
+                        requirement_id=requirement.requirement_id,
+                        dimension=requirement.dimension,
+                    )
+                )
+        return inputs
 
     @staticmethod
     def _toolchain_preparation(attempt: ExamAttempt) -> ToolchainPreparationResult:
@@ -524,6 +598,7 @@ class ExamineAction:
         interpretation,
         documentation: list[str],
         build_failed: bool,
+        scorer: ExamScorer | None = None,
     ) -> ExamResult:
         limitations: list[str] = [
             *evidence.limitations,
@@ -561,7 +636,7 @@ class ExamineAction:
             rubric_id=calculation.rubric_id,
             rubric_version=calculation.rubric_version,
             overall_score=calculation.percentage,
-            criteria=self.scorer.functional_criteria(definition, evidence),
+            criteria=list(calculation.criteria),
             dimension_scores={line.dimension: line.score for line in calculation.lines},
             evidence=list(evidence.evidence),
             strengths=interpretation.strengths(),
@@ -592,6 +667,9 @@ class ExamineAction:
             # report stays consistent when the language changed mid-exam
             # (spec 0010, RQ-LNG-013).
             locale=attempt.locale or self._active_locale(attempt.student_id),
+            supersedes_report_id=attempt.administrative_metadata.get(
+                "supersedes_report_id"
+            ),
         )
 
     # -- resolution -------------------------------------------------------

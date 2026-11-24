@@ -73,6 +73,30 @@ def test_ready_toolchain_is_persisted_on_attempt(tmp_path):
     ]
 
 
+def test_start_reports_localized_progress_by_real_stage(tmp_path):
+    project = make_project(tmp_path)
+    services = make_context(tmp_path, project)
+    progress: list[str] = []
+    action = ExamineAction(
+        services,
+        runner=OkRunner(),
+        toolchain=ReadyToolchainManager(),
+        progress=progress.append,
+    )
+
+    action.start(
+        ExamStartInput(
+            statement=str(_statement(tmp_path)),
+            project_id="project://p1",
+            confirmed=True,
+        )
+    )
+
+    assert progress[0].startswith("Validating")
+    assert "Preparing static analysis tools" in progress[1]
+    assert "Creating the exam attempt" in progress[2]
+
+
 def test_infrastructure_failure_has_no_final_score(tmp_path):
     definition = make_definition()
     evidence = make_evidence()

@@ -4,8 +4,10 @@ Este paquete actualiza el flujo de preparación e inicio de exámenes y añade l
 especificación del temporizador visible en el TUI.
 
 Archivos:
+- `IMPLEMENTATION-STATUS.md`: auditoría de completitud frente al código y las
+  pruebas; estado real de cada requisito, contradicciones normativas y brechas.
 - `spec.md`: comportamiento y criterios de aceptación.
-- `requirements.md`: requisitos trazables RQ-EXM-032 a RQ-EXM-047 y preservación
+- `requirements.md`: requisitos trazables RQ-EXM-032 a RQ-EXM-076 y preservación
   de los requisitos previos.
 - `design.md`: arquitectura propuesta, flujo, UI y timer.
 - `tasks.md`: lista de implementación y pruebas.
@@ -35,4 +37,6 @@ reales antes de iniciar. La preparación usa versiones fijadas y workspace/cach�
 aislados; no modifica el proyecto original ni instala herramientas globalmente.
 Si falla, el preflight bloquea el examen; un fallo posterior marca la evaluación
 como incompleta por infraestructura, nunca como cero del estudiante. Consulta
-`toolchain-policy.json` y `ADR-028-toolchain-preparation.md`.
+`toolchain-policy.json` y `ADR-028-toolchain-preparation.md`. El inicio muestra
+`Preparando…` y avances reales por etapa mientras se prepara el toolchain, sin
+congelar el TUI (RQ-EXM-076).

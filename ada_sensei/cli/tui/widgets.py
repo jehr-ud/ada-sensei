@@ -411,10 +411,35 @@ class ExamPreparationList(Static):
         self.update(self._render_preparation(locale))
         self.focus()
 
+    def show_preparing(self, *, locale: str) -> None:
+        """Show a non-blocking waiting state while the worker validates."""
+        self.status, self.ready, self.index, self.locale = None, False, 0, locale
+        self.mode = "preparing"
+        self.styles.display = "block"
+        self.update(self._render_preparation(locale))
+        self.focus()
+
     def _render_preparation(self, locale: str):
         from rich.text import Text
 
         es = locale == "es-CO"
+        if self.mode == "preparing":
+            title = "Preparando examen" if es else "Preparing exam"
+            message = (
+                "ADA Sensei está validando el proyecto y las herramientas de "
+                "análisis. Puede tardar unos minutos."
+                if es
+                else (
+                    "ADA Sensei is validating the project and analysis tools. "
+                    "This can take a few minutes."
+                )
+            )
+            text = Text(f"{title}\n\n{message}\n\n")
+            text.append(
+                "Esc Volver" if es else "Esc Back",
+                style="dim",
+            )
+            return text
         if self.mode == "finish":
             title = "Finalizar examen" if es else "Finish exam"
             intro = (
@@ -444,12 +469,9 @@ class ExamPreparationList(Static):
             return text
         title = "Preparar examen" if es else "Prepare exam"
         intro = (
-            "Configura el proyecto Android y la definición JSON antes de comenzar."
+            "Usa /project <ruta> y /instructions <ruta.json> para estar listo."
             if es
-            else (
-                "Configure the Android project and JSON definition before "
-                "starting."
-            )
+            else "Use /project <path> and /instructions <path.json> to get ready."
         )
         missing = "Faltan requisitos" if es else "Requirements missing"
         ready = "Listo para comenzar" if es else "Ready to start"
@@ -466,7 +488,14 @@ class ExamPreparationList(Static):
             if es
             else ("Ready" if toolchain_ready else "Not ready")
         )
+        student_ready = getattr(self.status, "student_ready", False)
+        student = (
+            ("Listo" if student_ready else "No listo")
+            if es
+            else ("Ready" if student_ready else "Not ready")
+        )
         text = Text(f"{title}\n\n{intro}\n\n")
+        text.append(f"{'Estudiante' if es else 'Student'}: {student}\n")
         text.append(f"{'Proyecto' if es else 'Project'}: {project}\n")
         text.append(f"{'Definición' if es else 'Definition'}: {instructions}\n")
         text.append(f"{'Toolchain' if es else 'Toolchain'}: {toolchain}\n")
@@ -503,6 +532,8 @@ class ExamPreparationList(Static):
         self._move(1)
 
     def action_confirm(self) -> None:
+        if self.mode == "preparing":
+            return
         if self.mode == "finish":
             option = "finish" if self.index == 0 else "continue"
         else:

@@ -1,6 +1,6 @@
 # ADR-028 — Preparación aislada y reproducible de herramientas estáticas
 
-- Estado: Propuesta normativa
+- Estado: Aceptado con verificación parcial
 - Fecha: 2026-11-21
 
 ## Contexto
@@ -17,10 +17,17 @@ obtiene de AGP; Detekt y KtLint se resuelven con versiones de una matriz
 verificada. No se usan versiones flotantes ni instalaciones globales.
 
 El preflight prepara el toolchain antes de crear el intento y arrancar el timer.
-Si no puede dejar las tres herramientas listas, bloquea el inicio. Si ocurre un
+Si no puede dejar las tres herramientas listas (`READY` o `ISSUES_FOUND` con
+health check PASS), bloquea el inicio. Si ocurre un
 fallo de infraestructura después del inicio, el reporte queda incompleto, sin
 nota final completa y sin penalización al estudiante. El código original nunca
 se modifica; no se ejecutan tareas de auto-fix.
+
+La configuración faltante se inyecta con init scripts de Gradle dentro del
+workspace temporal; el proyecto original nunca se edita. Una herramienta que
+termina con hallazgos se registra como `ISSUES_FOUND` con health check PASS y no
+bloquea el inicio del examen; solo bloquean los fallos de ejecución o la ausencia
+de un reporte estructurado válido.
 
 `TeacherAgent` solo comunica el estado. No administra herramientas ni evalúa.
 

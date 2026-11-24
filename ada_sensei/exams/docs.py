@@ -274,16 +274,25 @@ def render_architecture(result: ExamResult) -> str:
 
 
 def render_summary(result: ExamResult) -> str:
-    raw = result.raw_score_50
-    grade = result.suggested_grade
+    report = result.evaluation_report
+    raw = report.overall_score_50 if report is not None else result.raw_score_50
+    grade = report.suggested_grade if report is not None else result.suggested_grade
     lines = [
         "# Evaluation summary",
         "",
         f"- Exam attempt: `{result.exam_attempt_id}`",
-        f"- Rubric: `{result.rubric_ref}`",
+        f"- Rubric: `{result.rubric_id}:{result.rubric_version}`",
         f"- Raw score: {raw if raw is not None else 'not evaluated'} / "
         f"{result.score_calculation.max_raw_score if result.score_calculation else 50}",
         f"- Suggested grade: {grade if grade is not None else 'not evaluated'} / 5.0",
+    ]
+    if report is not None:
+        lines.append(f"- Evaluation status: {report.overall_status.value}")
+        if report.coverage_summary is not None:
+            lines.append(
+                f"- Excluded weight: {report.coverage_summary.excluded_weight:g}"
+            )
+    lines += [
         "",
         f"_{result.grade_disclosure}_",
         "",
@@ -292,7 +301,12 @@ def render_summary(result: ExamResult) -> str:
         "| dimension | score |",
         "|---|---:|",
     ]
-    for dimension, score in result.dimension_scores.items():
+    dimension_scores = (
+        {item.dimension_id: item.score for item in report.dimension_results}
+        if report is not None
+        else result.dimension_scores
+    )
+    for dimension, score in dimension_scores.items():
         shown = "not evaluated" if score is None else score
         lines.append(f"| `{dimension}` | {shown} |")
     for title, items in (

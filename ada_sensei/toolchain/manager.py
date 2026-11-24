@@ -104,6 +104,11 @@ _TOML_AGP = re.compile(
 _TASK_PATTERN = re.compile(
     r"\b(lint[A-Za-z0-9]*|detekt[A-Za-z0-9]*|ktlint[A-Za-z0-9]*)\b"
 )
+_REPOSITORY_GROOVY = {
+    "gradlePluginPortal": "gradlePluginPortal()",
+    "mavenCentral": "mavenCentral()",
+    "google": "google()",
+}
 
 
 class ProjectProfile(BaseModel):
@@ -142,6 +147,7 @@ class ToolchainManager:
             self.cache_dir = self.workspace_root / "cache"
         else:
             self.cache_dir = Path(tempfile.gettempdir()) / "ada-sensei-toolchain-cache"
+        self._result_cache: dict[tuple[str, ...], ToolchainPreparationResult] = {}
 
     @staticmethod
     def _coerce_policy(
@@ -180,6 +186,12 @@ class ToolchainManager:
         profile = detect_project_profile(project, variant=variant, modules=modules)
         limitations.extend(_detection_limitations(profile))
         resolution = self.policy.resolve_versions(profile.detected_versions())
+        cache_key = self._cache_key(
+            project, snapshot_hash, variant, modules, resolution
+        )
+        cached = self._result_cache.get(cache_key)
+        if cached is not None:
+            return cached.model_copy(deep=True)
 
         if resolution.blockers or any(
             status not in {ToolStatus.INSTALLED, ToolStatus.READY}
@@ -195,16 +207,26 @@ class ToolchainManager:
             )
 
         workspace = self._isolated_workspace(project)
+        sdk_property = _isolated_sdk_property(project, workspace)
+        if sdk_property is not None:
+            limitations.append(
+                "Android SDK path was forwarded to the isolated workspace "
+                "without copying other local.properties values"
+            )
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         limitations.append(
             "analysis ran in an isolated temporary copy; "
             "no task could rewrite the original tree"
         )
 
-        executions = [
-            self._execute_tool(tool, profile, resolution, workspace, snapshot_hash)
-            for tool in self.policy.required_tools()
-        ]
+        executions = []
+        for tool in self.policy.required_tools():
+            init_script = self._write_init_script(workspace.parent, tool, resolution)
+            executions.append(
+                self._execute_tool(
+                    tool, profile, resolution, workspace, snapshot_hash, init_script
+                )
+            )
         if _hash_project(project) != snapshot_hash:
             executions[-1:] = []
             return self._blocked_result(
@@ -223,17 +245,109 @@ class ToolchainManager:
         blockers = [
             f"{item.tool_id.value}: {item.error_cause or item.health_check.reason}"
             for item in executions
-            if item.status != ToolStatus.READY
+            if item.status not in {ToolStatus.READY, ToolStatus.ISSUES_FOUND}
             or item.health_check.status != HealthCheckStatus.PASS
         ]
         manifest = self._manifest(self.policy, resolution, snapshot_hash, executions)
-        return ToolchainPreparationResult(
+        result = ToolchainPreparationResult(
             ready=not blockers,
             manifest=manifest,
             executions=executions,
             blockers=blockers,
             limitations=limitations,
         )
+        if result.ready:
+            self._result_cache[cache_key] = result.model_copy(deep=True)
+        return result
+
+    def _cache_key(
+        self,
+        project: Path,
+        snapshot_hash: str,
+        variant: str | None,
+        modules: list[str] | str | None,
+        resolution: VersionResolution,
+    ) -> tuple[str, ...]:
+        if isinstance(modules, str):
+            normalized_modules = (modules,)
+        elif modules is None:
+            normalized_modules = ()
+        else:
+            normalized_modules = tuple(sorted(modules))
+        return (
+            str(project),
+            snapshot_hash,
+            variant or "",
+            *normalized_modules,
+            self.policy.model_dump_json(),
+            resolution.model_dump_json(),
+        )
+
+    def _write_init_script(
+        self, base: Path, tool: ToolId, resolution: VersionResolution
+    ) -> Path | None:
+        entry = resolution.entry
+        if entry is None:
+            return None
+        plugin = entry.plugins.get(tool.value)
+        if plugin is None:
+            return None
+        declarations = [
+            declaration
+            for declaration in (
+                _REPOSITORY_GROOVY.get(name) for name in self.policy.repositories
+            )
+            if declaration
+        ]
+
+        def repositories(indent: int) -> str:
+            return "\n".join(f"{' ' * indent}{item}" for item in declarations)
+
+        classpath = f"{plugin.marker}:{plugin.version}"
+        if tool is ToolId.ktlint:
+            ktlint_version = plugin.core_version or entry.version_for(tool)
+            extension = f"""
+            def ktlintExtension = project.extensions.findByName('ktlint')
+            if (ktlintExtension != null) {{
+                ktlintExtension.version.set('{ktlint_version}')
+                ktlintExtension.reporters {{
+                    reporter 'checkstyle'
+                }}
+            }}"""
+        else:
+            extension = ""
+        script = f"""initscript {{
+    repositories {{
+{repositories(8)}
+    }}
+    dependencies {{
+        classpath '{classpath}'
+    }}
+}}
+allprojects {{
+    buildscript {{
+        repositories {{
+{repositories(12)}
+        }}
+        dependencies {{
+            classpath '{classpath}'
+        }}
+    }}
+    afterEvaluate {{ project ->
+        def hasKotlinSources = project.file('src/main/kotlin').exists() ||
+            project.file('src/test/kotlin').exists() ||
+            project.file('src/main/java').exists() ||
+            project.file('src/test/java').exists()
+        if (!hasKotlinSources) {{
+            return
+        }}
+        project.pluginManager.apply('{plugin.id}'){extension}
+    }}
+}}
+"""
+        path = base / f"ada-sensei-{tool.value}-init.gradle"
+        path.write_text(script, encoding="utf-8")
+        return path
 
     def _isolated_workspace(self, project: Path) -> Path:
         if self.workspace_root is not None:
@@ -257,12 +371,16 @@ class ToolchainManager:
         resolution: VersionResolution,
         workspace: Path,
         snapshot_hash: str,
+        init_script: Path | None,
     ) -> ToolExecutionEvidence:
         cfg = self.policy.tools.get(tool)
         task = _select_task(
             tool, profile, cfg.task_resolution if cfg else [], profile.variant
         )
-        command = ["./gradlew" if profile.wrapper else "gradle", task]
+        command = ["./gradlew" if profile.wrapper else "gradle"]
+        if init_script is not None:
+            command.extend(["--init-script", str(init_script)])
+        command.append(task)
         version = resolution.versions.get(tool)
         coordinate = _COORDINATES[tool]
         if version:
@@ -311,13 +429,19 @@ class ToolchainManager:
             workspace, tool, cfg.report_paths if cfg else [], result, profile
         )
         report_hashes = {path: _file_hash(workspace / path) for path in reports}
-        passed = exit_code == 0 and bool(reports)
-        if passed:
+        analyzed = bool(reports) and exit_code in {0, 1} and not getattr(
+            result, "timed_out", False
+        )
+        if analyzed:
+            findings = _count_findings(workspace, reports)
+            status = ToolStatus.READY if exit_code == 0 else ToolStatus.ISSUES_FOUND
             health = HealthCheck(
                 status=HealthCheckStatus.PASS,
-                reason=f"exit_code=0; {len(reports)} structured report(s) validated",
+                reason=(
+                    f"exit_code={exit_code}; {len(reports)} structured report(s) "
+                    f"validated; {findings} finding(s)"
+                ),
             )
-            status = ToolStatus.READY
             error_cause = None
         else:
             reason = _failure_reason(
@@ -443,9 +567,9 @@ def detect_project_profile(
         )
         jdk = match.group(1) if match else None
     if jdk is None:
-        match = re.search(r"jvmToolchain\((\d+)\)|JavaVersion\.VERSION_(\d+)", all_text)
+        match = re.search(r"jvmToolchain\((\d+)\)", all_text)
         if match:
-            jdk = match.group(1) or match.group(2)
+            jdk = match.group(1)
 
     kotlin = _first_match(_KOTLIN_PATTERNS, all_text) or _first_match(
         [_TOML_KOTLIN], toml_text
@@ -485,6 +609,24 @@ def detect_project_profile(
         variant=variant or "debug",
         tasks=tasks,
     )
+
+
+def _isolated_sdk_property(project: Path, workspace: Path) -> str | None:
+    source = project / "local.properties"
+    if not source.is_file():
+        return None
+    for raw in _read_text(source).splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        if key.strip() == "sdk.dir" and value.strip():
+            sdk_dir = value.strip()
+            (workspace / "local.properties").write_text(
+                f"sdk.dir={sdk_dir}\n", encoding="utf-8"
+            )
+            return sdk_dir
+    return None
 
 
 def hash_project(project_path: str | Path) -> str:
@@ -641,6 +783,22 @@ def _is_report_valid(path: Path) -> bool:
     except (ET.ParseError, json.JSONDecodeError, ValueError):
         return False
     return False
+
+
+def _count_findings(workspace: Path, reports: list[str]) -> int:
+    findings = 0
+    for relative in reports:
+        path = workspace / relative
+        if path.suffix.lower() != ".xml":
+            continue
+        try:
+            root = ET.fromstring(path.read_text(encoding="utf-8", errors="replace"))
+        except ET.ParseError:
+            continue
+        findings += sum(
+            1 for item in root.iter() if item.tag in {"error", "issue"}
+        )
+    return findings
 
 
 def _file_hash(path: Path) -> str:

@@ -365,11 +365,23 @@ class TeacherAgent:
         )
         if report is None:
             return
-        if getattr(report, "overall_status", None) == "INCOMPLETE_INFRASTRUCTURE":
+        status = getattr(report, "overall_status", None)
+        status_value = getattr(status, "value", status)
+        if status_value == "INCOMPLETE_INFRASTRUCTURE":
             parts.append(
                 "El informe está incompleto por infraestructura; no hay nota final."
                 if locale == "es-CO"
                 else "The report is incomplete due to infrastructure; no final score."
+            )
+        elif status_value == "BLOCKED":
+            parts.append(
+                "El informe está bloqueado; los criterios dependientes del modelo "
+                "no fueron evaluados."
+                if locale == "es-CO"
+                else (
+                    "The report is blocked; model-dependent criteria were "
+                    "not evaluated."
+                )
             )
         for finding in list(getattr(report, "findings", []))[:3]:
             parts.append(

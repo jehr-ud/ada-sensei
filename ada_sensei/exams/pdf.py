@@ -272,11 +272,24 @@ class SimplePdfWriter:
     def page_break(self) -> None:
         self._new_page()
 
+    def footer(self, *, left: str, right: str) -> None:
+        """Add a stable identification footer to every laid-out page."""
+        size = 8.0
+        y = self.margin / 2
+        for page in self.pages:
+            page.lines.append(TextLine(self.margin, y, (Span(left),), size))
+            right_x = page.width - self.margin - text_width(right, size)
+            page.lines.append(TextLine(right_x, y, (Span(right),), size))
+
     # -- serialization ----------------------------------------------------
 
-    def build(self) -> bytes:
+    def build(self, *, max_pages: int | None = None) -> bytes:
         if not self.pages:
             self._new_page()
+        if max_pages is not None and len(self.pages) > max_pages:
+            raise PdfError(
+                f"report needs {len(self.pages)} pages; limit is {max_pages}"
+            )
         return _serialize(
             self.pages, self.page_width, self.page_height, compress=self.compress
         )

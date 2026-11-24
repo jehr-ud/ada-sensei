@@ -1,0 +1,973 @@
+{
+  "schema_version": "1.0",
+  "exam_id": "domino-conquista",
+  "title": "Domino Conquista para Android",
+  "version": "2.0",
+  "description": "Evaluación de una aplicación Android del juego Domino Conquista. El proyecto debe permitir participar en partidas por turnos, validar movimientos de dominó, conquistar territorios, aplicar efectos especiales, calcular puntajes y sincronizar el estado de la partida en tiempo real mediante Firebase.",
+  "statement_language": "es-CO",
+  "allowed_duration_seconds": null,
+  "allowed_ask_count": null,
+  "project_constraints": {
+    "platform": "Android",
+    "language": "Kotlin",
+    "ui_framework": "Jetpack Compose o interfaz Android equivalente",
+    "architecture": "Clean Architecture + MVVM; evaluate actual dependency direction and responsibility boundaries, not folder names",
+    "backend": "Firebase",
+    "realtime_sync_required": true,
+    "authentication": {
+      "required": true,
+      "google_sign_in": "optional"
+    },
+    "chat": "not_required",
+    "team_project": true,
+    "public_repository_required": true,
+    "manual_presentation_language": "en-US"
+  },
+  "documentation_rules": {
+    "accepted_globs": [
+      "docs/**/*.md",
+      "docs/**/*.pdf",
+      "*.md",
+      "*.pdf"
+    ]
+  },
+  "rubric_ref": "unified-android:v2",
+  "requirements": [
+    {
+      "id": "DOM-AUTH-001",
+      "type": "functional",
+      "title": "Autenticación y acceso a partidas",
+      "description": "La aplicación permite crear una cuenta e iniciar sesión para acceder al juego. La autenticación con Google es opcional. Los jugadores deben poder acceder al flujo de creación o ingreso a una sala de juego.",
+      "weight": 0.08,
+      "source": {
+        "file": "examen_domino_conquista.md",
+        "section": "2. Condiciones de trabajo; 3. Descripción del juego; 7. Criterios de evaluación",
+        "reference": "REQ-EXAM-01"
+      },
+      "acceptance_criteria": [
+        {
+          "id": "DOM-AUTH-001-AC1",
+          "description": "Un usuario puede crear una cuenta e iniciar sesión mediante el mecanismo de autenticación implementado.",
+          "verification": [
+            "unit_test",
+            "manual_review",
+            "ui_inspection",
+            "source_inspection"
+          ],
+          "evidence_hints": [
+            "Firebase Authentication",
+            "AuthRepository",
+            "LoginScreen",
+            "RegisterScreen",
+            "AuthViewModelTest"
+          ]
+        },
+        {
+          "id": "DOM-AUTH-001-AC2",
+          "description": "Después de autenticarse, el usuario puede acceder al flujo de creación o ingreso a una sala de juego.",
+          "verification": [
+            "ui_inspection",
+            "manual_review"
+          ],
+          "evidence_hints": [
+            "RoomScreen",
+            "CreateRoom",
+            "JoinRoom",
+            "navigation"
+          ]
+        }
+      ],
+      "related_requirements": [
+        "DOM-FIREBASE-001"
+      ],
+      "tags": [
+        "authentication",
+        "firebase",
+        "rooms"
+      ]
+    },
+    {
+      "id": "DOM-DEAL-001",
+      "type": "functional",
+      "title": "Distribución inicial de fichas",
+      "description": "Al comenzar una partida, cada jugador recibe exactamente siete fichas de dominó. La distribución debe respetar el conjunto disponible y no debe duplicar fichas.",
+      "weight": 0.08,
+      "source": {
+        "file": "examen_domino_conquista.md",
+        "section": "4. Reglas del juego",
+        "reference": "Reglas 1 y 2"
+      },
+      "acceptance_criteria": [
+        {
+          "id": "DOM-DEAL-001-AC1",
+          "description": "La inicialización de una partida asigna exactamente siete fichas a cada jugador.",
+          "verification": [
+            "unit_test",
+            "source_inspection"
+          ],
+          "evidence_hints": [
+            "GameEngine",
+            "initialDeal",
+            "GameEngineTest"
+          ]
+        },
+        {
+          "id": "DOM-DEAL-001-AC2",
+          "description": "Una misma ficha física no puede asignarse a más de un jugador ni aparecer duplicada en la distribución inicial.",
+          "verification": [
+            "unit_test"
+          ],
+          "evidence_hints": [
+            "Tile",
+            "TileId",
+            "initialDeal tests"
+          ]
+        }
+      ],
+      "related_requirements": [
+        "DOM-TURN-001"
+      ],
+      "tags": [
+        "domino",
+        "game-logic",
+        "initialization"
+      ]
+    },
+    {
+      "id": "DOM-TURN-001",
+      "type": "functional",
+      "title": "Gestión de turnos y validación de movimientos",
+      "description": "La partida se desarrolla por turnos. En cada turno, el jugador selecciona una ficha y el sistema valida que pueda conectarse legalmente con uno de los extremos abiertos de la cadena de dominó antes de permitir colocarla.",
+      "weight": 0.16,
+      "source": {
+        "file": "examen_domino_conquista.md",
+        "section": "4. Reglas del juego; 5. Requisitos de implementación",
+        "reference": "Reglas 2, 5 y 6"
+      },
+      "acceptance_criteria": [
+        {
+          "id": "DOM-TURN-001-AC1",
+          "description": "El sistema identifica y muestra el jugador al que le corresponde el turno.",
+          "verification": [
+            "unit_test",
+            "ui_inspection",
+            "source_inspection"
+          ],
+          "evidence_hints": [
+            "currentPlayer",
+            "turnState",
+            "GameState"
+          ]
+        },
+        {
+          "id": "DOM-TURN-001-AC2",
+          "description": "Se acepta un movimiento cuando uno de los extremos de la ficha coincide con un extremo abierto válido.",
+          "verification": [
+            "unit_test"
+          ],
+          "evidence_hints": [
+            "MoveValidator",
+            "canPlay",
+            "MoveValidatorTest"
+          ]
+        },
+        {
+          "id": "DOM-TURN-001-AC3",
+          "description": "Se rechaza un movimiento cuando ninguno de los extremos de la ficha coincide con los extremos abiertos.",
+          "verification": [
+            "unit_test"
+          ],
+          "evidence_hints": [
+            "MoveValidatorTest",
+            "invalidMove"
+          ]
+        },
+        {
+          "id": "DOM-TURN-001-AC4",
+          "description": "Una ficha solo puede colocarse en una posición permitida por las reglas y el estado actual del tablero.",
+          "verification": [
+            "unit_test",
+            "manual_review"
+          ],
+          "evidence_hints": [
+            "BoardState",
+            "PlacementValidator",
+            "move handling"
+          ]
+        }
+      ],
+      "related_requirements": [
+        "DOM-DEAL-001",
+        "DOM-BOARD-001",
+        "DOM-FIREBASE-001"
+      ],
+      "tags": [
+        "domino",
+        "turns",
+        "validation",
+        "game-logic"
+      ]
+    },
+    {
+      "id": "DOM-BOARD-001",
+      "type": "functional",
+      "title": "Tablero, conquista de territorios y casillas especiales",
+      "description": "El tablero se encuentra dividido en territorios. Al realizar un movimiento válido, el jugador conquista el territorio correspondiente. El tablero debe contemplar casillas Bonus, Tesoro, Trampa, Fortaleza y Portal con los efectos definidos en el enunciado.",
+      "weight": 0.2,
+      "source": {
+        "file": "examen_domino_conquista.md",
+        "section": "3. Descripción del juego; 4. Reglas del juego",
+        "reference": "Reglas 3, 4, 7, 8 y 9"
+      },
+      "acceptance_criteria": [
+        {
+          "id": "DOM-BOARD-001-AC1",
+          "description": "El tablero representa visualmente los territorios y permite identificar cuáles han sido conquistados y por qué jugador.",
+          "verification": [
+            "ui_inspection",
+            "manual_review"
+          ],
+          "evidence_hints": [
+            "GameBoard",
+            "Territory",
+            "territoryOwner",
+            "board state"
+          ]
+        },
+        {
+          "id": "DOM-BOARD-001-AC2",
+          "description": "Un movimiento válido actualiza la propiedad del territorio correspondiente.",
+          "verification": [
+            "unit_test",
+            "source_inspection"
+          ],
+          "evidence_hints": [
+            "TerritoryManager",
+            "conquerTerritory",
+            "territory tests"
+          ]
+        },
+        {
+          "id": "DOM-BOARD-001-AC3",
+          "description": "La casilla Bonus aplica el incremento de puntos configurado para ese tipo de casilla.",
+          "verification": [
+            "unit_test"
+          ],
+          "evidence_hints": [
+            "SpecialTile",
+            "Bonus",
+            "score tests"
+          ]
+        },
+        {
+          "id": "DOM-BOARD-001-AC4",
+          "description": "La casilla Tesoro suma cinco puntos y la casilla Trampa resta dos puntos.",
+          "verification": [
+            "unit_test"
+          ],
+          "evidence_hints": [
+            "Treasure",
+            "Trap",
+            "ScoringEngineTest"
+          ]
+        },
+        {
+          "id": "DOM-BOARD-001-AC5",
+          "description": "La Fortaleza requiere dos conquistas para cambiar a estado controlado.",
+          "verification": [
+            "unit_test"
+          ],
+          "evidence_hints": [
+            "Fortress",
+            "conquestCount",
+            "fortress tests"
+          ]
+        },
+        {
+          "id": "DOM-BOARD-001-AC6",
+          "description": "El Portal permite mover una ficha a otra posición válida, respetando la validación de movimientos.",
+          "verification": [
+            "unit_test",
+            "manual_review"
+          ],
+          "evidence_hints": [
+            "Portal",
+            "portal destination",
+            "PlacementValidator"
+          ]
+        }
+      ],
+      "related_requirements": [
+        "DOM-TURN-001",
+        "DOM-SCORE-001"
+      ],
+      "tags": [
+        "board",
+        "territories",
+        "special-cells",
+        "game-logic"
+      ]
+    },
+    {
+      "id": "DOM-FIREBASE-001",
+      "type": "functional",
+      "title": "Sincronización de la partida en tiempo real",
+      "description": "La aplicación utiliza Firebase para sincronizar el estado de la partida entre los participantes. Los cambios de turno, tablero, fichas, territorios y puntajes deben reflejarse para los jugadores conectados.",
+      "weight": 0.16,
+      "source": {
+        "file": "examen_domino_conquista.md",
+        "section": "3. Descripción del juego; 5. Requisitos de implementación",
+        "reference": "Sincronización en tiempo real"
+      },
+      "acceptance_criteria": [
+        {
+          "id": "DOM-FIREBASE-001-AC1",
+          "description": "La aplicación lee y actualiza el estado de una partida usando un servicio de Firebase, no únicamente datos locales o simulados.",
+          "verification": [
+            "source_inspection",
+            "manual_review",
+            "unit_test"
+          ],
+          "evidence_hints": [
+            "Firebase",
+            "Realtime Database",
+            "Cloud Firestore",
+            "GameRepository",
+            "GameRepositoryTest"
+          ]
+        },
+        {
+          "id": "DOM-FIREBASE-001-AC2",
+          "description": "Un cambio realizado por un jugador se refleja en la interfaz del otro participante sin requerir reiniciar manualmente la aplicación.",
+          "verification": [
+            "manual_review",
+            "ui_inspection"
+          ],
+          "evidence_hints": [
+            "snapshot listener",
+            "Flow",
+            "addValueEventListener",
+            "onSnapshot"
+          ]
+        },
+        {
+          "id": "DOM-FIREBASE-001-AC3",
+          "description": "El estado sincronizado incluye como mínimo el turno actual, las fichas o movimientos, el tablero/territorios y los puntajes.",
+          "verification": [
+            "source_inspection",
+            "manual_review"
+          ],
+          "evidence_hints": [
+            "GameState",
+            "remote data model",
+            "Firebase schema"
+          ]
+        }
+      ],
+      "related_requirements": [
+        "DOM-AUTH-001",
+        "DOM-TURN-001",
+        "DOM-BOARD-001",
+        "DOM-SCORE-001"
+      ],
+      "tags": [
+        "firebase",
+        "realtime",
+        "multiplayer",
+        "backend"
+      ]
+    },
+    {
+      "id": "DOM-SCORE-001",
+      "type": "functional",
+      "title": "Cálculo y actualización de puntajes",
+      "description": "El sistema calcula y actualiza el puntaje de cada jugador al realizar movimientos y conquistar territorios, incluyendo los efectos de las casillas especiales.",
+      "weight": 0.1,
+      "source": {
+        "file": "examen_domino_conquista.md",
+        "section": "3. Descripción del juego; 4. Reglas del juego",
+        "reference": "Reglas 3, 9, 10 y 11"
+      },
+      "acceptance_criteria": [
+        {
+          "id": "DOM-SCORE-001-AC1",
+          "description": "El puntaje se actualiza después de cada movimiento válido y de aplicar el efecto de la casilla correspondiente.",
+          "verification": [
+            "unit_test",
+            "source_inspection"
+          ],
+          "evidence_hints": [
+            "ScoringEngine",
+            "calculateScore",
+            "ScoringEngineTest"
+          ]
+        },
+        {
+          "id": "DOM-SCORE-001-AC2",
+          "description": "La interfaz muestra permanentemente el puntaje de cada jugador durante la partida.",
+          "verification": [
+            "ui_inspection",
+            "manual_review"
+          ],
+          "evidence_hints": [
+            "ScoreBoard",
+            "PlayerScore",
+            "GameScreen"
+          ]
+        },
+        {
+          "id": "DOM-SCORE-001-AC3",
+          "description": "El cálculo considera los puntos adicionales o las penalizaciones de las casillas especiales.",
+          "verification": [
+            "unit_test"
+          ],
+          "evidence_hints": [
+            "Bonus",
+            "Treasure",
+            "Trap",
+            "ScoringEngineTest"
+          ]
+        }
+      ],
+      "related_requirements": [
+        "DOM-BOARD-001",
+        "DOM-END-001"
+      ],
+      "tags": [
+        "scoring",
+        "game-logic"
+      ]
+    },
+    {
+      "id": "DOM-END-001",
+      "type": "functional",
+      "title": "Pozo, pase de turno y finalización de partida",
+      "description": "Cuando un jugador no tiene un movimiento válido debe tomar una ficha del pozo. Si no puede jugar y el pozo está vacío, pierde el turno. La aplicación detecta las condiciones de finalización y determina el ganador por puntaje, usando territorios conquistados como desempate.",
+      "weight": 0.12,
+      "source": {
+        "file": "examen_domino_conquista.md",
+        "section": "4. Reglas del juego",
+        "reference": "Reglas 12, 13, 14, 15 y 16"
+      },
+      "acceptance_criteria": [
+        {
+          "id": "DOM-END-001-AC1",
+          "description": "Si el jugador no tiene movimientos válidos y quedan fichas en el pozo, puede tomar una ficha del pozo.",
+          "verification": [
+            "unit_test",
+            "manual_review"
+          ],
+          "evidence_hints": [
+            "drawFromBoneyard",
+            "Boneyard",
+            "GameEngineTest"
+          ]
+        },
+        {
+          "id": "DOM-END-001-AC2",
+          "description": "Si el jugador no puede jugar y el pozo está vacío, el turno pasa al siguiente jugador.",
+          "verification": [
+            "unit_test"
+          ],
+          "evidence_hints": [
+            "passTurn",
+            "emptyBoneyard",
+            "turn tests"
+          ]
+        },
+        {
+          "id": "DOM-END-001-AC3",
+          "description": "La partida termina cuando un jugador se queda sin fichas, no existen movimientos posibles o se alcanza el máximo de rondas configurado.",
+          "verification": [
+            "unit_test",
+            "source_inspection"
+          ],
+          "evidence_hints": [
+            "GameEndDetector",
+            "isGameOver",
+            "roundLimit"
+          ]
+        },
+        {
+          "id": "DOM-END-001-AC4",
+          "description": "Al finalizar, gana el jugador con mayor puntaje; en caso de empate, gana quien haya conquistado más territorios.",
+          "verification": [
+            "unit_test",
+            "ui_inspection"
+          ],
+          "evidence_hints": [
+            "WinnerResolver",
+            "territoryCount",
+            "winner tests"
+          ]
+        }
+      ],
+      "related_requirements": [
+        "DOM-DEAL-001",
+        "DOM-TURN-001",
+        "DOM-SCORE-001"
+      ],
+      "tags": [
+        "boneyard",
+        "turns",
+        "game-end",
+        "winner"
+      ]
+    },
+    {
+      "id": "DOM-UI-001",
+      "type": "functional",
+      "title": "Interfaz y flujo visual de la partida",
+      "description": "La aplicación presenta las pantallas necesarias para autenticarse, crear o ingresar a una sala, esperar a los participantes y jugar. Durante la partida muestra el tablero, las fichas del jugador, el turno actual y los puntajes. La propuesta visual es libre, pero debe permitir comprender y ejecutar el flujo del juego.",
+      "weight": 0.06,
+      "source": {
+        "file": "examen_domino_conquista.md",
+        "section": "2. Condiciones de trabajo; 5. Requisitos de implementación; 9. Referencia visual",
+        "reference": "Interfaz de usuario y flujo de partida"
+      },
+      "acceptance_criteria": [
+        {
+          "id": "DOM-UI-001-AC1",
+          "description": "El usuario puede recorrer el flujo principal desde el acceso a la sala hasta la pantalla de juego.",
+          "verification": [
+            "ui_inspection",
+            "manual_review",
+            "unit_test"
+          ],
+          "evidence_hints": [
+            "navigation",
+            "screens",
+            "room flow",
+            "NavigationViewModelTest"
+          ]
+        },
+        {
+          "id": "DOM-UI-001-AC2",
+          "description": "La pantalla de juego permite identificar tablero, fichas disponibles, turno actual y puntajes.",
+          "verification": [
+            "ui_inspection",
+            "manual_review"
+          ],
+          "evidence_hints": [
+            "GameScreen",
+            "GameBoard",
+            "PlayerHand",
+            "ScoreBoard"
+          ]
+        },
+        {
+          "id": "DOM-UI-001-AC3",
+          "description": "Los territorios conquistados y las casillas especiales se distinguen visualmente.",
+          "verification": [
+            "ui_inspection"
+          ],
+          "evidence_hints": [
+            "TerritoryView",
+            "SpecialCellView",
+            "visual state"
+          ]
+        }
+      ],
+      "related_requirements": [
+        "DOM-AUTH-001",
+        "DOM-BOARD-001",
+        "DOM-SCORE-001"
+      ],
+      "tags": [
+        "ui",
+        "navigation",
+        "game-flow"
+      ]
+    },
+    {
+      "id": "DOM-MVVM-001",
+      "type": "technical",
+      "title": "Separación de responsabilidades mediante MVVM",
+      "description": "La solución separa la interfaz, el estado de presentación y la lógica del dominio. La ViewModel no depende de componentes visuales Android o Jetpack Compose y coordina los casos de uso o repositorios necesarios.",
+      "weight": 0.0,
+      "source": {
+        "file": "examen_domino_conquista.md",
+        "section": "5. Requisitos de implementación; 7. Criterios de evaluación",
+        "reference": "Separación MVVM y arquitectura"
+      },
+      "acceptance_criteria": [
+        {
+          "id": "DOM-MVVM-001-AC1",
+          "description": "Se identifican responsabilidades diferenciadas para View, ViewModel y Model/dominio.",
+          "verification": [
+            "source_inspection",
+            "static_analysis"
+          ],
+          "evidence_hints": [
+            "ViewModel",
+            "Model",
+            "Repository",
+            "UseCase"
+          ]
+        },
+        {
+          "id": "DOM-MVVM-001-AC2",
+          "description": "La ViewModel no mantiene referencias a Activity, View, Context de UI ni funciones Composable.",
+          "verification": [
+            "source_inspection",
+            "static_analysis"
+          ],
+          "evidence_hints": [
+            "ViewModel",
+            "android.view",
+            "android.app.Activity",
+            "@Composable"
+          ]
+        },
+        {
+          "id": "DOM-MVVM-001-AC3",
+          "description": "La lógica de reglas, validación de movimientos y puntuación puede probarse sin ejecutar la interfaz gráfica.",
+          "verification": [
+            "source_inspection",
+            "unit_test"
+          ],
+          "evidence_hints": [
+            "domain",
+            "GameEngine",
+            "MoveValidator",
+            "ScoringEngine"
+          ]
+        }
+      ],
+      "related_requirements": [
+        "DOM-TURN-001",
+        "DOM-BOARD-001",
+        "DOM-SCORE-001"
+      ],
+      "tags": [
+        "mvvm",
+        "architecture",
+        "separation-of-concerns"
+      ]
+    },
+    {
+      "id": "DOM-COMP-001",
+      "type": "technical",
+      "title": "Componentes reutilizables",
+      "description": "La aplicación organiza elementos reutilizables para representar fichas, tablero, territorios, jugadores y controles de interacción, evitando duplicación innecesaria de interfaz y lógica.",
+      "weight": 0.0,
+      "source": {
+        "file": "examen_domino_conquista.md",
+        "section": "5. Requisitos de implementación",
+        "reference": "Componentes reutilizables"
+      },
+      "acceptance_criteria": [
+        {
+          "id": "DOM-COMP-001-AC1",
+          "description": "Se identifican componentes reutilizables para fichas, territorios/tablero, jugadores y controles del juego.",
+          "verification": [
+            "source_inspection",
+            "ui_inspection"
+          ],
+          "evidence_hints": [
+            "Composable components",
+            "TileComponent",
+            "BoardComponent",
+            "PlayerComponent"
+          ]
+        },
+        {
+          "id": "DOM-COMP-001-AC2",
+          "description": "Los componentes reciben datos y callbacks/acciones desde sus propietarios, sin contener reglas globales de la partida ni acceso directo a Firebase.",
+          "verification": [
+            "source_inspection"
+          ],
+          "evidence_hints": [
+            "Composable parameters",
+            "state hoisting",
+            "Repository"
+          ]
+        }
+      ],
+      "related_requirements": [
+        "DOM-MVVM-001",
+        "DOM-UI-001"
+      ],
+      "tags": [
+        "components",
+        "reusability",
+        "architecture"
+      ]
+    },
+    {
+      "id": "DOM-DOC-001",
+      "type": "documentation",
+      "title": "Informe técnico y diagramas de diseño",
+      "description": "El repositorio incluye un informe técnico con especificaciones de diseño, descripción de la arquitectura MVVM, diagrama de clases, diagrama de arquitectura y diagrama de componentes.",
+      "weight": 0.0,
+      "source": {
+        "file": "examen_domino_conquista.md",
+        "section": "6. Entregables; 7. Criterios de evaluación",
+        "reference": "REQ-EXAM-03"
+      },
+      "acceptance_criteria": [
+        {
+          "id": "DOM-DOC-001-AC1",
+          "description": "Existe un informe técnico que describe las especificaciones y decisiones de diseño de la solución.",
+          "verification": [
+            "documentation_check",
+            "manual_review"
+          ],
+          "evidence_hints": [
+            "design specification",
+            "technical report",
+            "docs"
+          ]
+        },
+        {
+          "id": "DOM-DOC-001-AC2",
+          "description": "El informe contiene un diagrama de clases que corresponde con las clases y responsabilidades implementadas.",
+          "verification": [
+            "documentation_check",
+            "manual_review"
+          ],
+          "evidence_hints": [
+            "class diagram",
+            "UML",
+            "domain classes"
+          ]
+        },
+        {
+          "id": "DOM-DOC-001-AC3",
+          "description": "El informe contiene un diagrama de arquitectura que representa los módulos/capas y sus relaciones principales.",
+          "verification": [
+            "documentation_check",
+            "manual_review"
+          ],
+          "evidence_hints": [
+            "architecture diagram",
+            "MVVM",
+            "Firebase"
+          ]
+        },
+        {
+          "id": "DOM-DOC-001-AC4",
+          "description": "El informe contiene un diagrama de componentes que identifica los componentes principales y sus dependencias.",
+          "verification": [
+            "documentation_check",
+            "manual_review"
+          ],
+          "evidence_hints": [
+            "component diagram",
+            "reusable components"
+          ]
+        }
+      ],
+      "related_requirements": [
+        "DOM-MVVM-001",
+        "DOM-COMP-001"
+      ],
+      "tags": [
+        "documentation",
+        "diagrams",
+        "design"
+      ]
+    },
+    {
+      "id": "DOM-TEST-001",
+      "type": "testing",
+      "title": "Pruebas unitarias de la lógica del juego",
+      "description": "El proyecto incluye pruebas unitarias para verificar las reglas principales del dominio, especialmente distribución de fichas, validación de movimientos, efectos de casillas, puntuación y condiciones de finalización.",
+      "weight": 0.0,
+      "source": {
+        "file": "examen_domino_conquista.md",
+        "section": "6. Entregables; 7. Criterios de evaluación",
+        "reference": "REQ-EXAM-07"
+      },
+      "acceptance_criteria": [
+        {
+          "id": "DOM-TEST-001-AC1",
+          "description": "Existen pruebas unitarias ejecutables asociadas a los requisitos funcionales del juego.",
+          "verification": [
+            "unit_test",
+            "source_inspection"
+          ],
+          "evidence_hints": [
+            "src/test",
+            "test source set",
+            "JUnit",
+            "GameEngineTest"
+          ]
+        },
+        {
+          "id": "DOM-TEST-001-AC2",
+          "description": "Las pruebas cubren escenarios válidos e inválidos de movimientos y casos límite de las reglas del juego.",
+          "verification": [
+            "unit_test"
+          ],
+          "evidence_hints": [
+            "MoveValidatorTest",
+            "ScoringEngineTest",
+            "GameEndDetectorTest"
+          ]
+        },
+        {
+          "id": "DOM-TEST-001-AC3",
+          "description": "Las pruebas pueden ejecutarse mediante la tarea de pruebas unitarias de Gradle y sus resultados son observables.",
+          "verification": [
+            "build",
+            "unit_test"
+          ],
+          "evidence_hints": [
+            "./gradlew test",
+            "test reports",
+            "JUnit XML"
+          ]
+        }
+      ],
+      "related_requirements": [
+        "DOM-DEAL-001",
+        "DOM-TURN-001",
+        "DOM-BOARD-001",
+        "DOM-SCORE-001",
+        "DOM-END-001"
+      ],
+      "tags": [
+        "testing",
+        "unit-tests",
+        "game-logic"
+      ]
+    },
+    {
+      "id": "DOM-OPS-001",
+      "type": "functional",
+      "title": "Abandonar o reiniciar una partida",
+      "description": "La aplicación permite abandonar una partida y ofrece una acción para reiniciarla según el flujo de la sala. La acción debe mantener consistente el estado compartido entre los participantes.",
+      "weight": 0.04,
+      "source": {
+        "file": "examen_domino_conquista.md",
+        "section": "5. Requisitos de implementación",
+        "reference": "Abandonar o reiniciar una partida"
+      },
+      "acceptance_criteria": [
+        {
+          "id": "DOM-OPS-001-AC1",
+          "description": "El jugador puede abandonar la partida mediante una acción disponible en la interfaz.",
+          "verification": [
+            "ui_inspection",
+            "manual_review",
+            "unit_test"
+          ],
+          "evidence_hints": [
+            "leaveGame",
+            "exit room",
+            "confirmation dialog",
+            "GameSessionViewModelTest"
+          ]
+        },
+        {
+          "id": "DOM-OPS-001-AC2",
+          "description": "La aplicación permite reiniciar la partida y los participantes reciben el estado reiniciado sincronizado.",
+          "verification": [
+            "manual_review",
+            "source_inspection",
+            "unit_test"
+          ],
+          "evidence_hints": [
+            "restartGame",
+            "reset state",
+            "Firebase update",
+            "RestartGameUseCaseTest"
+          ]
+        }
+      ],
+      "related_requirements": [
+        "DOM-FIREBASE-001",
+        "DOM-END-001"
+      ],
+      "tags": [
+        "game-management",
+        "restart",
+        "leave-game"
+      ]
+    },
+    {
+      "id": "DOM-ARCH-001",
+      "type": "technical",
+      "title": "Separación arquitectónica Clean Architecture y MVVM",
+      "description": "La solución debe mantener límites de responsabilidad claros entre presentación, dominio e infraestructura y aplicar MVVM sin acoplar la lógica de negocio a Android, Compose o Firebase.",
+      "weight": 0.0,
+      "source": {
+        "file": "examen_domino_conquista.md",
+        "section": "5. Requisitos de implementación; 7. Criterios de evaluación",
+        "reference": "Arquitectura Clean Architecture y MVVM"
+      },
+      "acceptance_criteria": [
+        {
+          "id": "DOM-ARCH-001-CA1",
+          "description": "El dominio contiene reglas y modelos de negocio independientes de Android, Jetpack Compose y Firebase.",
+          "verification": [
+            "source_inspection",
+            "static_analysis",
+            "unit_test"
+          ],
+          "evidence_hints": [
+            "domain",
+            "business rules",
+            "Android imports",
+            "Firebase imports"
+          ]
+        },
+        {
+          "id": "DOM-ARCH-001-CA2",
+          "description": "La dirección de dependencias apunta hacia el dominio; las implementaciones de infraestructura dependen de contratos internos y no al contrario.",
+          "verification": [
+            "source_inspection",
+            "static_analysis"
+          ],
+          "evidence_hints": [
+            "imports",
+            "repository interfaces",
+            "Firebase implementations",
+            "module dependencies"
+          ]
+        },
+        {
+          "id": "DOM-ARCH-001-CA3",
+          "description": "La capa de presentación separa View/Composable y ViewModel; la ViewModel expone estado y delega reglas de negocio y acceso a datos.",
+          "verification": [
+            "source_inspection",
+            "static_analysis",
+            "unit_test"
+          ],
+          "evidence_hints": [
+            "ViewModel",
+            "StateFlow",
+            "Composable",
+            "UseCase",
+            "Repository"
+          ]
+        },
+        {
+          "id": "DOM-ARCH-001-CA4",
+          "description": "Las reglas de dominio pueden probarse sin ejecutar la interfaz ni depender de Firebase.",
+          "verification": [
+            "unit_test",
+            "source_inspection"
+          ],
+          "evidence_hints": [
+            "domain unit tests",
+            "fake repository",
+            "mock dependencies"
+          ]
+        }
+      ],
+      "related_requirements": [
+        "DOM-MVVM-001",
+        "DOM-COMP-001",
+        "DOM-TEST-001"
+      ],
+      "tags": [
+        "clean-architecture",
+        "mvvm",
+        "architecture",
+        "dependency-inversion"
+      ]
+    }
+  ]
+}

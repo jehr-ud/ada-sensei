@@ -9,6 +9,7 @@ the localized reasons are emitted to the scrollable conversation log instead.
 from __future__ import annotations
 
 import asyncio
+import threading
 from types import SimpleNamespace
 
 import ada_sensei.cli.tui.app as app_module
@@ -34,6 +35,7 @@ class FakeClient(LLMClient):
 def _status(*blockers: str) -> SimpleNamespace:
     return SimpleNamespace(
         ready_to_start=False,
+        student_ready=True,
         project_path="/tmp/project",
         instructions_path="/tmp/exam.md",
         blockers=blockers,
@@ -94,6 +96,38 @@ def test_opening_panel_emits_localized_blocker_reasons(tmp_path):
             assert "no_android_sdk" not in joined
             assert "examen activo" in joined
             assert "Android SDK" in joined
+            return True
+
+    assert asyncio.run(_run())
+
+
+def test_opening_panel_shows_preparing_while_worker_validates(tmp_path):
+    app = _app(tmp_path, "es-CO")
+    release = threading.Event()
+
+    def _slow_status():
+        release.wait(timeout=2)
+        return _status("no_android_sdk")
+
+    app.router.exam_preparation_status = _slow_status
+
+    async def _run():
+        async with app.run_test(size=(80, 24)) as pilot:
+            app._resolve_pending_name("s1")
+            await pilot.pause()
+            app._open_exam_preparation()
+            await pilot.pause()
+
+            panel = app.query_one("#exam-preparation-list", ExamPreparationList)
+            assert panel.mode == "preparing"
+            assert "Preparando" in str(panel._render_preparation("es-CO"))
+            assert app._preparation_worker is not None
+
+            release.set()
+            await pilot.pause()
+            await pilot.pause()
+            assert panel.mode == "prepare"
+            assert app._preparation_worker is None
             return True
 
     assert asyncio.run(_run())

@@ -7,10 +7,12 @@ be created.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 from ..evaluation.preflight import ProjectPreflight
+from ..locale.ui_strings import get_ui_string
 from ..toolchain.manager import ToolchainManager
 from ..toolchain.models import ToolchainPreparationResult
 from .definition import ExamDefinitionLoader
@@ -57,13 +59,21 @@ class ExamPreparationService:
         *,
         env: dict[str, str] | None = None,
         toolchain: ToolchainManager | None = None,
+        progress: Callable[[str], None] | None = None,
     ) -> None:
         self.services = services
         self._env = env
         self.loader = ExamDefinitionLoader()
         self.toolchain = toolchain if toolchain is not None else ToolchainManager()
+        self._progress = progress
 
-    def validate(self, *, require_instructions: bool = True) -> ExamPreparationStatus:
+    def validate(
+        self,
+        *,
+        require_instructions: bool = True,
+        locale: str | None = None,
+    ) -> ExamPreparationStatus:
+        self._emit("exam_start_progress_validating", locale)
         context = self.services.context
         project_path = context.project_path or self._configured_project_path()
         readiness = ProjectPreflight(env=self._env).check(project_path)
@@ -72,6 +82,7 @@ class ExamPreparationService:
         toolchain_preparation: ToolchainPreparationResult | None = None
         toolchain_blockers: tuple[str, ...] = ()
         if project_ready and readiness.project_path:
+            self._emit("exam_start_progress_toolchain", locale)
             try:
                 toolchain_preparation = self.toolchain.prepare(readiness.project_path)
             except Exception as exc:  # noqa: BLE001 - surfaced as a blocker
@@ -124,6 +135,10 @@ class ExamPreparationService:
             toolchain_blockers=toolchain_blockers,
             toolchain_preparation=toolchain_preparation,
         )
+
+    def _emit(self, key: str, locale: str | None) -> None:
+        if self._progress is not None:
+            self._progress(get_ui_string(key, locale))
 
     def _configured_project_path(self) -> str | None:
         path = getattr(self.services.config.project, "path", None)

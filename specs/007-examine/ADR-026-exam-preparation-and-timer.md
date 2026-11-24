@@ -1,7 +1,7 @@
 # ADR-026 — Preparación explícita del examen y temporizador de presentación
 
 ## Estado
-Propuesto
+Aceptado (panel de inicio implementado; temporizador pendiente)
 
 ## Contexto
 
@@ -13,7 +13,10 @@ de instrucciones antes de iniciar.
 
 ## Decisión
 
-Adoptar un panel de preparación con lista compacta y navegación por teclado,
+Adoptar un panel de preparación con lista compacta y navegación por teclado.
+La validación pesada del toolchain se ejecuta en un worker: el panel muestra
+`Preparando…` y el log emite avances localizados por etapa real antes de crear
+el intento, para que la espera no parezca un bloqueo (RQ-EXM-076).
 inspirado en `LanguageList`. La configuración se realiza mediante
 `/project <ruta>` y `/instructions <ruta>`. `Empezar examen` es la única acción
 que inicia el intento después de validar ambas rutas, identidad y preflight.

@@ -38,7 +38,7 @@ _TOOL_ALIASES = {
 }
 _FLOATING_VERSION = re.compile(r"^(?:latest|latest\.release)$", re.IGNORECASE)
 _DYNAMIC_VERSION = re.compile(r"\+$")
-_ENTRY_FIELDS = {"jdk", "gradle", "kotlin", "agp", "tools", "checksums"}
+_ENTRY_FIELDS = {"jdk", "gradle", "kotlin", "agp", "tools", "checksums", "plugins"}
 _RUNTIME_FIELDS = ("jdk", "gradle", "kotlin", "agp")
 
 
@@ -83,6 +83,13 @@ def _reject_floating(value: Any, path: str = "policy") -> None:
         )
 
 
+class PluginSpec(BaseModel):
+    id: str
+    marker: str
+    version: str
+    core_version: str | None = None
+
+
 class CompatibilityEntry(BaseModel):
     jdk: str | None = None
     gradle: str | None = None
@@ -90,6 +97,7 @@ class CompatibilityEntry(BaseModel):
     agp: str | None = None
     tools: dict[str, str] = Field(default_factory=dict)
     checksums: dict[str, str] = Field(default_factory=dict)
+    plugins: dict[str, PluginSpec] = Field(default_factory=dict)
 
     @model_validator(mode="before")
     @classmethod
@@ -313,6 +321,7 @@ def resolve_versions(policy: ToolchainPolicy, detected: Any) -> VersionResolutio
 
 __all__ = [
     "CompatibilityEntry",
+    "PluginSpec",
     "DEFAULT_POLICY_PATH",
     "PINNED_RESOLUTION_POLICY",
     "PolicyError",

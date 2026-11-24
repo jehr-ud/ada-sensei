@@ -11,6 +11,8 @@ from __future__ import annotations
 from ..evaluation import (
     UNIFIED_RUBRIC,
     UNIFIED_RUBRIC_REF,
+    UNIFIED_RUBRIC_V2,
+    UNIFIED_RUBRIC_V2_REF,
     RubricDefinition,
     RubricEngine,
 )
@@ -42,7 +44,7 @@ ASK_USAGE_BANDS: tuple[tuple[float, int], ...] = (
 ASK_USAGE_FLOOR_SCORE = 0
 
 
-EXAM_RUBRIC = UNIFIED_RUBRIC
+EXAM_RUBRIC = UNIFIED_RUBRIC_V2
 
 
 def exam_engine(definition: RubricDefinition = EXAM_RUBRIC) -> RubricEngine:
@@ -51,13 +53,16 @@ def exam_engine(definition: RubricDefinition = EXAM_RUBRIC) -> RubricEngine:
 
 
 def resolve_rubric(rubric_ref: str) -> RubricDefinition:
-    """Resolve the one published rubric reference; legacy refs are errors."""
+    """Resolve a published exam rubric; legacy refs stay readable."""
     from .models import ExamDefinitionError
 
+    if rubric_ref == UNIFIED_RUBRIC_V2_REF:
+        return UNIFIED_RUBRIC_V2
     if rubric_ref == UNIFIED_RUBRIC_REF:
-        return EXAM_RUBRIC
+        return UNIFIED_RUBRIC
     raise ExamDefinitionError(
-        f"unknown exam rubric {rubric_ref!r}; available: {UNIFIED_RUBRIC_REF}"
+        "unknown exam rubric "
+        f"{rubric_ref!r}; available: {UNIFIED_RUBRIC_V2_REF}, {UNIFIED_RUBRIC_REF}"
     )
 
 
@@ -72,6 +77,7 @@ __all__ = [
     "FUNCTIONAL_DIMENSION",
     "PROCESS_DIMENSION",
     "UNIFIED_RUBRIC_REF",
+    "UNIFIED_RUBRIC_V2_REF",
     "exam_engine",
     "resolve_rubric",
 ]

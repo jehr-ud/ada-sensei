@@ -100,3 +100,16 @@
 - [x] Verify `007-examine` can provide a distinct rubric definition.
 - [x] Verify `007-examine` cannot mutate `evaluate-default:v1`.
 - [x] Verify evidence collection is not duplicated.
+
+## Phase 11 — LLM semantic evaluation and evidence contract (v2)
+
+- [x] Add `EvidenceItem` with relative path, symbol, line range, excerpt and hash.
+- [x] Implement `LLMRequirementEvaluator` for per-acceptance-criterion decisions.
+- [x] Implement `LLMArchitectureEvaluator` with independent Clean Architecture and MVVM matrices.
+- [x] Configure Ollama model `qwen2.5-coder:7b` and persist model/prompt metadata.
+- [x] Validate every LLM evidence reference against the collected evidence registry.
+- [x] Derive requirement states from acceptance-criterion states.
+- [x] Preserve NOT_EVALUATED and infrastructure states without converting them to zero.
+- [ ] Implement a single immutable/versioned `EvaluationResult` contract.
+- [x] Add cross-validation for evidence IDs, line ranges, weights and score arithmetic.
+- [x] Add regression tests for hallucinated paths, unsupported PASS, invalid JSON and LLM unavailable.

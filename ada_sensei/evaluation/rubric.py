@@ -391,8 +391,102 @@ UNIFIED_RUBRIC = RubricDefinition(
     functional_dimension="functional_requirements",
 )
 
-#: Compatibility names. Both point to the *same* definition object: there is no
-#: second rubric definition and no alias accepted on persisted references.
+#: v2 splits D4 into two equal architecture matrices. The ids and descriptions
+#: are also the contract sent to the LLM architecture evaluator.
+CLEAN_ARCHITECTURE_CRITERIA: tuple[tuple[str, str], ...] = (
+    (
+        "C1",
+        "Presentation, Domain and Data (or equivalent) responsibilities are "
+        "separated by real code, not by folder names",
+    ),
+    (
+        "C2",
+        "Dependencies point toward the domain core; infrastructure does not "
+        "leak into domain contracts",
+    ),
+    (
+        "C3",
+        "Domain code is independent of Android, Compose, Firebase and other "
+        "frameworks",
+    ),
+    (
+        "C4",
+        "Repository contracts live in inner layers and implementations live in "
+        "infrastructure",
+    ),
+    (
+        "C5",
+        "Use cases have justified responsibilities instead of artificial wrappers",
+    ),
+    (
+        "C6",
+        "Dependency inversion and injection are used where substitutability "
+        "matters",
+    ),
+    (
+        "C7",
+        "Domain logic can be tested without Android or infrastructure",
+    ),
+)
+
+MVVM_CRITERIA: tuple[tuple[str, str], ...] = (
+    ("M1", "View/Composable renders state and emits events"),
+    ("M2", "ViewModel exposes observable state and coordinates actions"),
+    ("M3", "ViewModel delegates business rules and data access"),
+    (
+        "M4",
+        "ViewModel does not depend on Activity, View, UI Context or composables",
+    ),
+    ("M5", "State/event flow is unidirectional and internally consistent"),
+    ("M6", "Dependencies are substitutable and ViewModel tests exist"),
+)
+
+
+def _architecture_v2_dimension() -> RubricDimension:
+    clean_weight = 0.5 / len(CLEAN_ARCHITECTURE_CRITERIA)
+    mvvm_weight = 0.5 / len(MVVM_CRITERIA)
+    return RubricDimension(
+        id="mvvm",
+        weight=0.15,
+        description="D4 arquitectura — Clean Architecture 50% + MVVM 50%",
+        subcriteria=(
+            *(
+                RubricSubcriterion(
+                    id=criterion_id,
+                    weight=clean_weight,
+                    description=description,
+                )
+                for criterion_id, description in CLEAN_ARCHITECTURE_CRITERIA
+            ),
+            *(
+                RubricSubcriterion(
+                    id=criterion_id,
+                    weight=mvvm_weight,
+                    description=description,
+                )
+                for criterion_id, description in MVVM_CRITERIA
+            ),
+        ),
+    )
+
+
+UNIFIED_RUBRIC_V2_REF = "unified-android:v2"
+UNIFIED_RUBRIC_V2 = RubricDefinition(
+    id="unified-android",
+    version="v2",
+    title="Unified Android evaluation rubric with split D4 architecture",
+    dimensions=tuple(
+        _architecture_v2_dimension()
+        if dimension.id == "mvvm"
+        else dimension
+        for dimension in UNIFIED_RUBRIC.dimensions
+    ),
+    evidence_policy=UNIFIED_RUBRIC.evidence_policy,
+    functional_dimension=UNIFIED_RUBRIC.functional_dimension,
+)
+
+#: The default ``/evaluate`` engine stays on v1; v2 is selected explicitly by
+#: the exam workflow. Both are definitions of the same reusable mechanics.
 EVALUATE_RUBRIC = UNIFIED_RUBRIC
 
 
@@ -723,8 +817,10 @@ def evaluate_engine() -> RubricEngine:
 
 
 __all__ = [
+    "CLEAN_ARCHITECTURE_CRITERIA",
     "CriterionScore",
     "DimensionScorer",
+    "MVVM_CRITERIA",
     "DimensionScore",
     "EVALUATE_RUBRIC",
     "EvidencePolicy",
@@ -739,6 +835,8 @@ __all__ = [
     "ScoreBreakdown",
     "UNIFIED_RUBRIC",
     "UNIFIED_RUBRIC_REF",
+    "UNIFIED_RUBRIC_V2",
+    "UNIFIED_RUBRIC_V2_REF",
     "evaluate_engine",
     "normalize_rubric_ref",
     "requirement_not_evaluated_reason",

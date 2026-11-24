@@ -68,7 +68,7 @@
     },
     "rubric_ref": {
       "type": "string",
-      "const": "unified-android:v1"
+      "const": "unified-android:v2"
     },
     "requirements": {
       "type": "array",

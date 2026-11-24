@@ -226,8 +226,14 @@ contenido del enunciado.
 - comprueba que no haya otro examen activo en la sesión.
 
 Devuelve un `ExamPreparationStatus` inmutable que incluye todos los bloqueos
-conocidos. No ejecuta Gradle. No crea `ExamAttempt`, eventos, timer ni
-documentación.
+conocidos. La validación completa prepara y ejecuta las herramientas estáticas
+en un workspace aislado; nunca modifica el proyecto original. No crea
+`ExamAttempt`, eventos, timer ni documentación.
+
+Cuando la validación puede tardar, el TUI muestra de inmediato el estado
+`Preparando…` y ejecuta la validación en un worker. Emite avances localizados
+por etapa real y actualiza el panel al terminar; el hilo de la interfaz nunca
+espera a Gradle (RQ-EXM-076).
 
 ## Identidad del examen
 
@@ -1043,7 +1049,8 @@ la tarea o un archivo de configuración no demuestra ejecución correcta.
 ## Bloqueo y calificación
 
 - El preflight debe asegurar que las tres herramientas requeridas están listas
-  antes de iniciar el examen. Si falta una, intenta resolverla automáticamente
+  antes de iniciar el examen: `READY` o `ISSUES_FOUND` con `health_check=PASS` y
+  reporte estructurado válido. Si falta una, intenta resolverla automáticamente
   dentro de los límites de seguridad anteriores.
 - Si la resolución falla, no se crea `ExamAttempt`, no inicia timer y no se
   evalúa al estudiante. El `TeacherAgent` presenta un error de infraestructura
@@ -1095,6 +1102,9 @@ El reporte R9 debe mostrar estado de preparación y ejecución por separado.
 - **RQ-EXM-075 — Seguridad de dependencias:** permitir repositorios declarados,
   limitar ejecución de scripts y registrar origen/checksum; no ejecutar
   instaladores externos no confiables.
+- **RQ-EXM-076 — Progreso visible de inicio:** el TUI no ejecuta la preparación
+  del toolchain en el hilo de la interfaz; muestra `Preparando…` y avances
+  localizados por etapas reales hasta que termina el preflight.
 
 ## Criterios de aceptación
 
@@ -1113,3 +1123,87 @@ El reporte R9 debe mostrar estado de preparación y ejecución por separado.
    dentro de los límites documentados de cada herramienta.
 9. El hash del proyecto original antes/después es idéntico.
 10. TeacherAgent no puede invocar instalación ni modificar estados/puntuaciones.
+11. El panel muestra `Preparando…` antes de la validación pesada, emite avances
+    reales por etapa y no crea el intento hasta que el preflight termina.
+
+
+---
+
+# Adenda normativa — Evaluación semántica y PDF de evaluación única (v2)
+
+**Modelo LLM:** `qwen2.5-coder:7b` vía Ollama. **Contrato:** un `EvaluationReport` por `exam_attempt_id`.
+
+Esta adenda actualiza las reglas incompatibles de evaluación determinista exclusiva y de presentación del informe. Conserva el ciclo de vida, preflight, toolchain, timer, conteo `/ask`, persistencia y ubicación del PDF definidos en esta especificación. La evaluación se delega al motor reusable de `006-evaluate`; `007-examine` entrega la definición del examen y presenta el resultado.
+
+## 1. Evaluación de requisitos mediante LLM
+
+`EvaluatorAgent` orquesta el `EvidenceContext` y los evaluadores LLM. Qwen evalúa semánticamente cada criterio de aceptación funcional y los criterios arquitectónicos. Los analizadores deterministas aportan hechos verificables; el `ScoreCalculator` aplica la rúbrica. El LLM no calcula la nota ni inventa evidencias.
+
+Para cada criterio se debe guardar: identificador, estado, explicación concreta, evidencias citadas, limitaciones, nivel de confianza y acción de mejora. El requisito padre deriva su estado de sus criterios. No se admite una sola conclusión global por requisito sin el detalle por criterio.
+
+## 2. Evaluación de arquitectura: Clean Architecture y MVVM
+
+La dimensión D4 conserva el 15% global y se divide en partes iguales: Clean Architecture 50% de D4 y MVVM 50% de D4. La evaluación debe analizar responsabilidades y dependencias reales; no basta con nombres de paquetes o carpetas.
+
+### Clean Architecture
+
+Evaluar: (1) separación de Presentation, Domain y Data o equivalentes; (2) dirección de dependencias hacia el núcleo; (3) dominio independiente de Android, Compose y Firebase; (4) contratos de repositorio en capas internas e implementaciones en infraestructura; (5) casos de uso con responsabilidades justificadas; (6) inversión de dependencias e inyección; (7) posibilidad de probar dominio sin infraestructura. No exigir nombres concretos de módulos ni casos de uso artificiales.
+
+### MVVM
+
+Evaluar: (1) View/Composable representa estado y emite eventos; (2) ViewModel expone estado observable y coordina acciones; (3) ViewModel delega reglas de negocio y acceso a datos; (4) ViewModel no depende de Activity, View, Context de UI ni funciones Composable; (5) flujo unidireccional de estado/eventos; (6) dependencias sustituibles y pruebas de ViewModel. Aceptar mecanismos equivalentes a StateFlow cuando sean técnicamente válidos.
+
+Cada subcriterio debe incluir evidencias de implementación con archivo y líneas, dependencias/imports relevantes y, cuando existan, pruebas asociadas. El LLM debe señalar contraejemplos: dependencias de Firebase desde Domain, reglas de juego dentro de Composables/ViewModels, referencias Android en dominio, repositorios concretos acoplados, etc. No asumir incumplimiento por ausencia de una arquitectura de carpetas convencional.
+
+## 3. Rúbrica única
+
+La rúbrica oficial `unified-android:v2` es: funcionalidad 40%, pruebas unitarias 20%, calidad de código 15%, arquitectura (Clean Architecture + MVVM) 15%, buenas prácticas Android 10%. Total 100%. No añadir una dimensión `exam_process` a la nota académica. Duración y `/ask` son métricas de contexto y solo se califican si el enunciado define límites explícitos y la rúbrica lo contempla.
+
+La escala de cada criterio es 0.00–5.00: PASS=5.00; PARTIAL=2.50 por defecto; FAIL=0.00. Un criterio puede definir otra escala explícita versionada, pero el LLM no puede elegir arbitrariamente la puntuación. NOT_EVALUATED y errores de infraestructura no reciben cero; se excluyen y se informa el peso excluido. La puntuación global no se renormaliza silenciosamente para aparentar cobertura completa. Mostrar nota calculada sobre el peso evaluable y cobertura por separado; si la cobertura no es 100%, etiquetar claramente `EVALUACIÓN PARCIAL`.
+
+## 4. Una única evaluación oficial
+
+Por `exam_attempt_id` existe un único `EvaluationReport` final. `EvaluatorAgent` lo crea una sola vez después de validar evidencias y resultados. `TeacherAgent`, TUI, persistencia y PDF consumen el mismo objeto. Ningún consumidor puede volver a inspeccionar y producir una nota paralela. Si se solicita reevaluación, crear una nueva revisión/version del mismo intento con vínculo explícito `supersedes_report_id`; no sobrescribir silenciosamente el reporte anterior.
+
+## 5. Especificación del PDF
+
+El PDF debe ser breve, escaneable y auditable. Orden obligatorio:
+
+1. **Identificación:** examen, estudiante, proyecto, intento, fecha, versión de rúbrica y modelo.
+2. **Resultado general:** nota, escala, estado (completa/parcial), cobertura evaluable, peso excluido y advertencia si no está completa.
+3. **Resumen por dimensión:** nota, peso, contribución y cobertura.
+4. **Requisitos funcionales:** tabla por requisito y criterio con estado, explicación de una o dos frases y evidencia principal `ruta:líneas`.
+5. **Arquitectura:** dos secciones separadas, Clean Architecture y MVVM; por subcriterio indicar estado, hallazgo, archivo/líneas y mejora concreta. Incluir mapa compacto de dependencias/capas cuando pueda construirse desde evidencia.
+6. **Pruebas y calidad:** resumen de ejecución, totales y hallazgos priorizados. No listar cientos de advertencias; mostrar los hallazgos relevantes agrupados por severidad/regla y anexar referencias a reportes completos.
+7. **Limitaciones:** herramientas no disponibles, criterios no evaluados y motivo.
+8. **Acciones prioritarias:** máximo cinco, ordenadas por impacto y vinculadas a `criterion_id` o `finding_id`.
+
+Cada evidencia mostrada debe incluir ruta relativa y líneas cuando existan. El PDF no debe incluir extractos extensos: máximo 3–5 líneas por evidencia principal. Las evidencias adicionales se conservan en JSON/artefactos auditables. Si no existen líneas, mostrar símbolo/archivo y explicar por qué. No imprimir tablas vacías, placeholders, campos nulos ni observaciones sin contenido.
+
+## 6. Reglas de consistencia del PDF
+
+- Todos los valores numéricos se leen del mismo `EvaluationReport`; no se recalculan en la plantilla.
+- La nota global debe coincidir con la suma de contribuciones redondeada una sola vez al final.
+- La suma de pesos de dimensiones debe ser 100%.
+- La suma de pesos funcionales debe ser 1.0.
+- El resumen, las tablas detalladas y la conclusión deben reflejar los mismos estados.
+- No declarar una dimensión PASS si alguno de sus subcriterios ponderados está sin evaluar.
+- No mezclar Clean Architecture con MVVM ni usar esos nombres indistintamente.
+- No llamar `Clean Architecture` a una simple separación de carpetas.
+- Si el LLM falla, conservar evidencia determinista, marcar criterios LLM como `NOT_EVALUATED` y emitir informe parcial; no generar una nota inventada.
+
+## 7. Diseño de página
+
+Usar encabezados compactos, tipografía legible, tablas con columnas estables y saltos de página controlados. Evitar repetir identificación y conclusiones en cada sección. No dividir una fila de criterio entre páginas. El detalle de arquitectura debe tener espacio suficiente para mostrar evidencia y explicación, no comprimirse en una tabla ilegible. Pie de página con `exam_attempt_id`, número de página y versión del reporte.
+
+## 8. Criterios de aceptación nuevos
+
+1. Cada criterio funcional del JSON tiene una decisión LLM estructurada y evidencia rastreable.
+2. Clean Architecture y MVVM se evalúan por separado con subcriterios explícitos.
+3. El PDF y el TUI muestran la misma nota e idénticos estados porque consumen el mismo reporte.
+4. La plantilla no calcula puntuaciones ni interpreta resultados.
+5. La falta de evidencia y los errores de infraestructura no se convierten en cero.
+6. El PDF muestra evidencia concreta por criterio y limita los extractos.
+7. Los reportes con cobertura incompleta se identifican como evaluación parcial.
+8. Un reporte no contiene tablas vacías ni contradicciones entre resumen y detalle.
+9. Se registra modelo, prompt, rúbrica y versiones de herramientas para reproducibilidad.

@@ -64,7 +64,7 @@ class SubprocessRunner:
         timeout: int | None = None,
     ) -> SubprocessResult:
         started = time.monotonic()
-        cwd_str = str(cwd.resolve()) if cwd else None
+        cwd_str = str(Path(cwd).resolve()) if cwd else None
         try:
             proc = subprocess.run(
                 cmd,

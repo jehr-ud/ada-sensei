@@ -136,6 +136,14 @@ No almacena un `ExamDefinition` mutable como fuente de verdad entre el
 preflight y el inicio. Al confirmar, `ExamineAction.start` recarga la
 definición y valida de nuevo.
 
+El panel TUI obtiene este estado en un worker: primero muestra `Preparando…`,
+luego `ExamPreparationService.validate` emite avances localizados por etapa
+real (validación y preparación de herramientas) mediante un callback de
+progreso, y finalmente el worker actualiza el panel. El callback usa el mismo
+sink que la finalización (`router.progress`), por lo que todas las líneas llegan
+al log con `MessageKind.SYSTEM`; nunca se usa un temporizador simulado
+(RQ-EXM-076).
+
 ### `ExamineAction` (`ada_sensei/actions/examine.py`)
 
 Orquesta el ciclo de vida completo:
@@ -914,7 +922,8 @@ la tarea o un archivo de configuración no demuestra ejecución correcta.
 ## Bloqueo y calificación
 
 - El preflight debe asegurar que las tres herramientas requeridas están listas
-  antes de iniciar el examen. Si falta una, intenta resolverla automáticamente
+  antes de iniciar el examen: `READY` o `ISSUES_FOUND` con `health_check=PASS` y
+  reporte estructurado válido. Si falta una, intenta resolverla automáticamente
   dentro de los límites de seguridad anteriores.
 - Si la resolución falla, no se crea `ExamAttempt`, no inicia timer y no se
   evalúa al estudiante. El `TeacherAgent` presenta un error de infraestructura
@@ -966,6 +975,9 @@ El reporte R9 debe mostrar estado de preparación y ejecución por separado.
 - **RQ-EXM-075 — Seguridad de dependencias:** permitir repositorios declarados,
   limitar ejecución de scripts y registrar origen/checksum; no ejecutar
   instaladores externos no confiables.
+- **RQ-EXM-076 — Progreso visible de inicio:** el estado del panel se calcula en
+  un worker con avances localizados por etapa real; el hilo de la interfaz nunca
+  espera a Gradle ni a los health checks.
 
 ## Criterios de aceptación
 
@@ -984,3 +996,5 @@ El reporte R9 debe mostrar estado de preparación y ejecución por separado.
    dentro de los límites documentados de cada herramienta.
 9. El hash del proyecto original antes/después es idéntico.
 10. TeacherAgent no puede invocar instalación ni modificar estados/puntuaciones.
+11. El panel muestra `Preparando…` antes de la validación pesada, emite avances
+    reales por etapa y no crea el intento hasta que el preflight termina.

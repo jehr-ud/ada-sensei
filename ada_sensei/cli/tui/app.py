@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import contextlib
 import re
-from pathlib import Path
 
 from rich.syntax import Syntax
 from rich.text import Text
@@ -81,10 +80,10 @@ HELP_TEXT = (
     "Slash commands:\n"
     "  /help                      show this help\n"
     "  /practice, /ask, /examples, /evaluate   run an action\n"
-    "  /exam-init <statement>      start an exam (asks for confirmation)\n"
-    "  /exam-finish               finish the active exam (asks for confirmation)\n"
+    "  /exam-init <statement>      open the compact exam preparation panel\n"
+    "  /exam-finish               finish the active exam (compact confirmation)\n"
     "  /project <path>             configure the Android project for an exam\n"
-    "  /instructions <path.md>     configure the teacher's exam statement\n"
+    "  /instructions <path.json>   configure the teacher's exam definition\n"
     "  /learn [topic]              explain current-stage concepts\n"
     "  /diagnose [stage]           run a brief diagnostic\n"
     "  /language <locale>          change language (es-CO | en-US)\n"
@@ -328,6 +327,7 @@ class AdaSenseiTUI(App):
         #: App and shared with the input widget; never persisted to disk.
         self.input_history = InputHistory()
         self._active_worker = None
+        self._preparation_worker = None
         self._pending_eval: EvaluateCommand | None = None
         self._pending_exam: (
             EvaluateCommand | ExamineStartCommand | ExamineFinishCommand | None
@@ -335,8 +335,6 @@ class AdaSenseiTUI(App):
         self._exam_preparing = False
         #: Last blocker set emitted for the preparation panel (dedup guard).
         self._exam_prep_signature: tuple[str, ...] | None = None
-        #: Start exam guidance was already emitted when the action was picked.
-        self._exam_start_offer_shown: bool = False
         self._anim_timer: Timer | None = None
         self._anim_step = 0
         self._current_kind: MessageKind = MessageKind.SYSTEM
@@ -822,6 +820,13 @@ class AdaSenseiTUI(App):
         self.ui_state.cancelled = True
         if self._active_worker is not None and not self._active_worker.is_cancelled:
             self._active_worker.cancel()
+        if (
+            self._preparation_worker is not None
+            and not self._preparation_worker.is_cancelled
+        ):
+            self._preparation_worker.cancel()
+            self._preparation_worker = None
+            self._exam_preparing = False
         self._set_busy(False, "Cancelled")
         self._focus_input()
 
@@ -834,14 +839,13 @@ class AdaSenseiTUI(App):
         action = str(event.value)
         if action != "exam-init":
             # Changing actions abandons any confirmation that was still open.
-            self._exam_start_offer_shown = False
             self._pending_exam = None
             self._pending_eval = None
             self._set_confirmation_visible(False)
             self._close_exam_preparation()
         if action == "exam-init":
+            self._set_confirmation_visible(False)
             self._open_exam_preparation()
-            self._show_exam_start_offer()
             return
         if action == "exam-finish":
             # Selecting the finish action must immediately expose its explicit
@@ -1192,10 +1196,13 @@ class AdaSenseiTUI(App):
     def _confirm_then_run(self, command: Command) -> None:
         """Require an explicit confirmation before a consequential action.
 
-        ``/evaluate`` runs Gradle; ``/exam-init`` starts an exam; ``/exam-finish``
-        scores and closes the active exam. Each is confirmed unless it already
-        carries an explicit ``yes``.
+        ``/evaluate`` runs Gradle and uses the shared confirm bar; exam start and
+        finish use the compact ``ExamPreparationList`` instead (RQ-EXM-033/047).
         """
+        if isinstance(command, ExamineStartCommand):
+            self._set_confirmation_visible(False)
+            self._open_exam_preparation()
+            return
         if getattr(command, "confirmed", False):
             self._set_confirmation_visible(False)
             self._run_nonblocking(command)
@@ -1204,39 +1211,42 @@ class AdaSenseiTUI(App):
         self.ui_state.view = _CONFIRM_VIEW.get(type(command), View.EVALUATE)
         self._pending_eval = command if isinstance(command, EvaluateCommand) else None
         self._status(get_ui_string("waiting_confirmation", self._current_locale()))
-        if not (
-            isinstance(command, ExamineStartCommand) and self._exam_start_offer_shown
-        ):
-            self._emit(self._confirm_prompt(command))
+        self._emit(self._confirm_prompt(command))
         self._set_confirmation_visible(True)
 
-    def _open_exam_preparation(self) -> None:
-        """Show read-only readiness and the compact start/back selector."""
+    def _open_exam_preparation(self, *, force_guidance: bool = False) -> None:
+        """Show a waiting panel first, then the readiness selector."""
+        self._set_confirmation_visible(False)
         getter = getattr(self.router, "exam_preparation_status", None)
         if not callable(getter):
             return
-        status = getter()
         self._exam_preparing = True
         self.ui_state.view = View.EXAM_START
-        self.query_one("#exam-preparation-list", ExamPreparationList).show(
-            status, locale=self._current_locale()
+        self.query_one("#exam-preparation-list", ExamPreparationList).show_preparing(
+            locale=self._current_locale()
         )
-        self._emit_preparation_blockers(status)
+        self.router.progress = self._emit_progress
+        self._preparation_worker = self.run_worker(
+            lambda: (getter(), force_guidance),
+            thread=True,
+            exclusive=True,
+            exit_on_error=False,
+        )
 
-    def _emit_preparation_blockers(self, status) -> None:
-        """Explain, in the conversation log, why the exam cannot start yet.
+    def _emit_preparation_blockers(self, status, *, force: bool = False) -> None:
+        """Explain, in the scrollable log, what must be done before starting.
 
         The panel stays compact so ``Empezar examen`` is always visible; the
-        full, localized reasons (and how to fix each one) live in the scrollable
-        log instead of being clipped by the panel's height (RQ-EXM-036/045).
-        Re-emitted only when the set of blockers changes, so re-opening the
-        panel does not spam the conversation.
+        full, localized reasons (and how to fix each one) live in the log instead
+        of being clipped by the panel's height (RQ-EXM-036/045). Re-emitted when
+        the blocker set changes, and forced when the student explicitly picks
+        ``Empezar examen`` while the exam is still blocked.
         """
         if status.ready_to_start:
             self._exam_prep_signature = None
             return
         signature = tuple(status.blockers)
-        if signature == self._exam_prep_signature:
+        if signature == self._exam_prep_signature and not force:
             return
         self._exam_prep_signature = signature
         locale = self._current_locale()
@@ -1251,6 +1261,12 @@ class AdaSenseiTUI(App):
 
     def _close_exam_preparation(self) -> None:
         self._exam_preparing = False
+        if (
+            self._preparation_worker is not None
+            and not self._preparation_worker.is_cancelled
+        ):
+            self._preparation_worker.cancel()
+        self._preparation_worker = None
         with contextlib.suppress(Exception):
             self.query_one("#exam-preparation-list", ExamPreparationList).hide()
         self._focus_input()
@@ -1267,6 +1283,9 @@ class AdaSenseiTUI(App):
     def on_exam_preparation_confirmed(
         self, message: ExamPreparationList.Confirmed
     ) -> None:
+        if self._preparation_worker is not None:
+            self._emit(get_ui_string("exam_preparing", self._current_locale()))
+            return
         if message.option == "finish":
             self._close_exam_preparation()
             self._run_nonblocking(ExamineFinishCommand(yes=True))
@@ -1280,7 +1299,7 @@ class AdaSenseiTUI(App):
         getter = getattr(self.router, "exam_preparation_status", None)
         status = getter() if callable(getter) else None
         if status is None or not status.ready_to_start:
-            self._open_exam_preparation()
+            self._open_exam_preparation(force_guidance=True)
             return
         self._close_exam_preparation()
         self._run_nonblocking(
@@ -1292,35 +1311,6 @@ class AdaSenseiTUI(App):
         self, _message: ExamPreparationList.Cancelled
     ) -> None:
         self._close_exam_preparation()
-
-    def _show_exam_start_offer(self) -> None:
-        """Open Start exam confirmation as soon as the action is selected.
-
-        The controls appear before any pending command exists so the student
-        can still type the exam statement. Confirm validates that input (or
-        the already-pending command) and only then runs the action.
-        """
-        self._pending_exam = None
-        self._pending_eval = None
-        self.ui_state.view = View.EXAM_START
-        self._status(get_ui_string("waiting_confirmation", self._current_locale()))
-        if not self._exam_start_offer_shown:
-            self._emit(
-                self._confirm_prompt(
-                    ExamineStartCommand(statement=self._exam_start_statement())
-                )
-            )
-            self._exam_start_offer_shown = True
-        self._set_confirmation_visible(True)
-
-    def _exam_start_statement(self) -> str:
-        with contextlib.suppress(Exception):
-            return (self.query_one("#input", PromptArea).text or "").strip()
-        return ""
-
-    def _clear_input(self) -> None:
-        with contextlib.suppress(Exception):
-            self.query_one("#input", PromptArea).clear()
 
     def _set_confirmation_visible(self, visible: bool) -> None:
         """Show/hide the shared Confirm/Cancel buttons and localize labels."""
@@ -1350,7 +1340,6 @@ class AdaSenseiTUI(App):
     def _resolve_pending_exam(self, pending: Command, answer: str) -> None:
         self._pending_exam = None
         self._pending_eval = None
-        self._exam_start_offer_shown = False
         self.ui_state.view = View.CHAT
         self._set_confirmation_visible(False)
         if answer.strip().lower() in {"y", "yes"}:
@@ -1371,98 +1360,13 @@ class AdaSenseiTUI(App):
             self._emit(get_ui_string("busy_blocked", self._current_locale()))
             return
         pending = self._pending_exam
-        if isinstance(pending, ExamineStartCommand) or (
-            pending is None and self.ui_state.action == "exam-init"
-        ):
-            self._confirm_exam_start(pending)
-            return
         if pending is not None:
             self._resolve_pending_exam(pending, "yes")
-
-    def _confirm_exam_start(self, pending: Command | None) -> None:
-        """Validate student, exam instructions, and project before starting."""
-        statement = self._exam_start_statement()
-        if not statement and isinstance(pending, ExamineStartCommand):
-            statement = pending.statement
-        issues = self._validate_exam_start(statement)
-        if issues:
-            self._emit_exam_start_issues(issues)
-            if statement:
-                # Keep the edited statement so the next click can proceed.
-                self._pending_exam = ExamineStartCommand(statement=statement)
-            return
-        command = ExamineStartCommand(statement=statement)
-        self._clear_input()
-        self._resolve_pending_exam(command, "yes")
-
-    def _validate_exam_start(self, statement: str) -> list[str]:
-        """Return every blocking reason for starting the exam, localized."""
-        locale = self._current_locale()
-        issues: list[str] = []
-        if self.ui_state.awaiting_name or not self.router.context.student_id:
-            issues.append(get_ui_string("exam_start_no_student", locale))
-        text = statement.strip()
-        if not text:
-            issues.append(get_ui_string("prereq_statement", locale))
-        else:
-            path = Path(text).expanduser()
-            try:
-                from ...exams.definition import ExamDefinitionLoader
-
-                loader = ExamDefinitionLoader()
-                if text.startswith("{"):
-                    loader.load_text(text, exam_id=None)
-                elif path.is_file():
-                    loader.load(path, exam_id=None)
-                else:
-                    issues.append(
-                        get_ui_string("exam_statement_not_found", locale).format(
-                            detail=path
-                        )
-                    )
-            except Exception as exc:  # noqa: BLE001 - report, never crash
-                issues.append(
-                    get_ui_string("exam_statement_invalid", locale).format(
-                        detail=str(exc)
-                    )
-                )
-        try:
-            readiness = self.router.check_project_readiness()
-        except Exception as exc:  # noqa: BLE001 - report, never crash
-            issues.append(f"{get_ui_string('preflight_failed', locale)} {exc}")
-        else:
-            if not readiness.ready:
-                for issue in readiness.issues:
-                    issues.append(
-                        describe_blocker(issue.code, locale, detail=issue.detail)
-                    )
-        return issues
-
-    def _emit_exam_start_issues(self, issues: list[str]) -> None:
-        locale = self._current_locale()
-        self._emit(get_ui_string("exam_start_blocked", locale))
-        for issue in issues:
-            self._emit("- " + issue)
-        self._status(get_ui_string("waiting_confirmation", locale))
-        self._focus_input()
 
     @on(Button.Pressed, "#confirm-no")
     def _cancel_pressed(self) -> None:
         if self._pending_exam is not None:
             self._resolve_pending_exam(self._pending_exam, "no")
-            return
-        if self.ui_state.action != "exam-init":
-            return
-        self._clear_input()
-        self._exam_start_offer_shown = False
-        self._set_confirmation_visible(False)
-        self._status(get_ui_string("ready", self._current_locale()))
-        self._emit(
-            get_ui_string(
-                _ABORT_STRING_KEYS[ExamineStartCommand], self._current_locale()
-            )
-        )
-        self._focus_input()
 
     #: Backward-compatible alias for the evaluate-only flow.
     _resolve_pending_eval = _resolve_pending_exam
@@ -1489,6 +1393,16 @@ class AdaSenseiTUI(App):
 
     @on(Worker.StateChanged)
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
+        if event.worker is self._preparation_worker:
+            if event.state not in (
+                WorkerState.SUCCESS,
+                WorkerState.ERROR,
+                WorkerState.CANCELLED,
+            ):
+                return
+            self._preparation_worker = None
+            self._on_preparation_done(event.worker, event.state)
+            return
         if event.worker is not self._active_worker:
             return
         if event.state not in (
@@ -1518,6 +1432,27 @@ class AdaSenseiTUI(App):
         """
         if text:
             self.post_message(OutputReady(text, kind=MessageKind.SYSTEM))
+
+    def _on_preparation_done(self, worker: Worker, state: WorkerState) -> None:
+        if not self._exam_preparing or state is WorkerState.CANCELLED:
+            return
+        if state is WorkerState.ERROR or worker.error is not None:
+            error = worker.error or "exam preparation failed"
+            self._emit("Error: " + self.formatter.sanitized(error))
+            self._close_exam_preparation()
+            return
+        result = worker.result
+        if not isinstance(result, tuple) or len(result) != 2:
+            self._close_exam_preparation()
+            return
+        status, force_guidance = result
+        if status is None:
+            self._close_exam_preparation()
+            return
+        self.query_one("#exam-preparation-list", ExamPreparationList).show(
+            status, locale=self._current_locale()
+        )
+        self._emit_preparation_blockers(status, force=force_guidance)
 
     def _readiness_message(self, readiness) -> str:
         """Localized explanation of every blocking project-readiness issue."""

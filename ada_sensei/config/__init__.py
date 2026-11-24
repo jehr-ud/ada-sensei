@@ -53,7 +53,7 @@ class LLMConfig(BaseModel):
     provider: str = "ollama"
     model: str = "qwen2.5-coder:7b"
     base_url: str = "http://localhost:11434/v1"
-    temperature: float = 0.2
+    temperature: float = 0.0
     timeout_seconds: int = 120
     max_output_tokens: int = 2048
     max_context_tokens: int = 8192

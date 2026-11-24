@@ -2,7 +2,7 @@
 
 This package is deterministic and LLM-free. It never mutates the student's
 project tree: preparation runs in a temporary workspace and reports real
-execution evidence. It is not yet wired into exam preflight.
+execution evidence used by exam preflight.
 """
 
 from .manager import (
@@ -24,6 +24,7 @@ from .policy import (
     DEFAULT_POLICY_PATH,
     PINNED_RESOLUTION_POLICY,
     CompatibilityEntry,
+    PluginSpec,
     PolicyError,
     ToolchainPolicy,
     ToolPolicy,
@@ -36,6 +37,7 @@ __all__ = [
     "CompatibilityEntry",
     "DEFAULT_POLICY_PATH",
     "PINNED_RESOLUTION_POLICY",
+    "PluginSpec",
     "PolicyError",
     "ProjectProfile",
     "ToolPolicy",

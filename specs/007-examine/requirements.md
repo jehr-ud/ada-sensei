@@ -169,7 +169,9 @@ confía en el total almacenado.
 ## RQ-EXM-032 — Preflight obligatorio
 Antes de iniciar, `ProjectPreflight` comprueba que la ruta configurada existe
 y es directorio, que se detecta proyecto Android y que Gradle/JDK 17+/Android
-SDK están disponibles. No ejecuta Gradle ni modifica el proyecto.
+SDK están disponibles. `ProjectPreflight` no ejecuta Gradle ni modifica el
+proyecto; la validación completa delega la ejecución aislada en
+`ToolchainManager`.
 
 ## RQ-EXM-033 — Panel de preparación TUI
 El TUI presenta un panel de preparación compacto al seleccionar "Iniciar
@@ -318,6 +320,7 @@ ignora los registros con `status="info"` al contar deficiencias.
 | RQ-EXM-047–050 | TUI finish, `tools.opener` | — |
 | RQ-EXM-051 | `StaticAnalysisTool.run_detekt`, `_detekt_not_configured` | `tests/exams/test_definition.py` (pendiente) |
 | RQ-EXM-052-DEBUG | `AndroidProjectAnalyzer._check_optional`, `DimensionScorer._score_architecture` | `tests/exams/test_definition.py` (pendiente) |
+| RQ-EXM-076 | `ExamPreparationList.show_preparing`, `ExamPreparationService`, TUI worker | `tests/cli/tui/test_exam_preparation_panel.py`, `tests/cli/tui/test_exam_confirmation.py` |
 
 
 ---
@@ -977,7 +980,8 @@ la tarea o un archivo de configuración no demuestra ejecución correcta.
 ## Bloqueo y calificación
 
 - El preflight debe asegurar que las tres herramientas requeridas están listas
-  antes de iniciar el examen. Si falta una, intenta resolverla automáticamente
+  antes de iniciar el examen: `READY` o `ISSUES_FOUND` con `health_check=PASS` y
+  reporte estructurado válido. Si falta una, intenta resolverla automáticamente
   dentro de los límites de seguridad anteriores.
 - Si la resolución falla, no se crea `ExamAttempt`, no inicia timer y no se
   evalúa al estudiante. El `TeacherAgent` presenta un error de infraestructura
@@ -1029,6 +1033,12 @@ El reporte R9 debe mostrar estado de preparación y ejecución por separado.
 - **RQ-EXM-075 — Seguridad de dependencias:** permitir repositorios declarados,
   limitar ejecución de scripts y registrar origen/checksum; no ejecutar
   instaladores externos no confiables.
+- **RQ-EXM-076 — Progreso visible de inicio:** abrir el panel o elegir
+  `Empezar examen` no ejecuta la preparación del toolchain en el hilo de la
+  interfaz. El TUI muestra de inmediato un estado localizado de preparación y
+  emite mensajes por etapas reales: validación, preparación de herramientas y
+  creación del intento. No hay progreso simulado y no se crea estado antes de
+  que el preflight termine.
 
 ## Criterios de aceptación
 
@@ -1047,3 +1057,29 @@ El reporte R9 debe mostrar estado de preparación y ejecución por separado.
    dentro de los límites documentados de cada herramienta.
 9. El hash del proyecto original antes/después es idéntico.
 10. TeacherAgent no puede invocar instalación ni modificar estados/puntuaciones.
+11. El panel muestra "Preparando…" antes de la validación pesada, emite avances
+    reales por etapa y no crea el intento hasta que el preflight termina.
+
+
+## Adenda v2 — Reporte y evaluación LLM
+
+### RQ-EXM-078 Evaluación funcional asistida por LLM
+Cada criterio de aceptación del JSON SHALL recibir una decisión semántica estructurada del modelo configurado, sustentada en evidencia concreta.
+
+### RQ-EXM-079 Clean Architecture y MVVM
+La dimensión de arquitectura SHALL evaluar Clean Architecture y MVVM por separado, con igual peso interno y evidencias de dependencias, responsabilidades y pruebas.
+
+### RQ-EXM-080 Reporte oficial único
+Por intento SHALL existir un único EvaluationReport consumido por TUI, persistencia y PDF. Una reevaluación debe crear una revisión vinculada, no una nota paralela.
+
+### RQ-EXM-081 PDF auditable
+El PDF SHALL mostrar por requisito/criterio estado, explicación breve y evidencia con ruta y líneas cuando existan; incluir desglose de arquitectura y limitaciones.
+
+### RQ-EXM-082 Consistencia numérica
+Resumen, tablas y conclusión SHALL derivarse del mismo desglose y coincidir en notas, pesos, contribuciones y cobertura.
+
+### RQ-EXM-083 Cobertura parcial
+Si hay criterios no evaluados o fallos del LLM/toolchain, el PDF SHALL declarar evaluación parcial y mostrar peso excluido; nunca convertir indisponibilidad en cero.
+
+### RQ-EXM-084 Hallazgos priorizados
+El PDF SHALL mostrar un máximo de cinco acciones prioritarias vinculadas a criterios o hallazgos, y agrupar el resto sin saturar el documento.

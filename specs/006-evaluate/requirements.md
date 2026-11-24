@@ -243,3 +243,24 @@ for task-not-found patterns to make this distinction.
 JSON object when the schema declares it as an array by wrapping it in a list
 (`_coerce_array_fields`). This normalization occurs before schema validation
 and does not consume a retry attempt.
+
+
+## Adenda v2 — LLM y evidencia trazable
+
+### RQ-EVA-042 Evaluación semántica de criterios
+El sistema SHALL usar el LLM configurado para evaluar individualmente criterios funcionales y técnicos a partir de evidencia recopilada. El LLM puede proponer PASS/PARTIAL/FAIL/NOT_EVALUATED; el motor valida la evidencia y el ScoreCalculator calcula la puntuación.
+
+### RQ-EVA-043 Evidencia localizable
+Toda decisión PASS, PARTIAL o FAIL SHALL referenciar evidencia existente con ruta relativa y líneas/símbolo cuando aplique. No se aceptan referencias inventadas.
+
+### RQ-EVA-044 Evaluación de arquitectura
+El motor SHALL permitir evaluar Clean Architecture y MVVM mediante matrices de subcriterios independientes, sin inferir cumplimiento por nombres de carpetas.
+
+### RQ-EVA-045 Metadatos LLM
+El resultado SHALL registrar proveedor, modelo, versión de prompt, temperatura, intentos y estado de validación.
+
+### RQ-EVA-046 Resultado único
+Cada ejecución SHALL producir una única instancia versionada de resultado que alimente persistencia, TUI y PDF. Los consumidores no pueden volver a evaluar ni recalcular.
+
+### RQ-EVA-047 Validación cruzada
+Antes de persistir, el sistema SHALL validar IDs de evidencia, rangos, estados, pesos y consistencia matemática del resultado.

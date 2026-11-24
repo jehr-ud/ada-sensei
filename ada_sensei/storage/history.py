@@ -135,6 +135,30 @@ class HistoryStore:
         history layer does not import the exam package. The exam identity and the
         0-50/1.0-5.0 grade pair are kept in the payload for instructor review.
         """
+        report = getattr(result, "evaluation_report", None)
+        payload = {
+            "exam_id": result.exam_id,
+            "exam_attempt_id": result.exam_attempt_id,
+            "overall_score": (
+                report.overall_score_5 if report is not None else result.overall_score
+            ),
+            "raw_score_50": (
+                report.overall_score_50 if report is not None else result.raw_score_50
+            ),
+            "suggested_grade": (
+                report.suggested_grade if report is not None else result.suggested_grade
+            ),
+            "ask_count": result.ask_count,
+            "allowed_ask_count": result.allowed_ask_count,
+            "duration_seconds": result.duration_seconds,
+            "allowed_duration_seconds": result.allowed_duration_seconds,
+            "report_path": result.report_path,
+            "not_evaluated": list(result.not_evaluated),
+        }
+        if report is not None:
+            payload["evaluation_status"] = report.overall_status.value
+            if report.coverage_summary is not None:
+                payload["excluded_weight"] = report.coverage_summary.excluded_weight
         self.append_event(
             student_id,
             LearningEvent(
@@ -144,19 +168,7 @@ class HistoryStore:
                 exercise_id=result.exercise_id,
                 attempt_id=result.attempt_id,
                 result_id=result.id,
-                payload={
-                    "exam_id": result.exam_id,
-                    "exam_attempt_id": result.exam_attempt_id,
-                    "overall_score": result.overall_score,
-                    "raw_score_50": result.raw_score_50,
-                    "suggested_grade": result.suggested_grade,
-                    "ask_count": result.ask_count,
-                    "allowed_ask_count": result.allowed_ask_count,
-                    "duration_seconds": result.duration_seconds,
-                    "allowed_duration_seconds": result.allowed_duration_seconds,
-                    "report_path": result.report_path,
-                    "not_evaluated": list(result.not_evaluated),
-                },
+                payload=payload,
             ),
         )
 

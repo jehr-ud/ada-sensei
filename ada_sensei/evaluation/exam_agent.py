@@ -7,9 +7,13 @@ from typing import Any
 from ..models import Evidence, NotEvaluatedReason
 from ..toolchain.models import HealthCheckStatus, ToolchainPreparationResult, ToolStatus
 from ..urns import URN
+from .llm_evaluators import LLMCriterionDecision
 from .models import (
+    NON_EVALUABLE_STATUSES,
     AnalyzerCoverage,
+    ArchitectureSubdimension,
     CalculationTraceStep,
+    CoverageSummary,
     CriterionResult,
     CriterionStatus,
     DimensionResult,
@@ -17,8 +21,10 @@ from .models import (
     EvidenceReference,
     Finding,
     Limitation,
+    LLMRunMetadata,
     Observation,
     OverallStatus,
+    PriorityAction,
     RequirementResult,
     TestSummary,
     ToolRun,
@@ -54,6 +60,13 @@ _NON_EVALUABLE_REASONS = {
 }
 
 
+LLM_STATUS_TO_SCORE_5 = {
+    "PASS": 5.0,
+    "PARTIAL": 2.5,
+    "FAIL": 0.0,
+}
+
+
 class EvaluatorAgent:
     """Builds the official typed report from deterministic evidence only.
 
@@ -71,7 +84,12 @@ class EvaluatorAgent:
         build_failed: bool = False,
         tool_runs: list[ToolRun] | None = None,
         toolchain_preparation: ToolchainPreparationResult | None = None,
+        requirement_decisions: dict[str, LLMCriterionDecision] | None = None,
+        architecture_decisions: dict[str, LLMCriterionDecision] | None = None,
+        llm_runs: list[LLMRunMetadata] | None = None,
+        rubric_definition: Any | None = None,
     ) -> EvaluationReport:
+        rubric = rubric_definition or UNIFIED_RUBRIC
         calculation = result.score_calculation
         lines = list(calculation.lines) if calculation is not None else []
         score_by_dimension = {line.dimension: line.score for line in lines}
@@ -90,17 +108,49 @@ class EvaluatorAgent:
         ]
         findings = self._findings(evidence_references)
         criterion_results = self._criterion_results(
-            result, weight_by_dimension, score_by_dimension, reason_by_dimension
+            result,
+            definition,
+            weight_by_dimension,
+            score_by_dimension,
+            reason_by_dimension,
+            rubric,
+            requirement_decisions,
+            architecture_decisions,
         )
         dimension_results = self._dimension_results(
-            criterion_results, lines, weight_by_dimension, reason_by_dimension
+            criterion_results,
+            lines,
+            weight_by_dimension,
+            reason_by_dimension,
+            rubric,
         )
-        requirement_results = self._requirement_results(result, definition)
-        test_summary = self._test_summary(result, definition, criterion_results)
+        architecture_results = self._architecture_subdimensions(
+            criterion_results, rubric
+        )
+        requirement_results = self._requirement_results(
+            result, definition, requirement_decisions
+        )
+        test_summary = self._test_summary(
+            result, definition, requirement_results, criterion_results
+        )
         coverage = self._analyzer_coverage(
-            criterion_results, getattr(evidence, "evidence", [])
+            criterion_results, getattr(evidence, "evidence", []), rubric
         )
+        coverage_summary = self._coverage_summary(calculation, criterion_results)
         limitations = self._limitations(result, lines, build_failed)
+        if coverage_summary is not None and coverage_summary.partial:
+            limitations.append(
+                Limitation(
+                    limitation_id="limitation://coverage",
+                    dimension="global",
+                    reason_code="partial_evaluation_coverage",
+                    description="evaluation coverage is partial",
+                    coverage_impact=(
+                        f"excluded weight {coverage_summary.excluded_weight:.4f}"
+                    ),
+                    required_action="supply the missing evidence and rerun the exam",
+                )
+            )
         if toolchain_preparation is not None:
             limitations.extend(self._toolchain_limitations(toolchain_preparation))
         trace = self._trace(dimension_results)
@@ -108,14 +158,28 @@ class EvaluatorAgent:
             toolchain_preparation is not None and not toolchain_preparation.ready
         )
         blocked = build_failed or any(
-            reason in {NotEvaluatedReason.build_failed.value,
-                       NotEvaluatedReason.tool_unavailable.value}
+            reason
+            in {
+                NotEvaluatedReason.build_failed.value,
+                NotEvaluatedReason.tool_unavailable.value,
+            }
             for reason in reason_by_dimension.values()
             if reason is not None
+        ) or any(
+            item.reason_code
+            in {"LLM_UNAVAILABLE", "LLM_INVALID_OUTPUT", "EXECUTION_ERROR"}
+            for item in criterion_results
+        ) or any(
+            run.validation_status == "FAILED"
+            and "LLM_UNAVAILABLE" in run.limitations
+            for run in (llm_runs or [])
         )
-        complete = bool(dimension_results) and all(
-            dimension.score is not None
-            for dimension in dimension_results
+        complete = (
+            bool(dimension_results)
+            and all(dimension.score is not None for dimension in dimension_results)
+            and not any(
+                item.status in NON_EVALUABLE_STATUSES for item in criterion_results
+            )
         )
         if infrastructure_failed:
             status = OverallStatus.INCOMPLETE_INFRASTRUCTURE
@@ -126,6 +190,8 @@ class EvaluatorAgent:
         else:
             status = OverallStatus.PARTIAL
         scores = self._overall_scores(dimension_results, status, result)
+        priority_actions = self._priority_actions(criterion_results, limitations)
+        strengths = self._strengths(criterion_results)
 
         return EvaluationReport(
             report_id=result.report_id or URN.make("evaluation_report"),
@@ -136,9 +202,8 @@ class EvaluatorAgent:
             or getattr(result, "exam_attempt_id", "")
             or "",
             locale=getattr(result, "locale", None) or "en-US",
-            rubric_id=getattr(result, "rubric_id", None) or UNIFIED_RUBRIC.id,
-            rubric_version=getattr(result, "rubric_version", None)
-            or UNIFIED_RUBRIC.version,
+            rubric_id=getattr(result, "rubric_id", None) or rubric.id,
+            rubric_version=getattr(result, "rubric_version", None) or rubric.version,
             overall_status=status,
             overall_score_5=scores[0],
             overall_score_50=scores[1],
@@ -158,7 +223,7 @@ class EvaluatorAgent:
             calculation_trace=trace,
             observations=self._observations(findings),
             ruleset_versions={
-                "rubric": getattr(result, "rubric_ref", None) or RULESET_VERSION,
+                "rubric": getattr(result, "rubric_ref", None) or rubric.ref,
                 "analyzers": ANALYZER_VERSION,
             },
             toolchain_manifest=(
@@ -171,6 +236,12 @@ class EvaluatorAgent:
                 if toolchain_preparation is not None
                 else []
             ),
+            llm_runs=list(llm_runs or []),
+            architecture_results=architecture_results,
+            coverage_summary=coverage_summary,
+            priority_actions=priority_actions,
+            strengths=strengths,
+            supersedes_report_id=getattr(result, "supersedes_report_id", None),
         )
 
     @staticmethod
@@ -196,6 +267,13 @@ class EvaluatorAgent:
             type=item.type,
             path=item.file,
             line=item.line,
+            line_start=item.line_start if item.line_start is not None else item.line,
+            line_end=item.line_end if item.line_end is not None else item.line,
+            symbol=item.symbol,
+            excerpt=item.excerpt[:240],
+            content_hash=item.content_hash,
+            collector=item.collector,
+            reliability=item.reliability,
             tool=item.source,
             command=item.command,
             summary=item.message,
@@ -223,9 +301,13 @@ class EvaluatorAgent:
     def _criterion_results(
         self,
         result: Any,
+        definition: Any,
         weights: dict[str, float],
         scores: dict[str, float | None],
         reasons: dict[str, str | None],
+        rubric: Any,
+        requirement_decisions: dict[str, LLMCriterionDecision] | None = None,
+        architecture_decisions: dict[str, LLMCriterionDecision] | None = None,
     ) -> list[CriterionResult]:
         criteria: list[CriterionResult] = []
         for item in getattr(result, "criteria", []):
@@ -248,11 +330,13 @@ class EvaluatorAgent:
                     ),
                     analyzer="requirement_matcher",
                     analyzer_version=ANALYZER_VERSION,
-                    rule_version=RULESET_VERSION,
+                    rule_version=rubric.ref,
                 )
             )
-        for dimension in UNIFIED_RUBRIC.dimensions:
+        for dimension in rubric.dimensions:
             if dimension.id == "functional_requirements":
+                continue
+            if dimension.id == "mvvm" and architecture_decisions is not None:
                 continue
             dimension_score = self._to_score_5(scores.get(dimension.id))
             reason = reasons.get(dimension.id)
@@ -273,10 +357,87 @@ class EvaluatorAgent:
                         reason_code=reason,
                         analyzer=_DIMENSION_ANALYZERS[dimension.id][0],
                         analyzer_version=ANALYZER_VERSION,
-                        rule_version=RULESET_VERSION,
+                        rule_version=rubric.ref,
+                    )
+                )
+        if requirement_decisions is not None:
+            for requirement in getattr(definition, "requirements", []):
+                acceptance = list(requirement.acceptance_criteria)
+                if not acceptance:
+                    acceptance = [requirement]
+                weight = requirement.weight / len(acceptance)
+                for item in acceptance:
+                    item_id = getattr(item, "id", None) or requirement.requirement_id
+                    decision = requirement_decisions.get(item_id)
+                    if decision is not None:
+                        criteria.append(
+                            self._llm_criterion(
+                                decision,
+                                dimension="functional_requirements",
+                                weight=weight,
+                                requirement_id=requirement.requirement_id,
+                                subdimension=None,
+                                rubric=rubric,
+                            )
+                        )
+        if architecture_decisions is not None:
+            subweights = {
+                item.id: item.weight for item in rubric.dimension("mvvm").subcriteria
+            }
+            for criterion_id, decision in architecture_decisions.items():
+                subdimension = (
+                    "clean_architecture" if criterion_id.startswith("C") else "mvvm"
+                )
+                criteria.append(
+                    self._llm_criterion(
+                        decision,
+                        dimension="mvvm",
+                        weight=subweights.get(criterion_id, 0.0),
+                        requirement_id=None,
+                        subdimension=subdimension,
+                        rubric=rubric,
                     )
                 )
         return criteria
+
+    @staticmethod
+    def _llm_criterion(
+        decision: LLMCriterionDecision,
+        *,
+        dimension: str,
+        weight: float,
+        requirement_id: str | None,
+        subdimension: str | None,
+        rubric: Any,
+    ) -> CriterionResult:
+        status = CriterionStatus(decision.status)
+        score = (
+            LLM_STATUS_TO_SCORE_5.get(decision.status)
+            if status not in NON_EVALUABLE_STATUSES
+            else None
+        )
+        return CriterionResult(
+            criterion_id=decision.criterion_id,
+            dimension=dimension,
+            status=status,
+            score=score,
+            weight=weight,
+            weighted_score=round(score * weight, 4) if score is not None else None,
+            evidence_ids=list(decision.evidence_ids),
+            reason_code=decision.reason_code or (
+                None if score is not None else status.value
+            ),
+            analyzer="llm_criterion_evaluator",
+            analyzer_version=ANALYZER_VERSION,
+            rule_version=rubric.ref,
+            requirement_id=requirement_id,
+            subdimension=subdimension,
+            reason=decision.reason,
+            confidence=decision.confidence,
+            limitations=list(decision.limitations),
+            recommended_action=decision.recommended_action,
+            score_source="llm_status",
+        )
 
     def _dimension_results(
         self,
@@ -284,10 +445,11 @@ class EvaluatorAgent:
         lines: list[Any],
         weights: dict[str, float],
         reasons: dict[str, str | None],
+        rubric: Any,
     ) -> list[DimensionResult]:
         results: list[DimensionResult] = []
         for line in lines:
-            dimension = UNIFIED_RUBRIC.dimension(line.dimension)
+            dimension = rubric.dimension(line.dimension)
             own_criteria = [c for c in criteria if c.dimension == line.dimension]
             covered = sum(1 for c in own_criteria if c.score is not None)
             score = self._to_score_5(line.score)
@@ -311,22 +473,176 @@ class EvaluatorAgent:
         return results
 
     @staticmethod
-    def _requirement_results(result: Any, definition: Any) -> list[RequirementResult]:
+    def _architecture_subdimensions(
+        criteria: list[CriterionResult], rubric: Any
+    ) -> list[ArchitectureSubdimension]:
+        subcriteria = {
+            item.id: item.weight for item in rubric.dimension("mvvm").subcriteria
+        }
+        outputs: list[ArchitectureSubdimension] = []
+        for name in ("clean_architecture", "mvvm"):
+            own = [
+                item
+                for item in criteria
+                if item.dimension == "mvvm" and item.subdimension == name
+            ]
+            if not own:
+                continue
+            total = sum(subcriteria.get(item.criterion_id, item.weight) for item in own)
+            evaluated = [item for item in own if item.score is not None]
+            weighted = sum(
+                item.score * subcriteria.get(item.criterion_id, item.weight)
+                for item in evaluated
+            )
+            score = weighted / total if total else None
+            coverage = sum(
+                subcriteria.get(item.criterion_id, item.weight) for item in evaluated
+            ) / total if total else 0.0
+            status = (
+                EvaluatorAgent._status(score)
+                if evaluated
+                else CriterionStatus.NOT_EVALUATED
+            )
+            if any(item.status is CriterionStatus.FAIL for item in own):
+                status = CriterionStatus.FAIL
+            outputs.append(
+                ArchitectureSubdimension(
+                    name=name,
+                    weight_in_d4=0.5,
+                    score_5=score,
+                    coverage=round(coverage, 4),
+                    status=status,
+                    criteria=own,
+                )
+            )
+        return outputs
+
+    @staticmethod
+    def _coverage_summary(
+        calculation: Any, criteria: list[CriterionResult]
+    ) -> CoverageSummary | None:
+        if calculation is None:
+            return None
+        evaluated = sum(
+            1 for item in criteria if item.status not in NON_EVALUABLE_STATUSES
+        )
+        evaluated_weight = float(getattr(calculation, "evaluated_weight", 1.0))
+        excluded_weight = float(getattr(calculation, "excluded_weight", 0.0))
+        return CoverageSummary(
+            evaluated_weight=round(evaluated_weight, 6),
+            excluded_weight=round(excluded_weight, 6),
+            evaluated_criteria=evaluated,
+            total_criteria=len(criteria),
+            partial=excluded_weight > 1e-6 or evaluated < len(criteria),
+        )
+
+    @staticmethod
+    def _priority_actions(
+        criteria: list[CriterionResult], limitations: list[Limitation]
+    ) -> list[PriorityAction]:
+        actions: list[PriorityAction] = [
+            PriorityAction(
+                action_id=f"action://{item.criterion_id}",
+                target_id=item.criterion_id,
+                text=item.recommended_action,
+                impact=f"{item.dimension}: {item.status.value}",
+            )
+            for item in criteria
+            if item.recommended_action
+            and item.status in {CriterionStatus.FAIL, CriterionStatus.PARTIAL}
+        ]
+        if not actions:
+            actions = [
+                PriorityAction(
+                    action_id=item.limitation_id,
+                    target_id=item.dimension,
+                    text=item.required_action,
+                    impact=item.coverage_impact,
+                )
+                for item in limitations
+            ]
+        return actions[:5]
+
+    @staticmethod
+    def _strengths(criteria: list[CriterionResult]) -> list[str]:
+        values: list[str] = []
+        for item in criteria:
+            if item.status is not CriterionStatus.PASS or not item.reason:
+                continue
+            text = f"{item.criterion_id}: {item.reason}"
+            if text not in values:
+                values.append(text)
+            if len(values) == 5:
+                break
+        return values
+
+    @staticmethod
+    def _requirement_results(
+        result: Any,
+        definition: Any,
+        decisions: dict[str, LLMCriterionDecision] | None = None,
+    ) -> list[RequirementResult]:
         by_id = {
             item.requirement_id: item
             for item in getattr(result, "criteria", [])
             if item.requirement_id
         }
+        evidence_by_id = {
+            item.id: item for item in getattr(result, "evidence", []) if item.id
+        }
         outputs: list[RequirementResult] = []
         for requirement in getattr(definition, "requirements", []):
+            matched: list[str] = []
+            files: list[str] = []
+            passed_cases = 0
+            total_cases = 0
             criterion = by_id.get(requirement.requirement_id)
-            score = EvaluatorAgent._to_score_5(criterion.score) if criterion else None
-            matched = list(criterion.evidence_refs) if criterion else []
-            files = (
-                [item.file for item in criterion.evidence if item.file]
-                if criterion
-                else []
-            )
+            if decisions is not None:
+                criteria_ids = [item.id for item in requirement.acceptance_criteria]
+                if not criteria_ids:
+                    criteria_ids = [requirement.requirement_id]
+                children = [
+                    decisions[item_id]
+                    for item_id in criteria_ids
+                    if item_id in decisions
+                ]
+                values = [
+                    LLM_STATUS_TO_SCORE_5[item.status]
+                    for item in children
+                    if item.status in LLM_STATUS_TO_SCORE_5
+                ]
+                score = sum(values) / len(values) if values else None
+                matched = list(
+                    dict.fromkeys(
+                        item
+                        for child in children
+                        for item in child.evidence_ids
+                    )
+                )
+                passed_cases = sum(
+                    1 for item in children if item.status == CriterionStatus.PASS
+                )
+                total_cases = len(children)
+            else:
+                score = (
+                    EvaluatorAgent._to_score_5(criterion.score) if criterion else None
+                )
+                matched = list(criterion.evidence_refs) if criterion else []
+                files = [
+                    item.file for item in criterion.evidence if item.file
+                ] if criterion else []
+            for evidence_id in matched:
+                item = evidence_by_id.get(evidence_id)
+                if item is None or not item.file:
+                    continue
+                start = item.line_start if item.line_start is not None else item.line
+                end = item.line_end if item.line_end is not None else item.line
+                suffix = (
+                    f":{start}-{end}"
+                    if start is not None and end is not None
+                    else ""
+                )
+                files.append(f"{item.file}{suffix}")
             outputs.append(
                 RequirementResult(
                     requirement_id=requirement.requirement_id,
@@ -335,15 +651,20 @@ class EvaluatorAgent:
                     functional_weight=requirement.weight,
                     status=EvaluatorAgent._status(score),
                     score=score,
+                    passed_cases=passed_cases,
+                    total_cases=total_cases,
                     evidence_ids=matched,
-                    files_lines=files,
+                    files_lines=list(dict.fromkeys(files)),
                 )
             )
         return outputs
 
     @staticmethod
     def _test_summary(
-        result: Any, definition: Any, criteria: list[CriterionResult]
+        result: Any,
+        definition: Any,
+        requirements: list[RequirementResult],
+        criteria: list[CriterionResult],
     ) -> TestSummary:
         unit_tests = [
             item
@@ -359,10 +680,11 @@ class EvaluatorAgent:
             for requirement in getattr(definition, "requirements", [])
             if requirement.dimension == "functional_requirements"
         ]
+        functional_ids = {item.requirement_id for item in functional}
         covered = sum(
             1
-            for item in criteria
-            if item.dimension == "functional_requirements" and item.score is not None
+            for item in requirements
+            if item.requirement_id in functional_ids and item.score is not None
         )
         total = len(functional)
         ratio = covered / total if total else 0.0
@@ -389,11 +711,14 @@ class EvaluatorAgent:
         )
 
     def _analyzer_coverage(
-        self, criteria: list[CriterionResult], evidence: list[Evidence]
+        self,
+        criteria: list[CriterionResult],
+        evidence: list[Evidence],
+        rubric: Any,
     ) -> list[AnalyzerCoverage]:
         evidence_sources = {item.source for item in evidence}
         coverage: list[AnalyzerCoverage] = []
-        for dimension in UNIFIED_RUBRIC.dimensions:
+        for dimension in rubric.dimensions:
             required = _DIMENSION_ANALYZERS[dimension.id]
             executed = [name for name in required if name in evidence_sources]
             missing = [name for name in required if name not in evidence_sources]
@@ -573,16 +898,29 @@ class EvaluatorAgent:
     def _overall_scores(
         dimensions: list[DimensionResult], status: OverallStatus, result: Any
     ) -> tuple[float | None, int | None, float | None]:
-        if status is not OverallStatus.COMPLETE:
+        if status is OverallStatus.INCOMPLETE_INFRASTRUCTURE:
             return None, None, None
-        score_5 = round(
-            sum(item.weighted_contribution or 0.0 for item in dimensions), 2
-        )
-        score_50 = int(round(score_5 * 10))
+        score_50 = getattr(result, "raw_score_50", None)
+        score_5 = getattr(result, "overall_score", None)
+        if score_50 is not None:
+            score_5 = round(float(score_50) / 10.0, 2)
+        elif score_5 is None:
+            contributions = [
+                item.weighted_contribution
+                for item in dimensions
+                if item.weighted_contribution is not None
+            ]
+            if not contributions:
+                return None, None, None
+            score_5 = round(sum(contributions), 2)
+        if score_50 is None:
+            score_50 = int(round(float(score_5) * 10))
+        if status is OverallStatus.COMPLETE and score_50 is None:
+            return None, None, None
         suggested = getattr(result, "suggested_grade", None)
         if suggested is None:
-            suggested = round(1.0 + (score_5 / 5.0) * 4.0, 1)
-        return score_5, score_50, suggested
+            suggested = round(1.0 + (float(score_5) / 5.0) * 4.0, 1)
+        return float(score_5), int(score_50), suggested
 
 
 __all__ = ["EvaluatorAgent"]

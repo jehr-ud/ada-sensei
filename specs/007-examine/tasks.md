@@ -2,17 +2,24 @@
 
 ## Estado actual
 
-La implementación central del motor de examen está completa. Las tareas marcadas
-`[x]` están implementadas y verificadas con pruebas automatizadas. Las tareas
-marcadas `[ ]` son trabajo pendiente.
+La auditoría de completitud (`IMPLEMENTATION-STATUS.md`) determina que la spec
+no está completa: el motor base, el panel de inicio y el preflight real funcionan,
+pero faltan partes de la adenda de informe determinista, checksums de toolchain
+y el temporizador. Las casillas de este archivo están desactualizadas y deben
+leerse junto con esa auditoría.
+
+Las casillas `[x]` y `[ ]` reflejan el registro histórico de trabajo y no deben
+interpretarse como estado verificado sin consultar la auditoría.
 
 Decisiones de resolución aplicadas:
 - El requisito legado `RQ-EXM-052` se renombra `RQ-EXM-052-DEBUG`; las adendas
-  conservan `RQ-EXM-052`–`RQ-EXM-075`.
+  conservan `RQ-EXM-052`–`RQ-EXM-076`.
 - `exam-default:v1` y `evaluate-default:v1` migran a `unified-android:v1` sin
   alias temporales, incluyendo persistencia y pruebas.
-- La matriz `toolchain-policy.json` debe completarse con combinaciones fijadas
-  verificadas antes de habilitar el preflight real de toolchain.
+- La matriz `toolchain-policy.json:11-45` cubre dos combinaciones fijadas. La
+  combinación Gradle 9.5.0 / Kotlin 2.2.10 / AGP 9.3.3 injecta Detekt/KtLint en
+  un workspace temporal y fue verificada manualmente con reportes reales; faltan
+  checksums de plugin markers y una prueba de integración automatizada en CI.
 
 ---
 
@@ -95,13 +102,14 @@ Decisiones de resolución aplicadas:
 - [ ] Test: `_coerce_array_fields` normaliza objeto→lista sin consumir intento.
 - [ ] Test: fallo total del LLM conserva `raw_score_50` y `suggested_grade`.
 
-## 7. TUI — panel de preparación (pendiente)
+## 7. TUI — panel de preparación (implementado; pendiente el temporizador)
 
-- [ ] `ExamPreparationScreen` con lista compacta (patrón `LanguageList`).
-- [ ] Sin botones grandes Confirmar/Cancelar.
-- [ ] Muestra estado de estudiante, proyecto, preflight e instrucciones.
-- [ ] Opciones `Empezar examen` / `Volver` con Arriba/Abajo/Enter/Escape.
-- [ ] Bloquea `Empezar examen` con mensaje localizado si hay precondiciones pendientes.
+- [x] `ExamPreparationScreen` con lista compacta (patrón `LanguageList`).
+- [x] Sin botones grandes Confirmar/Cancelar.
+- [x] Muestra estado de estudiante, proyecto, preflight e instrucciones.
+- [x] Opciones `Empezar examen` / `Volver` con Arriba/Abajo/Enter/Escape.
+- [x] Bloquea `Empezar examen` con mensaje localizado si hay precondiciones pendientes.
+- [x] Muestra `Preparando…` y avances reales por etapa sin bloquear la interfaz (RQ-EXM-076).
 - [ ] Permite escribir `/project` y `/instructions` y actualiza el panel.
 - [ ] Abrir/cancelar el panel no crea side effects.
 
@@ -143,7 +151,7 @@ Decisiones de resolución aplicadas:
 - [x] Un examen Domino Conquista completo produce `raw_score_50` y `suggested_grade`
   sin errores de schema LLM ni penalizaciones injustificadas.
 - [ ] Los requisitos TUI (RQ-EXM-033, 039–043, 047–049) tienen pruebas de widget.
-- [ ] No hay botones grandes Confirmar/Cancelar en el inicio de examen.
+- [x] No hay botones grandes Confirmar/Cancelar en el inicio de examen.
 - [ ] El temporizador se muestra y es reconstruible desde el timestamp persistido.
 - [ ] No se ha duplicado parser, preflight, loader, lifecycle, scoring ni
   persistencia.
@@ -232,7 +240,8 @@ Decisiones de resolución aplicadas:
 - [x] Crear loader/validador de `toolchain-policy.json`; rechazar versiones flotantes y combinaciones no verificadas.
 - [x] Detectar JDK, Gradle wrapper, Kotlin, AGP, módulos, variantes y tareas Android Lint.
 - [x] Resolver Detekt y KtLint con versiones fijadas y compatibles; Android Lint se resuelve desde AGP.
-- [x] Implementar caché aislada ADA Sensei con checksum/origen de artefactos.
+- [x] Implementar caché aislada ADA Sensei y resultados repetibles; los checksums
+  de plugin markers siguen pendientes.
 - [x] Implementar workspace temporal/copia para configuración; no modificar proyecto original.
 - [x] Ejecutar health check real de Android Lint, Detekt y KtLint y validar reportes estructurados.
 - [x] Integrar preflight: bloquear antes de `ExamAttempt`/timer si cualquier herramienta requerida no queda `READY`.
@@ -243,6 +252,24 @@ Decisiones de resolución aplicadas:
 - [x] Implementar `INCOMPLETE_INFRASTRUCTURE` si falla herramienta tras iniciar; no emitir nota completa.
 - [x] Hacer que TeacherAgent solo comunique estados, sin instalar ni alterar calificaciones.
 - [x] Pruebas: proyecto preconfigurado, faltan Detekt/KtLint, AGP sin Lint, versión incompatible, offline, fallo de health check, mutación cero, caché/checksum y reproducibilidad.
-- [ ] Pruebas de integración en proyectos Android representativos para validar la estrategia de inyección temporal; no asumir compatibilidad universal de init scripts.
+- [ ] Automatizar en CI las pruebas de integración en proyectos Android
+  representativos; la estrategia de inyección temporal ya fue verificada
+  manualmente en un proyecto Gradle 9.5.0, pero no se asume compatibilidad
+  universal de init scripts.
 
-Evidencia: `tests/toolchain/test_manager.py`, `tests/toolchain/test_models.py`, `tests/exams/test_toolchain_integration.py`, `tests/agents/test_teacher_agent.py`; suite completa `672 passed`; ruff enfocado limpio. `ruff check . --fix` mantiene 77 errores preexistentes fuera del alcance de este cambio. La matriz de compatibilidad queda vacía: sin versiones fijadas verificadas el inicio se bloquea.
+Evidencia: `tests/toolchain/test_manager.py`, `tests/toolchain/test_models.py`, `tests/exams/test_toolchain_integration.py`, `tests/agents/test_teacher_agent.py`; suite completa `674 passed`; ruff enfocado limpio. `ruff check . --fix` mantiene 70 errores preexistentes fuera del alcance de este cambio. La matriz de compatibilidad contiene dos combinaciones fijadas; falta automatizar en CI la verificación con Gradle real y registrar checksums de plugin markers.
+
+
+## 9. Report v2 — evaluación única, evidencia y arquitectura
+
+- [x] Consume exclusivamente el `EvaluationReport` persistido/validado.
+- [x] Elimina cálculos duplicados en `ExamReportGenerator` y plantillas.
+- [x] Presenta identificación, nota, cobertura y desglose por dimensión.
+- [x] Presenta cada requisito y criterio con estado, justificación y evidencia `ruta:líneas`.
+- [x] Presenta Clean Architecture y MVVM como apartados separados.
+- [x] Incluye hallazgos relevantes de pruebas y analizadores sin volcar reportes completos.
+- [x] Muestra limitaciones, peso excluido y estado de evaluación parcial.
+- [x] Limita acciones prioritarias a cinco y las vincula a IDs.
+- [x] Evita tablas vacías, placeholders y filas partidas entre páginas.
+- [x] Añade pruebas de consistencia entre JSON del reporte, TUI y PDF.
+- [ ] Añade fixture de regresión con el PDF de Domino Conquista que detecte discrepancias de nota y evidencia.

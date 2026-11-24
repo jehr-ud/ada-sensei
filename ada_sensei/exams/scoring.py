@@ -16,6 +16,7 @@ from __future__ import annotations
 import re
 
 from ..evaluation import EvidenceContext, RubricEngine, score_requirement
+from ..evaluation.llm_evaluators import LLMCriterionDecision
 from ..models import EvaluationCriterion, Evidence, NotEvaluatedReason
 from .architecture import ArchitectureReport
 from .models import ExamDefinition, ProcessMetrics, ScoreCalculation, ScoreLine
@@ -34,6 +35,15 @@ MAX_SCORE = 4
 MAX_RAW_SCORE = 50
 MIN_GRADE = 1.0
 MAX_GRADE = 5.0
+
+#: Fixed status-to-engine-scale mapping. The LLM decides a status; the engine
+#: owns the number. PARTIAL maps to 2 on the 0-4 scale, i.e. 2.50 on the 0-5
+#: report scale required by the v2 addendum.
+STATUS_TO_SCORE: dict[str, float] = {
+    "PASS": 4.0,
+    "PARTIAL": 2.0,
+    "FAIL": 0.0,
+}
 
 #: Architecture signals observed in project structure, each worth a fraction of
 #: the clean-architecture score. Bounded so a large project cannot score higher
@@ -163,6 +173,73 @@ class ExamScorer:
             )
         return criteria
 
+    def functional_criteria_from_decisions(
+        self,
+        exam: ExamDefinition,
+        evidence: EvidenceContext,
+        decisions: dict[str, LLMCriterionDecision],
+    ) -> list[EvaluationCriterion]:
+        """Derive one deterministic requirement score per LLM criterion batch."""
+        by_evidence = {item.id: item for item in evidence.evidence if item.id}
+        criteria: list[EvaluationCriterion] = []
+        for requirement in exam.requirements:
+            values: list[float] = []
+            evidence_ids: list[str] = []
+            acceptance_criteria = list(requirement.acceptance_criteria) or [
+                type("Criterion", (), {
+                    "id": requirement.requirement_id,
+                    "description": requirement.description,
+                })()
+            ]
+            for acceptance in acceptance_criteria:
+                decision = decisions.get(acceptance.id)
+                if decision is None:
+                    continue
+                evidence_ids.extend(decision.evidence_ids)
+                value = STATUS_TO_SCORE.get(decision.status)
+                if value is not None:
+                    values.append(value)
+            score = sum(values) / len(values) if values else None
+            matched = [
+                by_evidence[item_id]
+                for item_id in dict.fromkeys(evidence_ids)
+                if item_id in by_evidence
+            ]
+            criteria.append(
+                EvaluationCriterion(
+                    requirement_id=requirement.requirement_id,
+                    dimension=FUNCTIONAL_DIMENSION,
+                    weight=requirement.weight,
+                    score=int(score) if score is not None else None,
+                    evidence=matched,
+                    evidence_refs=[item.id for item in matched if item.id],
+                    not_evaluated_reason=(
+                        None if score is not None else NotEvaluatedReason.no_evidence
+                    ),
+                    note=requirement.description,
+                )
+            )
+        return criteria
+
+    def architecture_score_from_decisions(
+        self, decisions: dict[str, LLMCriterionDecision]
+    ) -> tuple[float | None, float]:
+        """Compute D4 from its declared C/M subweights over evaluated criteria."""
+        dimension = self.definition.dimension("mvvm")
+        weighted = 0.0
+        evaluated_weight = 0.0
+        for subcriterion in dimension.subcriteria:
+            decision = decisions.get(subcriterion.id)
+            value = STATUS_TO_SCORE.get(decision.status) if decision else None
+            if value is None:
+                continue
+            weighted += subcriterion.weight * value
+            evaluated_weight += subcriterion.weight
+        if evaluated_weight <= 0:
+            return None, 0.0
+        score = weighted / sum(sub.weight for sub in dimension.subcriteria)
+        return score, evaluated_weight
+
     @staticmethod
     def _match(description: str, evidence: list[Evidence]) -> list[Evidence]:
         """Attach evidence to a requirement using stable path and message keys."""
@@ -193,9 +270,17 @@ class ExamScorer:
         architecture: ArchitectureReport | None = None,
         build_failed: bool = False,
         extra_limitations: list[str] | None = None,
+        requirement_decisions: dict[str, LLMCriterionDecision] | None = None,
+        architecture_decisions: dict[str, LLMCriterionDecision] | None = None,
     ) -> ScoreCalculation:
         """Compute the deterministic exam score and its full calculation table."""
-        criteria = self.functional_criteria(exam, evidence)
+        criteria = (
+            self.functional_criteria_from_decisions(
+                exam, evidence, requirement_decisions
+            )
+            if requirement_decisions is not None
+            else self.functional_criteria(exam, evidence)
+        )
         duration_weight, ask_weight = self.process_weights()
         metrics = (
             build_process_metrics(
@@ -216,6 +301,11 @@ class ExamScorer:
                 evidence.evidence
             ).items()
         }
+        architecture_coverage = 0.0
+        if architecture_decisions is not None:
+            supplied["mvvm"], architecture_coverage = (
+                self.architecture_score_from_decisions(architecture_decisions)
+            )
         process_score = process_dimension_score(metrics)[0]
         metrics_note = (
             "no allowed duration and no allowed ask count; exam process metrics "
@@ -238,13 +328,17 @@ class ExamScorer:
             build_failed=build_failed,
             extra_limitations=limitations,
         )
-        return self.calculation(breakdown, metrics, criteria)
+        return self.calculation(
+            breakdown, metrics, criteria, architecture_coverage=architecture_coverage
+        )
 
     def calculation(
         self,
         breakdown,
         metrics: ProcessMetrics,
         criteria: list[EvaluationCriterion],
+        *,
+        architecture_coverage: float = 0.0,
     ) -> ScoreCalculation:
         """Assemble the reconstructible calculation table (design.md §PDF)."""
         lines: list[ScoreLine] = []
@@ -268,15 +362,29 @@ class ExamScorer:
                     ),
                 )
             )
+        raw_exact = _raw_score_exact(
+            breakdown.weighted_sum, breakdown.weight_denominator
+        )
         raw = _raw_score(breakdown.weighted_sum, breakdown.weight_denominator)
+        denominator = breakdown.weight_denominator
         return ScoreCalculation(
             rubric_id=breakdown.rubric_id,
             rubric_version=breakdown.rubric_version,
             lines=lines,
-            weight_denominator=round(breakdown.weight_denominator, 6),
+            criteria=criteria,
+            weight_denominator=round(denominator, 6),
             weighted_sum=round(breakdown.weighted_sum, 6),
             percentage=breakdown.overall_score,
+            raw_score_exact=raw_exact,
             raw_score_50=raw,
+            evaluated_weight=round(denominator, 6),
+            excluded_weight=round(max(0.0, 1.0 - denominator), 6),
+            architecture_score_4=(
+                breakdown.dimension_scores.get("mvvm")
+                if architecture_coverage > 0
+                else None
+            ),
+            architecture_coverage=round(architecture_coverage, 6),
             max_raw_score=MAX_RAW_SCORE,
             suggested_grade=suggested_grade(raw),
             min_grade=MIN_GRADE,
@@ -292,12 +400,17 @@ class ExamScorer:
         )
 
 
-def _raw_score(weighted_sum: float, denominator: float) -> int | None:
-    """``50 × Σ(weight × score / 4) / Σ(weight evaluated)``, rounded to an int."""
+def _raw_score_exact(weighted_sum: float, denominator: float) -> float | None:
+    """``50 × Σ(weight × score / 4) / Σ(weight evaluated)`` without rounding."""
     if denominator <= 0:
         return None
     value = MAX_RAW_SCORE * weighted_sum / denominator
-    return int(max(0, min(MAX_RAW_SCORE, round(value))))
+    return max(0.0, min(float(MAX_RAW_SCORE), value))
+
+
+def _raw_score(weighted_sum: float, denominator: float) -> int | None:
+    value = _raw_score_exact(weighted_sum, denominator)
+    return None if value is None else int(round(value))
 
 
 def build_process_metrics_from_limits(

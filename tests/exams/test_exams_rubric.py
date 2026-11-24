@@ -1,4 +1,4 @@
-"""RQ-EXM-018: the default exam rubric is unified-android:v1."""
+"""RQ-EXM-018: the default exam rubric is unified-android:v2."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from ada_sensei.exams.rubric import EXAM_RUBRIC, exam_engine, resolve_rubric
 
 def test_exam_weights():
     weights = EXAM_RUBRIC.weights()
-    assert EXAM_RUBRIC.ref == "unified-android:v1"
+    assert EXAM_RUBRIC.ref == "unified-android:v2"
     assert weights["functional_requirements"] == pytest.approx(0.40)
     assert weights["tests"] == pytest.approx(0.20)
     assert weights["code_quality"] == pytest.approx(0.15)

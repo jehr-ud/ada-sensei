@@ -32,7 +32,7 @@ def test_engine_reuse_without_duplication():
     first = ExamScorer(engine=shared)
     second = ExamScorer(engine=shared)
     assert first.engine is second.engine is shared
-    assert EXAM_RUBRIC.ref == "unified-android:v1"
+    assert EXAM_RUBRIC.ref == "unified-android:v2"
     with pytest.raises(ExamDefinitionError):
         resolve_rubric("evaluate-default:v1")
 

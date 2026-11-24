@@ -220,7 +220,7 @@ STATEMENT_JSON = """{
   "allowed_duration_seconds": 3600,
   "allowed_ask_count": 4,
   "statement_language": "es-CO",
-  "rubric_ref": "unified-android:v1",
+  "rubric_ref": "unified-android:v2",
   "requirements": [
     {
       "id": "REQ-MID-001",

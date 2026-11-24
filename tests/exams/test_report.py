@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ada_sensei.evaluation import EvaluatorAgent
 from ada_sensei.exams.models import (
     SUGGESTED_GRADE_LABEL,
     ExamResult,
@@ -28,7 +29,7 @@ def _result() -> ExamResult:
         weighted_sum=0.75,
         weight_denominator=0.85,
     )
-    return ExamResult(
+    result = ExamResult(
         id="result://r1",
         student_id=attempt.student_id,
         project_id=attempt.project_id,
@@ -51,6 +52,12 @@ def _result() -> ExamResult:
         allowed_ask_count=4,
         duration_seconds=3600,
     )
+    result.evaluation_report = EvaluatorAgent().build_report(
+        result=result,
+        definition=make_definition(),
+        evidence=evidence,
+    )
+    return result
 
 
 def test_pdf_contains_required_sections(tmp_path):
@@ -68,17 +75,15 @@ def test_pdf_contains_required_sections(tmp_path):
         assert f"## {heading}" in text
 
     extracted = extract_text(payload)
-    # The cover and calculation table carry the identification, rubric and
-    # calculation sections (RQ-EXM-024).
     for label in (
-        "ADA Sensei",
-        "Exam assessment report",
+        "1. Identification",
         "Student",
         "Project",
         "Exam attempt",
-        "Report id",
-        "Rubric",
-        "Score calculation",
+        "Report:",
+        "Rubric:",
+        "Raw score:",
+        "Suggested grade:",
     ):
         assert label in extracted
     # The PDF's detail sections mirror the report text sections.

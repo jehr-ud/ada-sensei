@@ -28,6 +28,7 @@ class StructuredPipeline:
         self.client = client
         self.max_attempts = max_attempts
         self.temperature = temperature
+        self.attempts_used = 0
 
     @staticmethod
     def run_structured(
@@ -74,6 +75,7 @@ class StructuredPipeline:
 
         last_error: str | None = None
         for attempt in range(self.max_attempts):
+            self.attempts_used = attempt + 1
             raw = self.client.chat_structured(
                 work, model=model, json_schema=schema, temperature=self.temperature
             )

@@ -190,6 +190,13 @@ class EvidenceReference(BaseModel):
     type: str
     path: str | None = None
     line: int | None = None
+    line_start: int | None = None
+    line_end: int | None = None
+    symbol: str | None = None
+    excerpt: str = ""
+    content_hash: str | None = None
+    collector: str | None = None
+    reliability: str = "observed"
     rule: str | None = None
     summary: str = ""
     command: str | None = None
@@ -223,6 +230,14 @@ class CriterionResult(BaseModel):
     analyzer: str
     analyzer_version: str
     rule_version: str
+    #: v2 semantic decision fields. Optional so persisted v1 reports stay valid.
+    requirement_id: str | None = None
+    subdimension: str | None = None
+    reason: str = ""
+    confidence: float | None = None
+    limitations: list[str] = Field(default_factory=list)
+    recommended_action: str = ""
+    score_source: str = "deterministic"
 
     @model_validator(mode="after")
     def _non_evaluable_has_no_score(self) -> CriterionResult:
@@ -331,6 +346,53 @@ class DimensionResult(BaseModel):
     criteria: list[CriterionResult] = Field(default_factory=list)
 
 
+class LLMRunMetadata(BaseModel):
+    """Reproducibility record for one structured LLM batch (RQ-EVA-045)."""
+
+    provider: str
+    model_id: str
+    model_digest: str | None = None
+    prompt_id: str
+    prompt_version: str
+    temperature: float
+    attempts: int
+    validation_status: str
+    started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    duration_seconds: float = 0.0
+    limitations: list[str] = Field(default_factory=list)
+
+
+class ArchitectureSubdimension(BaseModel):
+    """One half of D4, kept separate from the other half (RQ-EXM-079)."""
+
+    name: str
+    weight_in_d4: float = 0.5
+    score_5: float | None = None
+    coverage: float = 0.0
+    status: CriterionStatus = CriterionStatus.NOT_EVALUATED
+    criteria: list[CriterionResult] = Field(default_factory=list)
+
+
+class CoverageSummary(BaseModel):
+    """Evaluable weight and excluded weight, never silently renormalized."""
+
+    evaluated_weight: float
+    excluded_weight: float
+    total_weight: float = 1.0
+    evaluated_criteria: int = 0
+    total_criteria: int = 0
+    partial: bool = False
+
+
+class PriorityAction(BaseModel):
+    """A prioritized improvement linked to an official criterion or finding."""
+
+    action_id: str
+    target_id: str
+    text: str
+    impact: str = ""
+
+
 class EvaluationReport(BaseModel):
     report_id: str
     student_id: str
@@ -359,6 +421,13 @@ class EvaluationReport(BaseModel):
     ruleset_versions: dict[str, str] = Field(default_factory=dict)
     toolchain_manifest: ToolchainManifest | None = None
     toolchain_evidence: list[ToolExecutionEvidence] = Field(default_factory=list)
+    #: v2 report extensions; defaults preserve v1 persisted records.
+    llm_runs: list[LLMRunMetadata] = Field(default_factory=list)
+    architecture_results: list[ArchitectureSubdimension] = Field(default_factory=list)
+    coverage_summary: CoverageSummary | None = None
+    priority_actions: list[PriorityAction] = Field(default_factory=list)
+    strengths: list[str] = Field(default_factory=list)
+    supersedes_report_id: str | None = None
 
     @model_validator(mode="after")
     def _complete_requires_every_dimension(self) -> EvaluationReport:
@@ -425,9 +494,13 @@ __all__ = [
     "EvaluationReport",
     "EvidenceContext",
     "EvidenceReference",
+    "ArchitectureSubdimension",
+    "CoverageSummary",
     "Finding",
+    "LLMRunMetadata",
     "Limitation",
     "NON_EVALUABLE_STATUSES",
+    "PriorityAction",
     "NotEvaluatedReason",
     "Observation",
     "OverallStatus",

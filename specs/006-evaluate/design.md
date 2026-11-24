@@ -394,3 +394,35 @@ Required categories:
 - Gradle confirmation;
 - build failure;
 - missing-tool behavior.
+
+## 11. Adenda v2 — diseño operativo
+
+El paquete `ada_sensei.evaluation` añade `llm_evaluators.py` sin importar
+`cli/` ni `tui/`. Expone `LLMRequirementEvaluator` y
+`LLMArchitectureEvaluator`, ambos construidos sobre `StructuredPipeline` con
+`temperatura=0`, máximo tres intentos totales y los esquemas Pydantic publicados
+en `llm-criterion-result.schema.json`.
+
+Cada evaluador recibe un `EvidenceContext`, un `LLMClient` opcional y los
+criterios declarados por el caller. Construye un prompt por lote que exige una
+decisión independiente por `criterion_id`; el modelo nunca recibe pesos, notas
+ni fórmulas. La salida se valida contra el esquema antes de aceptarse. Si el
+cliente falta, falla o agota los intentos, se producen decisiones
+`NOT_EVALUATED` con `reason_code=LLM_UNAVAILABLE` o `LLM_INVALID_OUTPUT`, sin
+puntuación.
+
+La validación de evidencia ocurre antes de persistir: todo `evidence_ids`
+debe existir en el registro; las decisiones `PASS`, `PARTIAL` y `FAIL` deben
+citar al menos una evidencia; `EvidenceItem` debe tener ruta relativa, símbolo
+opcional y `line_start`/`line_end` coherentes. Una referencia inventada o un
+rango inválido invalida la decisión y se reporta como hallazgo, nunca como
+hecho.
+
+`EvaluationReport` incorpora `llm_runs` (proveedor, modelo, prompt version,
+temperatura, intentos, estado de validación, fecha y duración), decisiones por
+criterio con `reason`, `confidence`, `limitations` y `recommended_action`, y un
+`coverage_summary` con peso evaluado/excluido. `RubricEngine` y el
+`ScoreCalculator` determinista convierten estados a valores fijos de la escala
+0–4 (`PASS=4`, `PARTIAL=2`, `FAIL=0`, no evaluable=`None`), aplican pesos sin
+que el LLM los elija y redondean una sola vez al final. La cobertura parcial se
+declara; nunca se renormaliza silenciosamente.

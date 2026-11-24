@@ -8,7 +8,7 @@ import pytest
 from ada_sensei.evaluation import EvaluatorAgent, OverallStatus
 from ada_sensei.exams.models import ExamResult, ExamStatus
 from ada_sensei.exams.pdftext import extract_text
-from ada_sensei.exams.report import ExamReportGenerator
+from ada_sensei.exams.report import SECTIONS, ExamReportGenerator
 from ada_sensei.exams.scoring import ExamScorer
 from exams_helpers import make_attempt, make_definition, make_evidence
 from pydantic import ValidationError
@@ -75,28 +75,31 @@ def test_report_rejects_non_evaluable_criterion_with_score():
         )
 
 
-def test_report_generator_renders_r1_to_r12(tmp_path):
+def test_report_generator_renders_v2_sections(tmp_path):
     result, definition = _result()
     generator = ExamReportGenerator(tmp_path)
     text = generator.render_text(result)
     headings = [heading for heading, _ in generator._sections(result)]
 
-    assert [h for h in headings if re.match(r"R\d+ ", h)] == [
-        "R1 Identification",
-        "R2 Global summary",
-        "R3 Dimension result",
-        "R4 Functional requirements",
-        "R5 Unit tests",
-        "R6 Code quality",
-        "R7 MVVM",
-        "R8 Android practices",
-        "R9 Tool status",
-        "R10 Exam metrics",
-        "R11 Deterministic observations",
-        "R12 Limitations and traceability",
+    assert list(SECTIONS) == [
+        "1. Identification",
+        "2. Global summary and coverage",
+        "3. Dimension results",
+        "4. Functional requirements and criteria",
+        "5. Architecture D4 split",
+        "6. Tests and code quality",
+        "7. Limitations",
+        "8. Priority actions",
+    ]
+    assert [h for h in headings if re.match(r"\d+\. ", h)] == [
+        "1. Identification",
+        "2. Global summary and coverage",
+        "3. Dimension results",
+        "4. Functional requirements and criteria",
+        "6. Tests and code quality",
     ]
     assert "Status: COMPLETE" in text
     path, _ = generator.generate(result, definition)
     extracted = extract_text(path.read_bytes())
-    assert "R1 Identification" in extracted
-    assert "R12 Limitations and traceability" in extracted
+    assert "1. Identification" in extracted
+    assert "6. Tests and code quality" in extracted
