@@ -18,7 +18,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.5"]
+dev = [
+    "pytest>=8",
+    "ruff>=0.5",
+]
 
 [project.scripts]
 ada-sensei = "ada_sensei.cli.app:CLIApp.main"
@@ -30,7 +33,11 @@ repository = "https://github.com/jehr-ud/ada-sensei"
 include = ["ada_sensei*"]
 
 [tool.setuptools.package-data]
-"ada_sensei" = ["**/*.tcss", "**/*.json"]
+ada_sensei = [
+    "**/*.tcss",
+    "specs/**/*.json",
+    "specs/**/*.md",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
