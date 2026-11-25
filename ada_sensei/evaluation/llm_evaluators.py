@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..llm.base import LLMClient, LLMError
 from ..llm.pipeline import StructuredPipeline
@@ -19,7 +19,7 @@ PROVIDER = "ollama"
 TEMPERATURE = 0.0
 MAX_ATTEMPTS = 3
 PROMPT_ID = "llm-criterion-evaluation"
-PROMPT_VERSION = "2.0.0"
+PROMPT_VERSION = "2.1.0"
 MAX_EVIDENCE_ITEMS = 60
 
 LLM_STATUSES = ("PASS", "PARTIAL", "FAIL", "NOT_EVALUATED")
@@ -34,13 +34,15 @@ class EvaluationCriterionInput(BaseModel):
 
 
 class LLMCriterionDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     criterion_id: str
     status: Literal["PASS", "PARTIAL", "FAIL", "NOT_EVALUATED"]
     reason: str = Field(min_length=1)
-    evidence_ids: list[str] = Field(default_factory=list)
-    limitations: list[str] = Field(default_factory=list)
-    recommended_action: str = ""
-    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    evidence_ids: list[str] = Field(min_length=0)
+    limitations: list[str] = Field(min_length=0)
+    recommended_action: str = Field()
+    confidence: float = Field(ge=0.0, le=1.0)
     reason_code: str | None = None
 
     @model_validator(mode="after")
@@ -53,12 +55,22 @@ class LLMCriterionDecision(BaseModel):
 
 
 class CriterionDecisionBatch(BaseModel):
-    criteria: list[LLMCriterionDecision] = Field(default_factory=list)
+    model_config = ConfigDict(extra="forbid")
+
+    criteria: list[LLMCriterionDecision] = Field()
 
 
 class ArchitectureDecisionBatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     clean_architecture: list[LLMCriterionDecision] = Field(default_factory=list)
     mvvm: list[LLMCriterionDecision] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _requires_decisions(self) -> ArchitectureDecisionBatch:
+        if not self.clean_architecture and not self.mvvm:
+            raise ValueError("at least one architecture decision is required")
+        return self
 
 
 @dataclass
@@ -114,7 +126,17 @@ def _system_prompt() -> str:
         "only proves the scenario it executes. Static inspection of runtime, "
         "remote or visual behavior is at most PARTIAL when part is demonstrable "
         "and NOT_EVALUATED otherwise. Do not assign scores, weights or grades. "
-        "Return strictly valid JSON matching the requested schema."
+        "Return strictly valid JSON matching the requested schema. Every "
+        "decision object MUST include criterion_id (string), status (one of "
+        "PASS, PARTIAL, FAIL, NOT_EVALUATED), reason (non-empty string), "
+        "evidence_ids (array of strings), limitations (array of strings), "
+        "recommended_action (string) and confidence (number from 0 to 1). "
+        "reason_code is optional. Do not use aliases or omit required fields. "
+        "For functional criteria return exactly {\"criteria\": [decision, ...]}. "
+        "For architecture return exactly {\"clean_architecture\": [decision, "
+        "...], \"mvvm\": [decision, ...]}. Do not return a bare decision object. "
+        "PASS, PARTIAL and FAIL require at least one evidence_id; "
+        "NOT_EVALUATED requires a limitation."
     )
 
 
@@ -195,6 +217,7 @@ def _validate_decisions(
                     criterion_id=item.criterion_id,
                     status=CriterionStatus.NOT_EVALUATED.value,
                     reason="the model returned no decision for this criterion",
+                    evidence_ids=[],
                     reason_code="LLM_INVALID_OUTPUT",
                     limitations=["missing criterion decision"],
                     recommended_action="rerun the evaluation with a valid model",

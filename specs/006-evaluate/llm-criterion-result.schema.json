@@ -48,6 +48,9 @@
       "type": "number",
       "minimum": 0,
       "maximum": 1
+    },
+    "reason_code": {
+      "type": ["string", "null"]
     }
   }
 }

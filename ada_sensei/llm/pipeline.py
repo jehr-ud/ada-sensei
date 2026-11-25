@@ -82,6 +82,7 @@ class StructuredPipeline:
             try:
                 data = LLMValidator.parse_json(raw)
                 data = _coerce_array_fields(data, array_fields)
+                data = _coerce_single_object_batch(data, schema)
                 LLMValidator.validate(data, schema)
                 return model_type.model_validate(data)
             except (InvalidJSONError, LLMError, pydantic.ValidationError) as exc:
@@ -121,3 +122,21 @@ def _coerce_array_fields(data: dict, array_fields: set[str]) -> dict:
         if isinstance(value, dict):
             result[field] = [value]
     return result
+
+
+def _coerce_single_object_batch(data: dict, schema: dict) -> dict:
+    """Wrap a lone decision object in the batch array the schema declares."""
+    candidates: list[str] = []
+    for field, prop in schema.get("properties", {}).items():
+        if prop.get("type") != "array" or field in data:
+            continue
+        item = prop.get("items", {})
+        if "$ref" in item:
+            name = item["$ref"].rsplit("/", 1)[-1]
+            item = schema.get("$defs", {}).get(name, {})
+        required = set(item.get("required", []))
+        if required and required.issubset(data):
+            candidates.append(field)
+    if not candidates:
+        return data
+    return {candidates[0]: [data]}

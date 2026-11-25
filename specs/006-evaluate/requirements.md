@@ -208,7 +208,8 @@ without modifying the default `/evaluate` behavior.
 | RQ-EVA-038 | EvaluationEngine | — |
 | RQ-EVA-039 | `AndroidProjectAnalyzer._check_optional`, `DimensionScorer._score_architecture` | `tests/exams/test_integration.py` |
 | RQ-EVA-040 | `StaticAnalysisTool.run_detekt`, `_detekt_not_configured` | `tests/exams/test_integration.py` |
-| RQ-EVA-041 | `StructuredPipeline._coerce_array_fields` | `tests/exams/test_exams_structured_output.py` |
+| RQ-EVA-041 | `StructuredPipeline._coerce_array_fields`, `_coerce_single_object_batch` | `tests/exams/test_exams_structured_output.py`, `tests/evaluation/test_v2_evaluators.py` |
+| RQ-EVA-048 | `EvaluationAgent`, `LLMCriterionDecision`, `StructuredPipeline` | `tests/actions/evaluate/test_structured_output.py`, `tests/evaluation/test_v2_evaluators.py` |
 
 
 ### RQ-EVA-037 Caller-supplied mastery rubric
@@ -241,8 +242,9 @@ for task-not-found patterns to make this distinction.
 ### RQ-EVA-041 LLM array field normalization
 `StructuredPipeline.run` SHALL normalize a top-level field that arrives as a
 JSON object when the schema declares it as an array by wrapping it in a list
-(`_coerce_array_fields`). This normalization occurs before schema validation
-and does not consume a retry attempt.
+(`_coerce_array_fields`). It SHALL also wrap a lone decision object in the
+batch array declared by the schema before validation. This normalization occurs
+before schema validation and does not consume a retry attempt.
 
 
 ## Adenda v2 — LLM y evidencia trazable
@@ -264,3 +266,6 @@ Cada ejecución SHALL producir una única instancia versionada de resultado que 
 
 ### RQ-EVA-047 Validación cruzada
 Antes de persistir, el sistema SHALL validar IDs de evidencia, rangos, estados, pesos y consistencia matemática del resultado.
+
+### RQ-EVA-048 Contrato exacto de salida estructurada
+Todo prompt que solicite JSON estructurado SHALL enumerar los campos obligatorios y su forma exacta. Los esquemas SHALL rechazar alias, campos ausentes y campos adicionales. Una respuesta inválida SHALL agotar los reintentos permitidos sin marcar criterios como `PASS`; una respuesta incompleta pero esquemáticamente válida SHALL degradar los criterios afectados a `NOT_EVALUATED` y registrar la limitación.

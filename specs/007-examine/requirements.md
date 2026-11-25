@@ -139,7 +139,9 @@ Sensei.
 Las respuestas estructuradas del LLM siguen el pipeline compartido (máximo 3
 intentos). Una respuesta que devuelva un **objeto** donde el esquema espera un
 **array** se normaliza automáticamente envolviéndola en una lista antes de
-validar el esquema, sin consumir un intento de reintento.
+validar el esquema, sin consumir un intento de reintento. Un objeto de decisión
+solitario también se envuelve en el array batch correspondiente antes de
+validar.
 
 ## RQ-EXM-026 — Persistencia
 Los fallos de persistencia (`ResultStore`, `AttemptStore`, `HistoryStore`) se
@@ -305,6 +307,7 @@ ignora los registros con `status="info"` al contar deficiencias.
 | RQ-EXM-023 | `ArchitectureAnalyzer` | `tests/exams/test_exams_architecture.py` |
 | RQ-EXM-024 | `ExamReportGenerator`, `ExamDocs` | `tests/exams/test_report.py` |
 | RQ-EXM-025 | `StructuredPipeline`, `_coerce_array_fields` | `tests/exams/test_exams_structured_output.py` |
+| RQ-EXM-085 | `ExamInterpretationAgent`, `ExamInterpretation`, `GroundedClaim` | `tests/exams/test_exams_structured_output.py` |
 | RQ-EXM-026 | `ExamineAction._persist` | `tests/exams/test_persistence.py` |
 | RQ-EXM-027 | `HistoryStore` | `tests/exams/test_persistence.py::test_history_appended` |
 | RQ-EXM-028 | `ExamineAction` | `tests/exams/test_integration.py::test_no_source_modification` |
@@ -1083,3 +1086,13 @@ Si hay criterios no evaluados o fallos del LLM/toolchain, el PDF SHALL declarar 
 
 ### RQ-EXM-084 Hallazgos priorizados
 El PDF SHALL mostrar un máximo de cinco acciones prioritarias vinculadas a criterios o hallazgos, y agrupar el resto sin saturar el documento.
+
+### RQ-EXM-085 Contrato exacto de interpretación del examen
+`ExamInterpretationAgent` SHALL solicitar y validar un objeto con `strengths`,
+`weaknesses`, `recommendations`, `findings`, `feedback`,
+`next_learning_activity`, `limitations` y `architecture`. Cada objeto de
+`strengths`, `weaknesses`, `recommendations`, `findings` y `architecture` SHALL
+incluir `claim`, `evidence_refs` y `kind`; se prohíben alias como `description`,
+`text`, `title` o `summary`, campos adicionales y respuestas vacías. Una salida
+inválida SHALL registrarse como limitación explícita sin alterar la puntuación
+determinista ni fabricar evidencia.

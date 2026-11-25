@@ -150,7 +150,13 @@ class InferenceClient(LLMClient):
     ):
         return json.dumps(
             {
+                "strengths": [],
+                "weaknesses": [],
+                "recommendations": [],
+                "findings": [],
                 "feedback": "Solid structure overall.",
+                "next_learning_activity": "",
+                "limitations": [],
                 "architecture": [
                     {
                         "claim": (

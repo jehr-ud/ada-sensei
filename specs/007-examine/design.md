@@ -86,6 +86,9 @@ Mejoras:
   lista. Esto normaliza la respuesta sin consumir un intento.
 - El límite de 3 intentos en total se aplica sobre la respuesta después de la
   normalización.
+- Los prompts de interpretación incluyen el shape exacto: campos top-level
+  obligatorios, `claim`/`evidence_refs`/`kind` en cada objeto y prohibición de
+  alias y campos adicionales (RQ-EXM-085).
 
 ```python
 def _coerce_array_fields(data: dict, array_fields: set[str]) -> dict:

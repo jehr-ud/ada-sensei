@@ -579,11 +579,17 @@ class ExamineAction:
             reason = f"exam interpretation unavailable: {type(exc).__name__}: {exc}"
             return GroundedExamInterpretation(
                 interpretation=ExamInterpretation(
+                    strengths=[],
+                    weaknesses=[],
+                    recommendations=[],
+                    findings=[],
                     feedback=(
                         "The qualitative interpretation could not be generated; "
                         "the deterministic score below is unaffected."
                     ),
+                    next_learning_activity="",
                     limitations=[reason],
+                    architecture=[],
                 )
             )
 

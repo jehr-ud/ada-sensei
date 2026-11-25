@@ -254,6 +254,9 @@ next activity
 ```
 
 Each claim about the project must reference available evidence where applicable.
+Interpretation and criterion schemas mark every contract field as required and set
+`additionalProperties=false`; prompts reproduce the exact shape so JSON mode in
+Ollama cannot satisfy validation with aliases or extra keys (RQ-EVA-048).
 
 Parsing behavior:
 
@@ -267,7 +270,8 @@ attempt 3 → parse + validate
 explicit structured-output failure
 ```
 
-No malformed result is accepted silently.
+No malformed result is accepted silently. A lone decision object is wrapped in
+its declared batch array before validation without consuming a retry.
 
 ## 6. Confirmation Flow
 

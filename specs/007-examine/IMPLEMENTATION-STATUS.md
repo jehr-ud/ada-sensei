@@ -295,7 +295,14 @@ durante la implementación.
 - Estados LLM no evaluables se excluyen del denominador, se declaran en la
   cobertura y nunca se convierten en cero; `LLM_UNAVAILABLE` marca el informe
   como `BLOCKED`.
-- Evidencia verificada: `python -m pytest -q` → **685 passed**.
+- Corrección del error de esquema: los prompts declaran `claim`, `evidence_refs`,
+  `kind`, `architecture` y los campos obligatorios de decisión; los esquemas
+  rechazan alias y campos adicionales; las respuestas inválidas o incompletas
+  siguen siendo `NOT_EVALUATED`, nunca `PASS` (RQ-EVA-048, RQ-EXM-085).
+- Un objeto de decisión solitario se envuelve en su array batch antes de
+  validar; los prompts declaran los wrappers `criteria`, `clean_architecture` y
+  `mvvm`.
+- Evidencia verificada: `python -m pytest -q` → **700 passed**.
 - Smoke en vivo: `/ask` responde con `qwen2.5-coder:7b`; `/evaluate` ya no
   produce HTTP 404 y llega al LLM con el payload estructurado.
 - `supersedes_report_id` se preserva desde los metadatos administrativos del

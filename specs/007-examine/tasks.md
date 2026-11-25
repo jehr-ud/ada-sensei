@@ -272,4 +272,5 @@ Evidencia: `tests/toolchain/test_manager.py`, `tests/toolchain/test_models.py`, 
 - [x] Limita acciones prioritarias a cinco y las vincula a IDs.
 - [x] Evita tablas vacías, placeholders y filas partidas entre páginas.
 - [x] Añade pruebas de consistencia entre JSON del reporte, TUI y PDF.
+- [x] Ajusta el prompt y el esquema de `ExamInterpretationAgent` al contrato exacto de `claim`, `evidence_refs`, `kind` y `architecture` (RQ-EXM-085).
 - [ ] Añade fixture de regresión con el PDF de Domino Conquista que detecte discrepancias de nota y evidencia.

@@ -118,6 +118,8 @@ def test_requirement_evaluator_accepts_grounded_decision(tmp_path):
                         "status": "PASS",
                         "reason": "CRUD methods are visible in the repository",
                         "evidence_ids": ["ev://task"],
+                        "limitations": [],
+                        "recommended_action": "none",
                         "confidence": 0.9,
                     }
                 ]
@@ -139,6 +141,30 @@ def test_requirement_evaluator_accepts_grounded_decision(tmp_path):
     assert client.calls[0]["temperature"] == 0.0
 
 
+def test_single_decision_object_is_wrapped_before_validation(tmp_path):
+    client = ScriptedClient(
+        json.dumps(
+            {
+                "criterion_id": "AC1",
+                "status": "PASS",
+                "reason": "CRUD methods are visible in the repository",
+                "evidence_ids": ["ev://task"],
+                "limitations": [],
+                "recommended_action": "none",
+                "confidence": 0.9,
+            }
+        )
+    )
+
+    batch = LLMRequirementEvaluator(client).evaluate(
+        [_criterion()], _context(tmp_path)
+    )
+
+    assert len(client.calls) == 1
+    assert [item.status for item in batch.decisions] == ["PASS"]
+    assert batch.run.validation_status == "VALIDATED"
+
+
 def test_invalid_evidence_reference_is_downgraded(tmp_path):
     client = ScriptedClient(
         json.dumps(
@@ -149,6 +175,8 @@ def test_invalid_evidence_reference_is_downgraded(tmp_path):
                         "status": "PASS",
                         "reason": "claimed without a real line",
                         "evidence_ids": ["ev://task"],
+                        "limitations": [],
+                        "recommended_action": "none",
                         "confidence": 0.8,
                     }
                 ]
@@ -180,6 +208,49 @@ def test_invalid_json_retries_three_times_without_scoring(tmp_path):
     assert all(item.reason_code == "LLM_INVALID_OUTPUT" for item in batch.decisions)
 
 
+def test_invalid_decision_is_retried_and_never_scored(tmp_path):
+    client = ScriptedClient(
+        json.dumps(
+            {
+                "criteria": [
+                    {
+                        "criterion_id": "AC1",
+                        "status": "PASS",
+                        "explanation": "alias for reason",
+                        "evidence_ids": ["ev://task"],
+                        "limitations": [],
+                        "recommended_action": "none",
+                        "confidence": 0.9,
+                    }
+                ]
+            }
+        )
+    )
+
+    batch = LLMRequirementEvaluator(client).evaluate(
+        [_criterion()], _context(tmp_path)
+    )
+
+    assert len(client.calls) == 3
+    assert batch.run.attempts == 3
+    assert batch.run.validation_status == "FAILED"
+    assert all(item.status == "NOT_EVALUATED" for item in batch.decisions)
+    assert LLM_STATUS_TO_SCORE_5.get(batch.decisions[0].status) is None
+
+
+def test_empty_decision_payload_is_retried_and_never_scored(tmp_path):
+    client = ScriptedClient("{}")
+
+    batch = LLMRequirementEvaluator(client).evaluate(
+        [_criterion()], _context(tmp_path)
+    )
+
+    assert len(client.calls) == 3
+    assert batch.run.attempts == 3
+    assert batch.run.validation_status == "FAILED"
+    assert all(item.status == "NOT_EVALUATED" for item in batch.decisions)
+
+
 def test_missing_client_never_produces_zero(tmp_path):
     batch = LLMRequirementEvaluator(None).evaluate(
         [_criterion()], _context(tmp_path)
@@ -209,6 +280,9 @@ def test_architecture_score_uses_declared_subweights_and_coverage():
             status="PASS",
             reason="observed",
             evidence_ids=["ev://task"],
+            limitations=[],
+            recommended_action="none",
+            confidence=1.0,
         )
         for n in range(1, 8)
     }
@@ -217,6 +291,9 @@ def test_architecture_score_uses_declared_subweights_and_coverage():
         status="PARTIAL",
         reason="partial state flow",
         evidence_ids=["ev://task"],
+        limitations=[],
+        recommended_action="none",
+        confidence=0.5,
     )
     score, coverage = ExamScorer().architecture_score_from_decisions(decisions)
 
@@ -242,6 +319,10 @@ def test_llm_unavailable_marks_the_single_report_blocked(tmp_path):
                 criterion_id="AC1",
                 status="NOT_EVALUATED",
                 reason="no LLM client is configured",
+                evidence_ids=[],
+                limitations=["LLM_UNAVAILABLE"],
+                recommended_action="provide the missing model",
+                confidence=0.0,
                 reason_code="LLM_UNAVAILABLE",
             )
         },

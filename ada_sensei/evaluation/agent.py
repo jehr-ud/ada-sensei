@@ -8,7 +8,7 @@ as an unsupported claim instead of being accepted as evidence.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..llm.base import LLMClient
 from ..llm.pipeline import StructuredOutputError, StructuredPipeline
@@ -23,24 +23,28 @@ MAX_EVIDENCE_PROMPTED = 40
 class GroundedClaim(BaseModel):
     """A qualitative statement that must cite the evidence it rests on."""
 
+    model_config = ConfigDict(extra="forbid")
+
     claim: str
     #: ``ev://`` ids from the evidence context. Empty means the LLM asserted
     #: something with no evidence behind it.
-    evidence_refs: list[str] = Field(default_factory=list)
-    kind: str = "finding"
+    evidence_refs: list[str]
+    kind: str
 
 
 class EvaluationInterpretation(BaseModel):
     """Schema the evaluation agent must return (design.md §5)."""
 
-    strengths: list[GroundedClaim] = Field(default_factory=list)
-    weaknesses: list[GroundedClaim] = Field(default_factory=list)
-    recommendations: list[GroundedClaim] = Field(default_factory=list)
-    feedback: str = ""
-    next_learning_activity: str = ""
+    model_config = ConfigDict(extra="forbid")
+
+    strengths: list[GroundedClaim]
+    weaknesses: list[GroundedClaim]
+    recommendations: list[GroundedClaim]
+    feedback: str
+    next_learning_activity: str
     #: Free-form narrative claims; each is also grounding-checked.
-    findings: list[GroundedClaim] = Field(default_factory=list)
-    limitations: list[str] = Field(default_factory=list)
+    findings: list[GroundedClaim]
+    limitations: list[str]
 
 
 class GroundedInterpretation(BaseModel):
@@ -86,8 +90,26 @@ class EvaluationAgent:
         "weakness, recommendation, and finding MUST cite one or more evidence "
         "ids from the supplied evidence list in its evidence_refs field; a "
         "claim you cannot ground MUST be omitted rather than asserted. "
-        "Return strictly valid JSON matching the EvaluationInterpretation "
-        "schema without markdown fences."
+        "Return strictly valid JSON matching this shape, without markdown:\n"
+        "{\n"
+        '  "strengths": [{"claim": "...", "evidence_refs": ["ev://1"], '
+        '"kind": "strength"}],\n'
+        '  "weaknesses": [{"claim": "...", "evidence_refs": ["ev://2"], '
+        '"kind": "weakness"}],\n'
+        '  "recommendations": [{"claim": "...", "evidence_refs": ["ev://3"], '
+        '"kind": "recommendation"}],\n'
+        '  "findings": [{"claim": "...", "evidence_refs": ["ev://4"], '
+        '"kind": "finding"}],\n'
+        '  "feedback": "...",\n'
+        '  "next_learning_activity": "...",\n'
+        '  "limitations": ["..."]\n'
+        "}\n"
+        "Every object in strengths, weaknesses, recommendations and findings "
+        "MUST include claim (string), evidence_refs (array of strings) and "
+        "kind (string). Do not use description, text, title or summary instead "
+        "of claim. Top-level fields strengths, weaknesses, recommendations, "
+        "findings, feedback, next_learning_activity and limitations MUST all "
+        "be present."
     )
 
     def __init__(
@@ -112,8 +134,12 @@ class EvaluationAgent:
         if self.client is None:
             return GroundedInterpretation(
                 interpretation=EvaluationInterpretation(
-                    feedback="LLM interpretation unavailable (no LLM client).",
+                    strengths=[],
+                    weaknesses=[],
                     recommendations=[],
+                    findings=[],
+                    feedback="LLM interpretation unavailable (no LLM client).",
+                    next_learning_activity="",
                     limitations=["no LLM client available for interpretation"],
                 )
             )
@@ -224,9 +250,14 @@ def unavailable_interpretation(reason: str) -> GroundedInterpretation:
     """
     return GroundedInterpretation(
         interpretation=EvaluationInterpretation(
+            strengths=[],
+            weaknesses=[],
+            recommendations=[],
+            findings=[],
             feedback=(
                 "LLM interpretation failed; deterministic scoring remains."
             ),
+            next_learning_activity="",
             limitations=[reason],
         )
     )

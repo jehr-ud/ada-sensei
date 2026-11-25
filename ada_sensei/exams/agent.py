@@ -10,7 +10,7 @@ unsupported claim rather than believed.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..evaluation import (
     EvidenceContext,
@@ -30,16 +30,18 @@ MAX_EVIDENCE_PROMPTED = 40
 class ExamInterpretation(BaseModel):
     """Schema the exam interpreter must return."""
 
-    strengths: list[GroundedClaim] = Field(default_factory=list)
-    weaknesses: list[GroundedClaim] = Field(default_factory=list)
-    recommendations: list[GroundedClaim] = Field(default_factory=list)
-    findings: list[GroundedClaim] = Field(default_factory=list)
-    feedback: str = ""
-    next_learning_activity: str = ""
-    limitations: list[str] = Field(default_factory=list)
+    model_config = ConfigDict(extra="forbid")
+
+    strengths: list[GroundedClaim]
+    weaknesses: list[GroundedClaim]
+    recommendations: list[GroundedClaim]
+    findings: list[GroundedClaim]
+    feedback: str
+    next_learning_activity: str
+    limitations: list[str]
     #: Architecture statements the model infers; each is grounding-checked and
     #: must declare ``kind: "inferred"``.
-    architecture: list[GroundedClaim] = Field(default_factory=list)
+    architecture: list[GroundedClaim]
 
 
 class GroundedExamInterpretation(BaseModel):
@@ -84,8 +86,30 @@ class ExamInterpretationAgent:
         "architecture statement MUST cite one or more reference ids from the "
         "supplied lists in its evidence_refs field; omit anything you cannot "
         "ground. Ask-usage measures use of the tutor, not honesty, and you MUST "
-        "NOT suggest dishonesty from it. Return strictly valid JSON matching the "
-        "ExamInterpretation schema without markdown fences."
+        "NOT suggest dishonesty from it. Return strictly valid JSON matching "
+        "this exact shape, without markdown:\n"
+        "{\n"
+        '  "strengths": [{"claim": "...", "evidence_refs": ["ev://1"], '
+        '"kind": "strength"}],\n'
+        '  "weaknesses": [{"claim": "...", "evidence_refs": ["ev://2"], '
+        '"kind": "weakness"}],\n'
+        '  "recommendations": [{"claim": "...", "evidence_refs": ["ev://3"], '
+        '"kind": "recommendation"}],\n'
+        '  "findings": [{"claim": "...", "evidence_refs": ["ev://4"], '
+        '"kind": "finding"}],\n'
+        '  "feedback": "...",\n'
+        '  "next_learning_activity": "...",\n'
+        '  "limitations": ["..."],\n'
+        '  "architecture": [{"claim": "...", "evidence_refs": ["ev://5"], '
+        '"kind": "inferred"}]\n'
+        "}\n"
+        "Every object in strengths, weaknesses, recommendations, findings and "
+        "architecture MUST include claim (string), evidence_refs (array of "
+        "strings) and kind (string). Do not use description, text, title or "
+        "summary instead of claim. Top-level fields strengths, weaknesses, "
+        "recommendations, findings, feedback, next_learning_activity, "
+        "limitations and architecture MUST all be present. Do not echo the "
+        "input fields and do not add other top-level fields."
     )
 
     def __init__(
@@ -199,6 +223,7 @@ class ExamInterpretationAgent:
             feedback=interpretation.feedback,
             next_learning_activity=interpretation.next_learning_activity,
             limitations=list(interpretation.limitations),
+            architecture=[],
         )
         architecture, rejected = _ground_architecture(
             interpretation.architecture, known
@@ -213,8 +238,14 @@ class ExamInterpretationAgent:
         fallback = unavailable_interpretation(reason)
         return GroundedExamInterpretation(
             interpretation=ExamInterpretation(
+                strengths=[],
+                weaknesses=[],
+                recommendations=[],
+                findings=[],
                 feedback=fallback.interpretation.feedback,
+                next_learning_activity="",
                 limitations=list(fallback.interpretation.limitations),
+                architecture=[],
             )
         )
 
