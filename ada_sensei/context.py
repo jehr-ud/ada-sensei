@@ -9,6 +9,12 @@ from pydantic import BaseModel
 
 from .config import Config
 from .models import AssistanceLevel, Turn
+from .resources.paths import (
+    ResourceKind,
+    ResourcePathError,
+    ResourceReference,
+    ResourceResolver,
+)
 from .urns import URN
 
 MAX_TURNS = 60
@@ -21,7 +27,8 @@ class SessionState(BaseModel):
     # Paths are session configuration, distinct from the immutable project id
     # snapshot kept on an ExamAttempt.
     project_path: str | None = None
-    instructions_path: str | None = None
+    instructions_path: str | ResourceReference | None = None
+    exam_definition_path: str | ResourceReference | None = None
     attempt_id: str | None = None
     #: Set while an exam is running so ``/ask`` and ``Finish Exam`` can find the
     #: attempt without the student restating its id (RQ-EXM-001, RQ-EXM-004).
@@ -34,9 +41,19 @@ class SessionState(BaseModel):
 
 class SessionContext:
     def __init__(
-        self, config: Config | None = None, data_dir: Path | None = None
+        self,
+        config: Config | None = None,
+        data_dir: Path | None = None,
+        base_dir: Path | None = None,
     ) -> None:
         self.config = config
+        configured_base = base_dir or (config.base_dir if config else None)
+        self.base_dir = (
+            Path(configured_base).expanduser().resolve()
+            if configured_base is not None
+            else Path.cwd().resolve()
+        )
+        self._resolver = ResourceResolver(self.base_dir)
         self._data_dir = Path(
             data_dir
             or (config.data_dir if config else None)
@@ -44,6 +61,12 @@ class SessionContext:
         )
         self._session_dir = self._data_dir / "sessions"
         self.state = SessionState()
+        self.migrated_resources: tuple[str, ...] = ()
+        if config is not None:
+            if config.exam.instructions_path:
+                self.set_instructions(config.exam.instructions_path)
+            if config.exam.exam_definition_path:
+                self.set_exam_definition(config.exam.exam_definition_path)
 
     @property
     def student_id(self) -> str | None:
@@ -59,7 +82,15 @@ class SessionContext:
 
     @property
     def instructions_path(self) -> str | None:
-        return self.state.instructions_path
+        return self._display_path(
+            self.state.instructions_path, ResourceKind.INSTRUCTIONS
+        )
+
+    @property
+    def exam_definition_path(self) -> str | None:
+        return self._display_path(
+            self.state.exam_definition_path, ResourceKind.EXAM_DEFINITION
+        )
 
     @property
     def attempt_id(self) -> str:
@@ -134,8 +165,31 @@ class SessionContext:
 
     def set_instructions(self, path: str | Path | None) -> None:
         self.state.instructions_path = (
-            str(Path(path).expanduser().resolve()) if path is not None else None
+            self._resolver.reference_for(path, ResourceKind.INSTRUCTIONS)
+            if path is not None
+            else None
         )
+
+    def set_exam_definition(self, path: str | Path | None) -> None:
+        self.state.exam_definition_path = (
+            self._resolver.reference_for(path, ResourceKind.EXAM_DEFINITION)
+            if path is not None
+            else None
+        )
+
+    def _display_path(
+        self,
+        reference: str | ResourceReference | None,
+        resource: ResourceKind,
+    ) -> str | None:
+        if reference is None:
+            return None
+        try:
+            return str(self._resolver.resolve_reference(reference, resource))
+        except ResourcePathError:
+            if isinstance(reference, ResourceReference):
+                return reference.value or reference.resource
+            return reference
 
     def set_exercise(self, exercise_id: str) -> None:
         self.state.current_exercise_id = exercise_id
@@ -168,6 +222,26 @@ class SessionContext:
             return None
         try:
             data: dict[str, Any] = json.loads(path.read_text())
-            return SessionState.model_validate(data)
+            state = SessionState.model_validate(data)
         except Exception:
             return None
+        self.migrated_resources = self._migrate_legacy_definition(state)
+        return state
+
+    def _migrate_legacy_definition(self, state: SessionState) -> tuple[str, ...]:
+        legacy = state.instructions_path
+        if (
+            state.exam_definition_path is not None
+            or not isinstance(legacy, str)
+            or Path(legacy).suffix.lower() != ".json"
+        ):
+            return ()
+        from .exams.definition import ExamDefinitionLoader
+
+        try:
+            ExamDefinitionLoader().load(legacy, base_dir=self.base_dir)
+        except Exception:
+            return ()
+        state.exam_definition_path = legacy
+        state.instructions_path = None
+        return ("instructions_path -> exam_definition_path",)

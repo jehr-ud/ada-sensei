@@ -11,7 +11,10 @@ rather than a code generator.
 - `/ask` — contextual Q&A with progressive assistance (`/hint`, `/more`, `/solution`).
 - `/examples` — teachable Android examples tailored to the current stage.
 - `/evaluate` — evidence-based project evaluation (build, unit tests, Android Lint, Detekt).
-- `/exam-init` / `/exam-finish` — exam workflow with timed attempts and detailed reports.
+- `/project <path>` — configure the Android project workspace.
+- `/instructions <path.md>` — configure teacher-authored Markdown instructions.
+- `/exam-definition <path.json>` — configure the validated JSON exam definition.
+- `/exam-init [path.json]` / `/exam-finish` — exam workflow with timed attempts and detailed reports.
 - `/learn` — review stage concepts and learning objectives.
 - `/diagnose` — run a diagnostic to identify strengths and gaps.
 - `/language` / `/lang` — view or change interface language (`es-CO` or `en-US`).
@@ -22,7 +25,7 @@ rather than a code generator.
 ## Prerequisites
 
 - Python >= 3.11
-- macOS or Linux (POSIX)
+- macOS, Linux, or Windows
 - JDK 17+ (required only for `/evaluate`)
 - An Android project using the Gradle wrapper (`./gradlew`) for `/evaluate`
 

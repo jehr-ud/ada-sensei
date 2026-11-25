@@ -83,7 +83,8 @@ HELP_TEXT = (
     "  /exam-init <statement>      open the compact exam preparation panel\n"
     "  /exam-finish               finish the active exam (compact confirmation)\n"
     "  /project <path>             configure the Android project for an exam\n"
-    "  /instructions <path.json>   configure the teacher's exam definition\n"
+    "  /instructions <path.md>     configure the teacher's Markdown instructions\n"
+    "  /exam-definition <path.json> configure the validated exam definition\n"
     "  /learn [topic]              explain current-stage concepts\n"
     "  /diagnose [stage]           run a brief diagnostic\n"
     "  /language <locale>          change language (es-CO | en-US)\n"
@@ -96,7 +97,8 @@ HELP_TEXT = (
     "  /ask why does LazyColumn not update?\n"
     "  /examples ViewModel\n"
     "  /evaluate --yes\n"
-    "  /exam-init docs/exam.md\n"
+    "  /exam-definition docs/exam.json\n"
+    "  /exam-init docs/exam.json\n"
     "  /exam-finish\n"
     "  /hint\n"
     "\n"
@@ -1303,7 +1305,9 @@ class AdaSenseiTUI(App):
             return
         self._close_exam_preparation()
         self._run_nonblocking(
-            ExamineStartCommand(statement=status.instructions_path or "", yes=True)
+            ExamineStartCommand(
+                statement=getattr(status, "exam_definition_path", "") or "", yes=True
+            )
         )
 
     @on(ExamPreparationList.Cancelled)

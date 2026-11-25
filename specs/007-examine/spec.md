@@ -1207,3 +1207,42 @@ Usar encabezados compactos, tipografía legible, tablas con columnas estables y 
 7. Los reportes con cobertura incompleta se identifican como evaluación parcial.
 8. Un reporte no contiene tablas vacías ni contradicciones entre resumen y detalle.
 9. Se registra modelo, prompt, rúbrica y versiones de herramientas para reproducibilidad.
+
+---
+
+# Adenda normativa — Recursos de examen multiplataforma (2026-11-25)
+
+Esta adenda prevalece sobre RQ-EXM-035 y sobre cualquier texto que trate el
+archivo de instrucciones y la definición JSON como el mismo recurso. La
+decisión técnica completa está en
+`ADR-030-exam-resource-path-resolution.md`.
+
+## Separación de recursos
+
+- `instructions_path`: instrucciones Markdown (`.md`) del docente.
+- `exam_definition_path`: definición JSON validada contra
+  `exam-definition.schema.json`.
+- `project_path`: workspace raíz del proyecto; nunca identifica a los anteriores.
+
+`/instructions <ruta>` configura solo el primero. `/exam-definition <ruta>` y
+`exam-init <ruta.json>` configuran solo el segundo. Un archivo de definición de
+examen entregado al cargador de instrucciones se rechaza como error de tipo de
+recurso; un archivo Markdown entregado como definición se rechaza por extensión
+y contenido.
+
+## Resolución
+
+Toda ruta de usuario se resuelve mediante un único componente basado en
+`pathlib.Path`:
+
+1. `~` se expande con `expanduser()`.
+2. Una ruta absoluta válida se respeta; una ruta relativa se resuelve contra el
+   directorio base explícito de la configuración, nunca contra una suposición
+   sobre la raíz del repositorio.
+3. Los recursos internos se localizan con `importlib.resources`; los archivos
+   del docente permanecen fuera del paquete.
+4. Se validan existencia, tipo de recurso y legibilidad antes de usarlos.
+5. No se sustituye silenciosamente una ruta inválida por otra.
+
+Los mensajes de error identifican el recurso, la ruta resuelta y la causa
+concreta. El TUI muestra ambos recursos en el panel de preparación.

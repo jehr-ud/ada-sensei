@@ -129,7 +129,8 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
             "/instructions <path>."
         ),
         "preflight_instructions_not_markdown": (
-            "The exam definition must be a JSON (.json) file."
+            "The instructions file must be Markdown (.md). The JSON definition "
+            "is configured with /exam-definition <path>."
         ),
         "preflight_instructions_missing": (
             "The exam instructions file was not found. Check the path set with "
@@ -144,8 +145,30 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
             "functional requirements."
         ),
         "preflight_instructions_invalid": (
-            "The exam instructions are not a valid exam definition. Include a "
-            "title and the functional requirements as a list."
+            "The exam instructions are not valid Markdown text."
+        ),
+        "preflight_instructions_wrong_resource": (
+            "An exam definition JSON cannot be used as instructions. Configure "
+            "it with /exam-definition <path>."
+        ),
+        "preflight_no_exam_definition": (
+            "No exam definition JSON is configured. Set one with "
+            "/exam-definition <path>."
+        ),
+        "preflight_exam_definition_missing": (
+            "The exam definition JSON was not found. Check the path set with "
+            "/exam-definition <path>."
+        ),
+        "preflight_exam_definition_unreadable": (
+            "The exam definition JSON could not be read. Check its permissions "
+            "and encoding."
+        ),
+        "preflight_exam_definition_invalid": (
+            "The exam definition JSON does not satisfy the exam schema."
+        ),
+        "preflight_exam_definition_wrong_resource": (
+            "The exam definition path points to a different resource type. "
+            "Provide a validated JSON definition."
         ),
         "preflight_active_exam": (
             "An exam is already active. Finish it with /exam-finish before "
@@ -324,7 +347,8 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
             "Configúralo con /instructions <ruta>."
         ),
         "preflight_instructions_not_markdown": (
-            "La definición del examen debe ser un archivo JSON (.json)."
+            "El archivo de instrucciones debe ser Markdown (.md). La definición "
+            "JSON se configura con /exam-definition <ruta>."
         ),
         "preflight_instructions_missing": (
             "No se encontró el archivo de instrucciones del examen. Revisa la "
@@ -339,8 +363,30 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
             "y los requisitos funcionales."
         ),
         "preflight_instructions_invalid": (
-            "Las instrucciones del examen no son una definición válida. Incluye "
-            "un título y los requisitos funcionales en una lista."
+            "Las instrucciones del examen no son texto Markdown válido."
+        ),
+        "preflight_instructions_wrong_resource": (
+            "Un JSON de definición de examen no puede usarse como instrucciones. "
+            "Configúralo con /exam-definition <ruta>."
+        ),
+        "preflight_no_exam_definition": (
+            "No hay una definición JSON de examen configurada. Configúrala con "
+            "/exam-definition <ruta>."
+        ),
+        "preflight_exam_definition_missing": (
+            "No se encontró la definición JSON del examen. Revisa la ruta "
+            "configurada con /exam-definition <ruta>."
+        ),
+        "preflight_exam_definition_unreadable": (
+            "No se pudo leer la definición JSON del examen. Revisa sus permisos "
+            "y su codificación."
+        ),
+        "preflight_exam_definition_invalid": (
+            "La definición JSON del examen no cumple el esquema."
+        ),
+        "preflight_exam_definition_wrong_resource": (
+            "La ruta de definición apunta a otro tipo de recurso. Proporciona "
+            "una definición JSON válida."
         ),
         "preflight_active_exam": (
             "Ya hay un examen activo. Finalízalo con /exam-finish antes de "
@@ -413,6 +459,12 @@ _BLOCKER_UI_KEYS: dict[str, str] = {
     "instructions_unreadable": "preflight_instructions_unreadable",
     "instructions_empty": "preflight_instructions_empty",
     "instructions_invalid": "preflight_instructions_invalid",
+    "instructions_wrong_resource": "preflight_instructions_wrong_resource",
+    "no_exam_definition": "preflight_no_exam_definition",
+    "exam_definition_missing": "preflight_exam_definition_missing",
+    "exam_definition_unreadable": "preflight_exam_definition_unreadable",
+    "exam_definition_invalid": "preflight_exam_definition_invalid",
+    "exam_definition_wrong_resource": "preflight_exam_definition_wrong_resource",
     "active_exam": "preflight_active_exam",
     "toolchain_not_ready": "preflight_toolchain_not_ready",
 }

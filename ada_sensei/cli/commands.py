@@ -119,6 +119,13 @@ class InstructionsCommand:
 
 
 @dataclass
+class ExamDefinitionCommand:
+    """Request to set / display the JSON exam definition."""
+
+    path: str | None = None
+
+
+@dataclass
 class HintCommand:
     """Request to reveal the next hint (delegated to the action layer)."""
 
@@ -193,12 +200,22 @@ class ProjectResult:
 
 @dataclass
 class InstructionsResult:
-    """Result of configuring the instructor's exam statement."""
+    """Result of configuring the instructor's Markdown instructions."""
 
     path: str | None
 
     def present(self) -> str:
         return f"Exam instructions: {self.path or 'not configured'}"
+
+
+@dataclass
+class ExamDefinitionResult:
+    """Result of configuring the validated JSON exam definition."""
+
+    path: str | None
+
+    def present(self) -> str:
+        return f"Exam definition: {self.path or 'not configured'}"
 
 
 @dataclass
@@ -284,6 +301,7 @@ CommandResult = (
     | ExamFinishResult
     | ProjectResult
     | InstructionsResult
+    | ExamDefinitionResult
     | AssistanceResult
     | HelpResult
     | ClearResult
@@ -306,6 +324,7 @@ Command = (
     | ExamineFinishCommand
     | ProjectCommand
     | InstructionsCommand
+    | ExamDefinitionCommand
     | HintCommand
     | MoreCommand
     | SolutionCommand

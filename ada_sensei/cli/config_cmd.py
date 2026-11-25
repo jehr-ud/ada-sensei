@@ -13,6 +13,10 @@ DEFAULT_TEMPLATE = """\
 [project]
 path = "."
 
+[exam]
+# instructions_path = "instructions/exam.md"
+# exam_definition_path = "exams/exam.json"
+
 [llm]
 provider = "ollama"
 model = "qwen2.5-coder:7b"

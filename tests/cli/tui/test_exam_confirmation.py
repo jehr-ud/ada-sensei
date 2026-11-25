@@ -96,6 +96,7 @@ def _status(*, ready: bool = False, instructions_path: str = "") -> SimpleNamesp
         project_ready=ready,
         project_blockers=() if ready else ("no_project",),
         instructions_path=instructions_path or "/tmp/exam.json",
+        exam_definition_path=instructions_path or "/tmp/exam.json",
         instructions_ready=ready,
         instruction_blockers=() if ready else ("no_instructions",),
         active_exam=False,

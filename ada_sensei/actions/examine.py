@@ -278,7 +278,18 @@ class ExamineAction:
             )
         # The application boundary repeats the preparation check.  The TUI is
         # only a presenter and cannot be trusted to keep a preflight fresh.
-        configured_instructions = self.services.context.instructions_path
+        configured_definition = self.services.context.exam_definition_path
+        statement_text = inp.statement.strip()
+        definition_source = None
+        is_inline = statement_text.startswith("{")
+        is_path = False
+        if not is_inline and statement_text:
+            try:
+                is_path = Path(statement_text).expanduser().is_file()
+            except (OSError, ValueError):
+                is_path = False
+        if is_inline or is_path:
+            definition_source = statement_text
         locale = (
             self._active_locale(self.services.context.student_id)
             if self.services.context.student_id
@@ -287,7 +298,10 @@ class ExamineAction:
         status = ExamPreparationService(
             self.services, toolchain=self.toolchain, progress=self._progress_callback
         ).validate(
-            require_instructions=bool(configured_instructions), locale=locale
+            require_instructions=bool(self.services.context.instructions_path),
+            require_exam_definition=bool(configured_definition or definition_source),
+            definition_source=definition_source,
+            locale=locale,
         )
         if not status.ready_to_start:
             reasons = "; ".join(
@@ -305,20 +319,18 @@ class ExamineAction:
             raise ExamStateError(
                 "exam preparation incomplete: " + (reasons or "unknown reason")
             )
-        if configured_instructions:
+        if configured_definition:
             if (
                 inp.statement
+                and not inp.statement.strip().startswith("{")
                 and Path(inp.statement).expanduser().resolve()
-                != Path(configured_instructions).expanduser().resolve()
+                != Path(configured_definition).expanduser().resolve()
             ):
                 raise ExamDefinitionError(
-                    "exam statement differs from configured instructions"
+                    "exam statement differs from configured exam definition"
                 )
-            statement = configured_instructions
+            statement = configured_definition
         else:
-            # Compatibility for application callers that predate the explicit
-            # configuration commands. Router/TUI entry points always configure
-            # an instructions path and therefore take the strict path above.
             statement = inp.statement
         definition = self._resolve_definition(statement)
         student_id = self._require_student(inp.student_id)

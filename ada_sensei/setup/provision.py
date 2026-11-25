@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import platform
+import tempfile
 import urllib.request
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -38,7 +39,8 @@ class DefaultModelProvisioner:
         self.config = config
         self.runner = runner or SubprocessRunner(timeout_seconds=120)
         self.cache_dir = Path(
-            cache_dir or (config.cache_dir or Path("/tmp/ada-sensei-cache"))
+            cache_dir
+            or (config.cache_dir or Path(tempfile.gettempdir()) / "ada-sensei-cache")
         )
         self.model = config.llm.model
         self._origin = self._origin_from(config.llm.base_url)

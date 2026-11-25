@@ -16,6 +16,7 @@ from .commands import (
     Command,
     DiagnoseCommand,
     EvaluateCommand,
+    ExamDefinitionCommand,
     ExamineFinishCommand,
     ExamineStartCommand,
     ExamplesCommand,
@@ -196,6 +197,8 @@ class CommandParser:
                 return ProjectCommand(path=rest[1] if len(rest) > 1 else None)
             if token == "/instructions":
                 return InstructionsCommand(path=rest[1] if len(rest) > 1 else None)
+            if token == "/exam-definition":
+                return ExamDefinitionCommand(path=rest[1] if len(rest) > 1 else None)
             if token in ("/hint", "/more", "/solution"):
                 return cls._slash_assist(token)
             if token == "/clear":
@@ -243,6 +246,8 @@ class CommandParser:
             return ProjectCommand(path=rest[1] if len(rest) > 1 else None)
         if token == "instructions":
             return InstructionsCommand(path=rest[1] if len(rest) > 1 else None)
+        if token == "exam-definition":
+            return ExamDefinitionCommand(path=rest[1] if len(rest) > 1 else None)
         if token in ("hint", "more", "solution"):
             return cls._slash_assist("/" + token)
         if token in ("clear",):
@@ -281,6 +286,8 @@ class CommandParser:
         if tokens[0] in (
             "help",
             "project",
+            "instructions",
+            "exam-definition",
             "hint",
             "more",
             "solution",
@@ -309,10 +316,9 @@ class CommandParser:
                 "    e.g. examples ViewModel",
                 "  evaluate [--exercise <uri>] [--yes] [--instrumented (future)]",
                 "    e.g. evaluate --yes",
-                "  exam-init [<statement>] [--yes]",
-                "    start an exam from an instructor statement (file, Markdown,",
-                "    structured definition, or inline text)",
-                "    e.g. exam-init ~/exams/midterm.md --yes",
+                "  exam-init [<definition.json>] [--yes]",
+                "    start an exam from a validated JSON definition or inline JSON",
+                "    e.g. exam-init ~/exams/midterm.json --yes",
                 "  exam-finish [--yes]",
                 "    finish the active exam, score it, and generate the report",
                 "    e.g. exam-finish --yes",
@@ -322,6 +328,10 @@ class CommandParser:
                 "  /exit, /quit              leave the session",
                 "  /project [<path>]         set / show the active project",
                 "    e.g. /project ~/my-project",
+                "  /instructions [<path.md>] set / show Markdown instructions",
+                "    e.g. /instructions docs/instructions.md",
+                "  /exam-definition [<path>] set / show the JSON exam definition",
+                "    e.g. /exam-definition docs/exam.json",
                 "  /practice [options]       start a practice session",
                 "    e.g. /practice --topic state --difficulty intermediate",
                 "  /ask <question>           ask a question",
@@ -330,8 +340,8 @@ class CommandParser:
                 "    e.g. /examples ViewModel",
                 "  /evaluate [--yes]         evaluate the project",
                 "    e.g. /evaluate --yes",
-                "  /exam-init [<statement>]   start an exam (needs confirmation)",
-                "    e.g. /exam-init docs/exam.md",
+                "  /exam-init [<path.json>]  start an exam (needs confirmation)",
+                "    e.g. /exam-init docs/exam.json",
                 "  /exam-finish              finish the active exam",
                 "    e.g. /exam-finish",
                 "  /learn [topic]            explain current-stage concepts",

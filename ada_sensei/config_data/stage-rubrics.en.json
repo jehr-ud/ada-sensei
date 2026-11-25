@@ -1,0 +1,1143 @@
+{
+  "schema_version": "1.0.0",
+  "catalog_id": "android-learning-path",
+  "catalog_version": "1.2.0",
+  "locale": "en-US",
+  "score_scale": {
+    "min": 0,
+    "max": 4,
+    "levels": {
+      "0": {
+        "label": "No evidence / incorrect",
+        "description": "No produce evidence verificable, the solución es incorrect o no puede explain the resultado."
+      },
+      "1": {
+        "label": "Beginning",
+        "description": "Resuelve fragmentos with aanduda paso a paso; persistin errores withceptuales o de ejecución."
+      },
+      "2": {
+        "label": "Developing",
+        "description": "Resuelve parcialmente; requiere pistas o presenta inwithsistencias que afectan algunos casos."
+      },
+      "3": {
+        "label": "Competent",
+        "description": "Resuelve the criterio in a autónoma, correct and verificable, with errores menores que no invalidan the resultado."
+      },
+      "4": {
+        "label": "Strong and transferable",
+        "description": "Resuelve, justifies decisiones, withtempthe casos límite and adapta the solución a a variación nueva."
+      }
+    },
+    "scoring_guidance": "Assign a score only from observed evidence. Do not infer mastery from verbal fluency, message count, time spent, or apparent code quality without verification."
+  },
+  "dimension_definitions": [
+    {
+      "id": "construction",
+      "label": "Construction",
+      "definition": "Implements a artefacto funcional and verificable for the etapa."
+    },
+    {
+      "id": "analysis_design",
+      "label": "Analysis and Design",
+      "definition": "Interpreta requirements, descompone problemas, elige estructuras and justifies decisiones."
+    },
+    {
+      "id": "comprehension",
+      "label": "Comprehension",
+      "definition": "Explica, predice, diagnostica and modifica the solución with razonamiento verificable."
+    }
+  ],
+  "rubrics": [
+    {
+      "id": "stage-kotlin-fundamentals-v1",
+      "stage_id": "kotlin-fundamentals",
+      "stage_number": 1,
+      "stage_title": "Kotlin Fundamentals",
+      "version": "1.0.0",
+      "scope": "stage_exit",
+      "objective": "Solve small Kotlin problems using types, control flow, functions, classes, and collections, and explain the decisions made.",
+      "dimensions": [
+        {
+          "id": "construction",
+          "label": "Construction",
+          "weight": 0.4,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "KOT-C1",
+              "description": "Implements a solución Kotlin que produce los resultados esperados.",
+              "observable_evidence": "Ejecución reproducible o tests que cubran the caso normal and al menos a caso límite.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "KOT-C2",
+              "description": "Usa variables, tipos, expresiones, withdicionales, ciclos and colecciones in a apropiada.",
+              "observable_evidence": "Código fuente que muestre selección razonada de estructuras and tipos.",
+              "critical": false,
+              "required_for_decision": true
+            },
+            {
+              "id": "KOT-C3",
+              "description": "Define and utiliza functions and classes with responsibilities comprensibles.",
+              "observable_evidence": "Funciones with parámetros/retornos adecuados and a clase/moof theo cuando the problema lo requiera.",
+              "critical": true,
+              "required_for_decision": true
+            }
+          ]
+        },
+        {
+          "id": "analysis_design",
+          "label": "Analysis and Design",
+          "weight": 0.3,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "KOT-A1",
+              "description": "Descompone the problema in pasos and responsibilities pequeñas.",
+              "observable_evidence": "Explanation o diseño que withecte requirements with functions and classes.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "KOT-A2",
+              "description": "Selects estructuras de data and tipos adecuados al problema.",
+              "observable_evidence": "Justifiesción de a representación de data and sus implicaciones.",
+              "critical": false,
+              "required_for_decision": true
+            },
+            {
+              "id": "KOT-A3",
+              "description": "Identifies entradas inválidas and casos límite relevantes.",
+              "observable_evidence": "Casos de test o explanation de comportamiento ante valores vacíos, extremos o inválidos.",
+              "critical": false,
+              "required_for_decision": true
+            }
+          ]
+        },
+        {
+          "id": "comprehension",
+          "label": "Comprehension",
+          "weight": 0.3,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "KOT-U1",
+              "description": "Explica variables, tipos, flujo de withtrol, functions and classes usadas in su solución.",
+              "observable_evidence": "Explanation oral o escrita vinculada a líneas withcretas of the code.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "KOT-U2",
+              "description": "Predice the comportamiento de a fragmento sin ejecutarlo and withtrasta su predicción.",
+              "observable_evidence": "Predicción razonada for a caso nuevo.",
+              "critical": false,
+              "required_for_decision": true
+            },
+            {
+              "id": "KOT-U3",
+              "description": "Modifica a regthe and explica the impacto de su cambio.",
+              "observable_evidence": "Cambio correct in the code and explanation coherente.",
+              "critical": true,
+              "required_for_decision": true
+            }
+          ]
+        }
+      ],
+      "exit_challenge": {
+        "id": "kotlin-student-grade-manager",
+        "description": "Implementsr a programa que gestione estudiantes and calificaciones, calcule promedios and determine aprobación; debe usar functions and al menos a clase o moof theo. Incluir entradas inválidas o casos límite.",
+        "required_artifacts": [
+          "code fuente Kotlin",
+          "ejecución verificable o tests automatizadas",
+          "explanation breve of the diseño",
+          "modificación solicitada durante the evaluación"
+        ]
+      },
+      "comprehension_check": [
+        "Explain the flujo de ejecución de a purpose elegida and the papthe de sus parámetros and retorno.",
+        "Predecir the resultado de a caso límite and justifiesrlo.",
+        "Modifand a requisito pequeño and explain qué code cambia and by qué."
+      ],
+      "scoring": {
+        "criterion_scale_ref": "mastery_scale_v1",
+        "minimum_overall_score_ref": "progression-policy.json",
+        "minimum_dimension_score_ref": "progression-policy.json",
+        "minimum_critical_criterion_score_ref": "progression-policy.json",
+        "missing_evidence_behavior": "Insufficient evidence"
+      }
+    },
+    {
+      "id": "stage-android-project-structure-v1",
+      "stage_id": "android-project-structure",
+      "stage_number": 2,
+      "stage_title": "Android Project Structure",
+      "version": "1.0.0",
+      "scope": "stage_exit",
+      "objective": "Navigate an Android project, identify the purpose of its files and configuration, and build and run a basic application.",
+      "dimensions": [
+        {
+          "id": "construction",
+          "label": "Construction",
+          "weight": 0.4,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "APS-C1",
+              "description": "Builds and ejecuta a project Android válido.",
+              "observable_evidence": "Resultado de Gradle build and evidence de ejecución in emulador o dispositivo.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "APS-C2",
+              "description": "Localiza and modifica archivos de withfiguración and code sin romper the project.",
+              "observable_evidence": "Cambio pequeño verificable seguido de compilación exitosa.",
+              "critical": false,
+              "required_for_decision": true
+            },
+            {
+              "id": "APS-C3",
+              "description": "Gestiona a dependencia o withfiguración simple in a correct.",
+              "observable_evidence": "Cambio reproducible in withfiguración Gradle and build resultante.",
+              "critical": false,
+              "required_for_decision": true
+            }
+          ]
+        },
+        {
+          "id": "analysis_design",
+          "label": "Analysis and Design",
+          "weight": 0.3,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "APS-A1",
+              "description": "Relaciona carpetas and archivos with sus responsibilities.",
+              "observable_evidence": "Mapa o explanation of the módulo, code fuente, recursos and withfiguración.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "APS-A2",
+              "description": "Traza the recorrido desde the withfiguración hasta the compilación and ejecución.",
+              "observable_evidence": "Explanation coherente de Gradle, manifest, recursos and punto de entrada.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "APS-A3",
+              "description": "Formuthe hipótesis razonables ante a error básico de withfiguración/build.",
+              "observable_evidence": "Diagnóstico sustentado in mensaje de error and archivo relevante.",
+              "critical": false,
+              "required_for_decision": true
+            }
+          ]
+        },
+        {
+          "id": "comprehension",
+          "label": "Comprehension",
+          "weight": 0.3,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "APS-U1",
+              "description": "Explica the propósito de AndroidManifest.xml, Gradle and los recursos.",
+              "observable_evidence": "Explanation correct basada in the project evaluado.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "APS-U2",
+              "description": "Distingue code de application, recursos, withfiguración and dependencies.",
+              "observable_evidence": "Clasificación correct de archivos nuevos o existentes.",
+              "critical": false,
+              "required_for_decision": true
+            },
+            {
+              "id": "APS-U3",
+              "description": "Explica cómo comprobaría and aislaría a fallo simple de build.",
+              "observable_evidence": "Secuencia de depuración pertinente, segura and reproducible.",
+              "critical": false,
+              "required_for_decision": true
+            }
+          ]
+        }
+      ],
+      "exit_challenge": {
+        "id": "android-project-inspection",
+        "description": "Abrir o crear a project Android, localizar archivos clave, explain su responsabilidad, cambiar a elemento sencillo and compilar/ejecutar the app.",
+        "required_artifacts": [
+          "árbol de archivos o inspección of the repositorio",
+          "salida de compilación and ejecución",
+          "explanation de Manifest and Gradle",
+          "diagnóstico de a fallo simple prefordo for the evaluación"
+        ]
+      },
+      "comprehension_check": [
+        "Explain the relación entre módulo, source set, AndroidManifest.xml and withfiguración Gradle.",
+        "Localizar dónde se declara a dependencia and cómo se incorpora al build.",
+        "Explain the punto de entrada o pantalthe inicial of the project utilizado."
+      ],
+      "scoring": {
+        "criterion_scale_ref": "mastery_scale_v1",
+        "minimum_overall_score_ref": "progression-policy.json",
+        "minimum_dimension_score_ref": "progression-policy.json",
+        "minimum_critical_criterion_score_ref": "progression-policy.json",
+        "missing_evidence_behavior": "Insufficient evidence"
+      }
+    },
+    {
+      "id": "stage-activities-lifecycle-v1",
+      "stage_id": "activities-lifecycle",
+      "stage_number": 3,
+      "stage_title": "Activities and Lifecycle",
+      "version": "1.0.0",
+      "scope": "stage_exit",
+      "objective": "Implementsr navegación entre pantallas and explain the ciclo de vida de Activitand and las withsecuencias for the state.",
+      "dimensions": [
+        {
+          "id": "construction",
+          "label": "Construction",
+          "weight": 0.4,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "AL-C1",
+              "description": "Implements navegación entre pantallas usando Intent in a correct.",
+              "observable_evidence": "Prueba funcional of the flujo de navegación and retorno.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "AL-C2",
+              "description": "Envía and recibe data entre Activities in a withsistente.",
+              "observable_evidence": "Evidence de dato correct in the pantalthe destino, incluandendo a valor alternativo.",
+              "critical": false,
+              "required_for_decision": true
+            },
+            {
+              "id": "AL-C3",
+              "description": "Gestiona the state requerido by the escenario durante eventos relevantes of the ciclo de vida.",
+              "observable_evidence": "Demostración de comportamiento tras navegación o recreación especificada.",
+              "critical": true,
+              "required_for_decision": true
+            }
+          ]
+        },
+        {
+          "id": "analysis_design",
+          "label": "Analysis and Design",
+          "weight": 0.3,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "AL-A1",
+              "description": "Designs a flujo de navegación apropiado for los requirements.",
+              "observable_evidence": "Diagrama breve o explanation of the flujo and responsibilities de pantallas.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "AL-A2",
+              "description": "Identifies qué state debe persistir and dónde debe withservarse.",
+              "observable_evidence": "Justifiesción withtextualizada de state transitorio and state que debe recuperarse.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "AL-A3",
+              "description": "Rewithoce riesgos de fugas, operaciones largas o trabajo incorrect in callbacks.",
+              "observable_evidence": "Análisis de a escenario simple with a mitigación adecuada.",
+              "critical": false,
+              "required_for_decision": true
+            }
+          ]
+        },
+        {
+          "id": "comprehension",
+          "label": "Comprehension",
+          "weight": 0.3,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "AL-U1",
+              "description": "Explica los callbacks of the ciclo de vida relevantes for the escenario.",
+              "observable_evidence": "Explanation ordenada and causal, no solo memorización de nombres.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "AL-U2",
+              "description": "Predice los efectos de navegar, volver atrás o recrear a Activitand.",
+              "observable_evidence": "Predicción razonada and comprobación with a test o traza.",
+              "critical": false,
+              "required_for_decision": true
+            },
+            {
+              "id": "AL-U3",
+              "description": "Modifica the flujo o the gestión of the state and justifies las withsecuencias.",
+              "observable_evidence": "Cambio funcional and explanation de sus efectos secundarios.",
+              "critical": true,
+              "required_for_decision": true
+            }
+          ]
+        }
+      ],
+      "exit_challenge": {
+        "id": "two-activity-navigation",
+        "description": "Crear a application with dos Activities, navegar through Intent, enviar a dato and demostrar a comportamiento correct ante a transición relevante of the ciclo de vida.",
+        "required_artifacts": [
+          "code de Activities e Intent",
+          "ejecución de navegación",
+          "test o demostración de transferencia de data",
+          "explanation de callbacks and state"
+        ]
+      },
+      "comprehension_check": [
+        "Explain cuándo and by qué ocurrin onCreate, onStart, onResume, onPause, onStop and onDestroand in a escenario withcreto.",
+        "Predecir qué sucede al navegar, volver atrás o recrear a Activitand.",
+        "Proponer cómo withservar a dato relevante durante a recreación cuando the escenario lo requiera."
+      ],
+      "scoring": {
+        "criterion_scale_ref": "mastery_scale_v1",
+        "minimum_overall_score_ref": "progression-policy.json",
+        "minimum_dimension_score_ref": "progression-policy.json",
+        "minimum_critical_criterion_score_ref": "progression-policy.json",
+        "missing_evidence_behavior": "Insufficient evidence"
+      }
+    },
+    {
+      "id": "stage-jetpack-compose-ui-v1",
+      "stage_id": "jetpack-compose-ui",
+      "stage_number": 4,
+      "stage_title": "Building Interfaces with Jetpack Compose",
+      "version": "1.0.0",
+      "scope": "stage_exit",
+      "objective": "Build interfaces declarativas accesibles and reactivas with composables, laandouts, eventos and state local.",
+      "dimensions": [
+        {
+          "id": "construction",
+          "label": "Construction",
+          "weight": 0.4,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "JC-C1",
+              "description": "Builds the jerarquía de UI solicitada usando composables and laandouts adecuados.",
+              "observable_evidence": "Pantalthe funcional implementsda with componentes Compose apropiados.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "JC-C2",
+              "description": "Conecta eventos de user with cambios visibles and corrects.",
+              "observable_evidence": "Demostración de botones, campos de entrada and actualización de UI.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "JC-C3",
+              "description": "Implements states vacíos, validación and mensajes de error básicos.",
+              "observable_evidence": "Pruebas de entradas válidas e inválidas and representación coherente.",
+              "critical": false,
+              "required_for_decision": true
+            }
+          ]
+        },
+        {
+          "id": "analysis_design",
+          "label": "Analysis and Design",
+          "weight": 0.3,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "JC-A1",
+              "description": "Selects composables and a jerarquía de laandout que reflejan the estructura visual.",
+              "observable_evidence": "Código and explanation de the elección de Column, Row, Box, LazandColumn u otros.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "JC-A2",
+              "description": "Designs states de interacción and validación antes de implementsrlos.",
+              "observable_evidence": "Identifiesción de states inicial, válido, inválido and resultado where applicablen.",
+              "critical": false,
+              "required_for_decision": true
+            },
+            {
+              "id": "JC-A3",
+              "description": "Mantiene sefordas the presentación and las decisiones de lógica que no pertenecin a the UI.",
+              "observable_evidence": "Estructura de code que evita withcentrar toda the lógica in a único composable.",
+              "critical": false,
+              "required_for_decision": true
+            }
+          ]
+        },
+        {
+          "id": "comprehension",
+          "label": "Comprehension",
+          "weight": 0.3,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "JC-U1",
+              "description": "Explica composición, parámetros and recomposición in the withtexto de su pantalla.",
+              "observable_evidence": "Explanation correct basada in a interacción withcreta.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "JC-U2",
+              "description": "Explica the flujo de eventos and the origin of the state visible.",
+              "observable_evidence": "Traza evento → actualización de state → UI.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "JC-U3",
+              "description": "Modifica a componente o interacción sin introducir regresiones esenciales.",
+              "observable_evidence": "Cambio solicitado, ejecución and explanation of the resultado.",
+              "critical": false,
+              "required_for_decision": true
+            }
+          ]
+        }
+      ],
+      "exit_challenge": {
+        "id": "compose-interactive-form",
+        "description": "Build a pantalthe Compose with formulario, validación, acciones and a lista o resumin que se actualice al interactuar.",
+        "required_artifacts": [
+          "code Compose",
+          "ejecución visual funcional",
+          "demostración de eventos and validación",
+          "explanation de composición and state"
+        ]
+      },
+      "comprehension_check": [
+        "Explain the rol de @Composable and the composición de the interface.",
+        "Predecir qué cambia in pantalthe ante a interacción and by qué se produce recomposición.",
+        "Cambiar a requisito de interface o validación and explain the cambio."
+      ],
+      "scoring": {
+        "criterion_scale_ref": "mastery_scale_v1",
+        "minimum_overall_score_ref": "progression-policy.json",
+        "minimum_dimension_score_ref": "progression-policy.json",
+        "minimum_critical_criterion_score_ref": "progression-policy.json",
+        "missing_evidence_behavior": "Insufficient evidence"
+      }
+    },
+    {
+      "id": "stage-state-basic-architecture-v1",
+      "stage_id": "state-basic-architecture",
+      "stage_number": 5,
+      "stage_title": "State and Basic Architecture",
+      "version": "1.0.0",
+      "scope": "stage_exit",
+      "objective": "Seforr state de UI and lógica de presentación, utilizar ViewMoof the where appropriate and mantener a flujo de data comprensible.",
+      "dimensions": [
+        {
+          "id": "construction",
+          "label": "Construction",
+          "weight": 0.4,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "SBA-C1",
+              "description": "Implements state observable que mantiene the UI sincronizada with los data.",
+              "observable_evidence": "Cambios de state reflejados in a reproducible in the interface.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "SBA-C2",
+              "description": "Traslada lógica de presentación apropiada fuera de composables hacia ViewMoof the u otra abstracción adecuada.",
+              "observable_evidence": "Código with responsibilities diferenciadas and sin lógica de negocio dispersa in UI.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "SBA-C3",
+              "description": "Representa states relevantes de pantalla, como withtenido, carga, vacío o error where appropriaten.",
+              "observable_evidence": "Pruebas o demostración de las transiciones requeridas.",
+              "critical": false,
+              "required_for_decision": true
+            }
+          ]
+        },
+        {
+          "id": "analysis_design",
+          "label": "Analysis and Design",
+          "weight": 0.3,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "SBA-A1",
+              "description": "Asigna responsibilities coherentes a UI, ViewMoof the and moof theo/repositorio.",
+              "observable_evidence": "Diagrama o explanation de responsibilities and límites.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "SBA-A2",
+              "description": "Designs a flujo de data unidireccional and acciones explícitas cuando es adecuado.",
+              "observable_evidence": "Traza de evento/acción, actualización of the state and representación UI.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "SBA-A3",
+              "description": "Identifies riesgos de state duplicado, acoplamiento and pérdida de data.",
+              "observable_evidence": "Análisis de a caso and propuesta de mitigación proporcionada.",
+              "critical": false,
+              "required_for_decision": true
+            }
+          ]
+        },
+        {
+          "id": "comprehension",
+          "label": "Comprehension",
+          "weight": 0.3,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "SBA-U1",
+              "description": "Explica the relación entre UI state, eventos and ViewMoof the.",
+              "observable_evidence": "Explanation vinculada a code and a transición withcreta.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "SBA-U2",
+              "description": "Justifies qué state debe sobrevivir a recomposición o recreación.",
+              "observable_evidence": "Justifiesción correct for the escenario, sin afirmar que ViewMoof the persiste todos los data indefinidamente.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "SBA-U3",
+              "description": "Adapta the moof theo de state a a requisito nuevo and explica sus efectos.",
+              "observable_evidence": "Cambio verificado sin inconsistencias importantes.",
+              "critical": false,
+              "required_for_decision": true
+            }
+          ]
+        }
+      ],
+      "exit_challenge": {
+        "id": "stateful-task-app",
+        "description": "Implementsr a app de tareas o notas with lista, alta/edición, states de carga/error si aplican and state de pantalthe gestionado desde ViewMoof the.",
+        "required_artifacts": [
+          "UI y ViewModel",
+          "moof theo de state observable",
+          "demostración de cambios and recreación pertinente",
+          "tests o verificaciones de lógica"
+        ]
+      },
+      "comprehension_check": [
+        "Explain quién es dueño of the state and cómo fluande hacia the UI.",
+        "Distinguir responsabilidad de composable, ViewMoof the and moof theo/repositorio in the project.",
+        "Modifand a caso de state and explain cómo evitar inwithsistencias."
+      ],
+      "scoring": {
+        "criterion_scale_ref": "mastery_scale_v1",
+        "minimum_overall_score_ref": "progression-policy.json",
+        "minimum_dimension_score_ref": "progression-policy.json",
+        "minimum_critical_criterion_score_ref": "progression-policy.json",
+        "missing_evidence_behavior": "Insufficient evidence"
+      }
+    },
+    {
+      "id": "stage-android-basic-application-v1",
+      "stage_id": "android-basic-application",
+      "stage_number": 6,
+      "stage_title": "Basic Android application",
+      "version": "1.0.0",
+      "scope": "stage_exit",
+      "objective": "Verify that the learner integrates prior knowledge in a small application dynamically proposed by Trainer, without relying on web services or external persistence.",
+      "dimensions": [
+        {
+          "id": "construction",
+          "label": "Construction",
+          "weight": 0.4,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "BA-C1",
+              "description": "Implements the agreed functional requirements and the application’s main flows.",
+              "observable_evidence": "Reproducible execution of the main flows against the acceptance criteria.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "BA-C2",
+              "description": "Builds an interactive Compose interface that correctly reflects events and state.",
+              "observable_evidence": "Code inspection and a demonstration of interaction and state updates.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "BA-C3",
+              "description": "Validates inputs and handles relevant empty states and edge cases.",
+              "observable_evidence": "Reproducible tests or demonstrations of validation and edge cases.",
+              "critical": false,
+              "required_for_decision": true
+            }
+          ]
+        },
+        {
+          "id": "analysis_design",
+          "label": "Analysis and Design",
+          "weight": 0.25,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "BA-A1",
+              "description": "Interprets the agent’s proposal and maintains traceability between requirements and the solution.",
+              "observable_evidence": "Requirements and acceptance criteria linked to implemented features.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "BA-A2",
+              "description": "Organizes responsibilities across the UI, state, and presentation logic according to the project scope.",
+              "observable_evidence": "Identifiable code structure; ViewModel where appropriate.",
+              "critical": true,
+              "required_for_decision": true
+            }
+          ]
+        },
+        {
+          "id": "comprehension",
+          "label": "Comprehension",
+          "weight": 0.25,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "BA-U1",
+              "description": "Explains the flow of events, state, and data from a user action to the interface.",
+              "observable_evidence": "Learner explanation grounded in specific parts of the project.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "BA-U2",
+              "description": "Makes or explains a small requirement change without relying on step-by-step instructions.",
+              "observable_evidence": "A verifiable code or design change and a justification of its effects.",
+              "critical": true,
+              "required_for_decision": true
+            }
+          ]
+        },
+        {
+          "id": "testing_quality",
+          "label": "Testing and Quality",
+          "weight": 0.1,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "BA-Q1",
+              "description": "Includes automated tests for core logic where technically feasible and verifies key flows.",
+              "observable_evidence": "Executed tests or, if testing is not feasible, a documented rationale and reproducible checks.",
+              "critical": false,
+              "required_for_decision": true
+            }
+          ]
+        }
+      ],
+      "exit_challenge": {
+        "id": "android-basic-application-exit-challenge",
+        "description": "Build the agreed small application based on Trainer’s proposal. The theme may vary by learner, but the application must cover the learning targets and acceptance criteria defined before implementation.",
+        "generation_contract": "Trainer generates the proposal; the learner may accept it or request an adjustment. The proposal must map each requirement to a learning target and observable evidence. The rubric remains the same across application themes.",
+        "required_artifacts": [
+          "confirmed proposal with functional requirements and acceptance criteria",
+          "runnable Android project",
+          "evidence for main flows and edge cases",
+          "explanation of state flow and responsibilities",
+          "core-logic tests or documented rationale",
+          "a small change made during evaluation"
+        ],
+        "out_of_scope": [
+          "web services and remote APIs",
+          "authentication",
+          "databases and external persistence"
+        ]
+      },
+      "comprehension_check": [
+        "Explain how a user action changes state and how that change reaches the interface.",
+        "Justify where core logic belongs and how it can be tested.",
+        "Modify a small requirement and explain which parts of the application change."
+      ],
+      "scoring": {
+        "criterion_scale_ref": "mastery_scale_v1",
+        "minimum_overall_score_ref": "progression-policy.json",
+        "minimum_dimension_score_ref": "progression-policy.json",
+        "minimum_critical_criterion_score_ref": "progression-policy.json",
+        "missing_evidence_behavior": "INSUFFICIENT_EVIDENCE"
+      }
+    },
+    {
+      "id": "stage-web-services-api-integration-v1",
+      "stage_id": "web-services-api-integration",
+      "stage_number": 7,
+      "stage_title": "Web Services and API Integration",
+      "version": "1.0.0",
+      "scope": "stage_exit",
+      "objective": "Integrate a remote API into an Android application, display data, send information, and handle asynchronous operations and network errors.",
+      "dimensions": [
+        {
+          "id": "construction",
+          "label": "Construction",
+          "weight": 0.4,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "WS-C1",
+              "description": "Implements a solicitud HTTP and procesa correctmente a respuesta JSON.",
+              "observable_evidence": "Código and ejecución verificable de a solicitud GET o POST withtra a API de test.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "WS-C2",
+              "description": "Muestra data remotos in the interface and representa los states de carga, éxito, vacío and error que correspondan.",
+              "observable_evidence": "Demostración reproducible de los states de interface with respuesta normal and fallo withtrolado.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "WS-C3",
+              "description": "Ejecuta las solicitudes de red in a asíncrona and maneja fallos sin bloquear the hilo principal.",
+              "observable_evidence": "Uso verificable de corrutinas and manejo de excepción/timeout o error HTTP.",
+              "critical": true,
+              "required_for_decision": true
+            }
+          ]
+        },
+        {
+          "id": "analysis_design",
+          "label": "Analysis and Design",
+          "weight": 0.3,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "WS-A1",
+              "description": "Interpreta endpoint, método HTTP, parámetros, encabezados and cuerpo según the withtrato de the API.",
+              "observable_evidence": "Explanation o inspección de a solicitud and su respuesta, vinculada a the documentación de the API.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "WS-A2",
+              "description": "Designs moof theos de data and sefor the comunicación remota de the interface through a estructura proporcionada.",
+              "observable_evidence": "Data classes and cliente/repositorio with responsibilities identifiesbles.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "WS-A3",
+              "description": "Propone a tratamiento adecuado for fallos de withectividad, respuestas inválidas and errores HTTP.",
+              "observable_evidence": "Matriz breve de escenarios and comportamiento esperado.",
+              "critical": false,
+              "required_for_decision": true
+            }
+          ]
+        },
+        {
+          "id": "comprehension",
+          "label": "Comprehension",
+          "weight": 0.3,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "WS-U1",
+              "description": "Explica the ciclo solicitud-respuesta and the diferencia entre errores de transporte and codes HTTP de error.",
+              "observable_evidence": "Explanation correct basada in a solicitud observada.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "WS-U2",
+              "description": "Explica cómo a respuesta JSON se withvierte in moof theos Kotlin and llega a the interface.",
+              "observable_evidence": "Traza of the flujo desde the respuesta hasta the state visible de UI.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "WS-U3",
+              "description": "Modifica a requisito de the API o a withdición de error and justifies los cambios.",
+              "observable_evidence": "Cambio verificado in code o diseño, with explanation de sus withsecuencias.",
+              "critical": false,
+              "required_for_decision": true
+            }
+          ]
+        }
+      ],
+      "exit_challenge": {
+        "id": "web-services-api-integration-exit-challenge",
+        "description": "Build a pantalthe Compose que withsulte a API pública o de test, muestre a colección de data and maneje carga, respuesta vacía and error. Incluir a solicitud POST cuando the endpoint de test lo permita.",
+        "required_artifacts": [
+          "code de cliente HTTP and moof theos",
+          "interfaz Compose funcional",
+          "manejo verificable de carga and errores",
+          "explanation of the withtrato HTTP and flujo de data",
+          "cambio pequeño solicitado durante the evaluación"
+        ]
+      },
+      "comprehension_check": [
+        "Explain the diferencia entre a respuesta HTTP exitosa, a error HTTP and a fallo de withectividad.",
+        "Seguir a respuesta JSON hasta the dato que se muestra in the interface.",
+        "Explain cómo evitar bloquear the hilo principal and qué ocurre si the solicitud falla."
+      ],
+      "scoring": {
+        "criterion_scale_ref": "mastery_scale_v1",
+        "minimum_overall_score_ref": "progression-policy.json",
+        "minimum_dimension_score_ref": "progression-policy.json",
+        "minimum_critical_criterion_score_ref": "progression-policy.json",
+        "missing_evidence_behavior": "Insufficient evidence"
+      }
+    },
+    {
+      "id": "stage-clean-architecture-code-quality-v1",
+      "stage_id": "clean-architecture-code-quality",
+      "stage_number": 8,
+      "stage_title": "Clean Architecture and Code Quality",
+      "version": "1.0.0",
+      "scope": "stage_exit",
+      "objective": "Organizar code with dependencies withtroladas, aplicar principios de diseño in a proporcionada and validar comportamiento through tests.",
+      "dimensions": [
+        {
+          "id": "construction",
+          "label": "Construction",
+          "weight": 0.4,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "CAQ-C1",
+              "description": "Implements responsibilities sefordas and dependencies que respetan los límites definidos.",
+              "observable_evidence": "Código and estructura de paquetes que evidencin los límites de the funcionalidad.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "CAQ-C2",
+              "description": "Escribe and ejecuta unit tests for reglas o lógica aislable.",
+              "observable_evidence": "Resultado de tests reproducible and casos significativos.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "CAQ-C3",
+              "description": "Aplica nombres, functions, manejo de errores and refactorización que mejoran mantenibilidad.",
+              "observable_evidence": "Revisión de code antes/después o evidence estática relevante.",
+              "critical": false,
+              "required_for_decision": true
+            }
+          ]
+        },
+        {
+          "id": "analysis_design",
+          "label": "Analysis and Design",
+          "weight": 0.3,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "CAQ-A1",
+              "description": "Designs límites de responsabilidad and dirección de dependencies adecuados al tamaño of the problema.",
+              "observable_evidence": "Diagrama o justifiesción de dependencies entre UI, dominio and data where applicable.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "CAQ-A2",
+              "description": "Selects interfaces and abstracciones justifiesdas by necesidades reales de cambio o test.",
+              "observable_evidence": "Justifiesción que evita tanto acoplamiento innecesario como sobreingeniería.",
+              "critical": false,
+              "required_for_decision": true
+            },
+            {
+              "id": "CAQ-A3",
+              "description": "Identifies riesgos de testabilidad, duplicación, acoplamiento and complejidad.",
+              "observable_evidence": "Hallazgos withcretos and priorización de mejoras.",
+              "critical": false,
+              "required_for_decision": true
+            }
+          ]
+        },
+        {
+          "id": "comprehension",
+          "label": "Comprehension",
+          "weight": 0.3,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "CAQ-U1",
+              "description": "Explica by qué las dependencies tienin the dirección implementsda.",
+              "observable_evidence": "Explanation withsistente with the code and the flujo de ejecución.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "CAQ-U2",
+              "description": "Explica qué testn las tests and qué queda fuera de su cobertura.",
+              "observable_evidence": "Lectura crítica de casos de test and limitaciones.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "CAQ-U3",
+              "description": "Justifies a trade-off de arquitectura and propone a alternativa viable.",
+              "observable_evidence": "Comforción withtextualizada, sin aplicar reglas de arquitectura como dogmas.",
+              "critical": false,
+              "required_for_decision": true
+            }
+          ]
+        }
+      ],
+      "exit_challenge": {
+        "id": "layered-feature-refactor",
+        "description": "Refactorizar o build a funcionalidad de tamaño pequeño/medio with seforción de responsibilities, interfaces donde aportin valor and unit tests de lógica esencial.",
+        "required_artifacts": [
+          "estructura de paquetes/capas",
+          "evidence de dependencies and responsibilities",
+          "pruebas unitarias ejecutadas",
+          "análisis estático disponible and explanation de trade-offs"
+        ]
+      },
+      "comprehension_check": [
+        "Explain the dirección de dependencies and qué cambiaría al sustituir a fuente de data.",
+        "Justifiesr dónde ubicar a regthe de negocio and cómo probarla.",
+        "Identifiesr a abstracción innecesaria o a acoplamiento and proponer a mejora proporcionada."
+      ],
+      "scoring": {
+        "criterion_scale_ref": "mastery_scale_v1",
+        "minimum_overall_score_ref": "progression-policy.json",
+        "minimum_dimension_score_ref": "progression-policy.json",
+        "minimum_critical_criterion_score_ref": "progression-policy.json",
+        "missing_evidence_behavior": "Insufficient evidence"
+      }
+    },
+    {
+      "id": "stage-independent-projects-v1",
+      "stage_id": "independent-projects",
+      "stage_number": 9,
+      "stage_title": "Independent Projects",
+      "version": "1.0.0",
+      "scope": "stage_exit",
+      "objective": "Definir, designsr, implementsr, validar e iterar a application Android propia, justifiesndo decisiones and comunicando sus limitaciones.",
+      "dimensions": [
+        {
+          "id": "construction",
+          "label": "Construction",
+          "weight": 0.4,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "IP-C1",
+              "description": "Entrega a funcionalidad o application que satisface criterios de aceptación explícitos.",
+              "observable_evidence": "Demostración reproducible and trazabilidad requisito → resultado.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "IP-C2",
+              "description": "Integra UI, lógica and data with manejo razonable de errores and states.",
+              "observable_evidence": "Pruebas funcionales de flujos principales and escenarios negativos relevantes.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "IP-C3",
+              "description": "Incluande tests, documentación de ejecución and evidence de validación proporcionada al alcance.",
+              "observable_evidence": "Pruebas ejecutadas, README and limitaciones withocidas.",
+              "critical": false,
+              "required_for_decision": true
+            }
+          ]
+        },
+        {
+          "id": "analysis_design",
+          "label": "Analysis and Design",
+          "weight": 0.3,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "IP-A1",
+              "description": "Convierte a necesidad in requirements and criterios de aceptación verificables.",
+              "observable_evidence": "Documento breve de alcance, prioridades and criterios de aceptación.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "IP-A2",
+              "description": "Designs a arquitectura proporcional al problema and explica sus límites.",
+              "observable_evidence": "Diagrama o explanation de módulos, responsibilities and dependencies.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "IP-A3",
+              "description": "Prioriza tareas, riesgos and cambios usando evidence de tests o retroalimentación.",
+              "observable_evidence": "Backlog o registro de decisiones/iteraciones with razones verificables.",
+              "critical": false,
+              "required_for_decision": true
+            }
+          ]
+        },
+        {
+          "id": "comprehension",
+          "label": "Comprehension",
+          "weight": 0.3,
+          "aggregation": "arithmetic_mean_of_criterion_scores",
+          "criteria": [
+            {
+              "id": "IP-U1",
+              "description": "Explica the sistema de extremo a extremo and cómo cumple los requirements.",
+              "observable_evidence": "Recorrido coherente de requirements, componentes, data and tests.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "IP-U2",
+              "description": "Justifies decisiones técnicas and rewithoce limitaciones and alternativas.",
+              "observable_evidence": "Defensa técnica withtextualizada, sin exigir a única arquitectura correct.",
+              "critical": true,
+              "required_for_decision": true
+            },
+            {
+              "id": "IP-U3",
+              "description": "Diagnostica a defecto o cambio nuevo and plantea a modificación segura.",
+              "observable_evidence": "Análisis causal and plan/cambio verificable with tests de regresión where applicable.",
+              "critical": false,
+              "required_for_decision": true
+            }
+          ]
+        }
+      ],
+      "exit_challenge": {
+        "id": "independent-android-project",
+        "description": "Entregar a funcionalidad o project propio acotado desde requirements hasta a versión ejecutable, incluandendo diseño, decisiones técnicas, tests and revisión final.",
+        "required_artifacts": [
+          "requirements and criterios de aceptación",
+          "diseño/arquitectura and decisiones registradas",
+          "proyecto Android ejecutable",
+          "tests and evidence de validación",
+          "README with instalación, uso, limitaciones and próximos pasos"
+        ]
+      },
+      "comprehension_check": [
+        "Explain cómo los requirements se reflejan in diseño, code and tests.",
+        "Defender a decisión técnica and describir a alternativa and sus trade-offs.",
+        "Analizar a defecto o cambio de alcance and proponer a plan de iteración."
+      ],
+      "scoring": {
+        "criterion_scale_ref": "mastery_scale_v1",
+        "minimum_overall_score_ref": "progression-policy.json",
+        "minimum_dimension_score_ref": "progression-policy.json",
+        "minimum_critical_criterion_score_ref": "progression-policy.json",
+        "missing_evidence_behavior": "Insufficient evidence"
+      }
+    }
+  ]
+}

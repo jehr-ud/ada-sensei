@@ -41,7 +41,13 @@ from ..agents import (
 from ..config import Config, ConfigLoader, Secrets
 from ..context import SessionContext
 from ..events import AppEventBus
-from ..exams.models import ASK_SUCCESS_EVENTS, ExamAttempt, ExamError
+from ..exams.instructions import InstructionsLoader
+from ..exams.models import (
+    ASK_SUCCESS_EVENTS,
+    ExamAttempt,
+    ExamDefinitionError,
+    ExamError,
+)
 from ..exams.store import ExamStore
 from ..learning.catalog import LearningCatalogLoader
 from ..learning.stores import (
@@ -55,6 +61,7 @@ from ..llm.ollama import OllamaProvider
 from ..locale.service import LocaleService
 from ..locale.store import LocalePreferenceStore
 from ..models import Timestamps
+from ..resources.paths import ResourceKind, ResourcePathError, ResourceResolver
 from ..toolchain.manager import ToolchainManager
 from ..urns import URN
 from .commands import (
@@ -67,6 +74,8 @@ from .commands import (
     DiagnoseCommand,
     ErrorResponse,
     EvaluateCommand,
+    ExamDefinitionCommand,
+    ExamDefinitionResult,
     ExamineFinishCommand,
     ExamineStartCommand,
     ExamplesCommand,
@@ -236,6 +245,8 @@ class CommandRouter:
                 return self._project(command)
             if isinstance(command, InstructionsCommand):
                 return self._instructions(command)
+            if isinstance(command, ExamDefinitionCommand):
+                return self._exam_definition(command)
             if isinstance(command, (HintCommand, MoreCommand, SolutionCommand)):
                 return self._assist(command)
             if isinstance(command, HelpCommand):
@@ -314,11 +325,15 @@ class CommandRouter:
     # -- exam workflow (007-examine) --------------------------------------
 
     def _examine_start(self, cmd: ExamineStartCommand) -> CommandResult:
-        # A direct legacy ``exam-init <path>`` remains a convenient alias for
-        # selecting the statement, but the actual validation is still shared
-        # with the preparation service and cannot be bypassed by ``--yes``.
-        if cmd.statement and not self.context.instructions_path:
-            selected = self._set_instructions(cmd.statement)
+        # A direct ``exam-init <path.json>`` configures the exam definition,
+        # never the Markdown instructions. Inline JSON needs no file selection.
+        statement = cmd.statement.strip()
+        if (
+            statement
+            and not statement.startswith("{")
+            and not self.context.exam_definition_path
+        ):
+            selected = self._set_exam_definition(statement)
             if isinstance(selected, ErrorResponse):
                 return selected
         return ExamineAction(
@@ -524,31 +539,48 @@ class CommandRouter:
         return ProjectResult(path=path, project_id=project_id)
 
     def _set_instructions(self, value: str) -> InstructionsResult | ErrorResponse:
-        path = Path(value).expanduser().resolve()
-        if path.suffix.lower() != ".json":
-            return ErrorResponse(
-                message="exam instructions must be a JSON (.json) file"
-            )
-        if not path.exists() or not path.is_file():
-            return ErrorResponse(message=f"instructions file does not exist: {path}")
         try:
-            if not path.read_text(encoding="utf-8").strip():
-                return ErrorResponse(message="instructions file is empty")
-            from ..exams.definition import ExamDefinitionLoader
-
-            ExamDefinitionLoader().load(path, exam_id=None)
-        except (OSError, UnicodeError):
-            return ErrorResponse(message=f"instructions file is not readable: {path}")
-        except Exception as exc:
-            return ErrorResponse(message=f"invalid exam instructions: {exc}")
-        self.context.set_instructions(path)
+            document = InstructionsLoader(self.context.base_dir).load(value)
+        except ResourcePathError as exc:
+            return ErrorResponse(message=exc.render())
+        self.context.set_instructions(document.path)
         self.context.persist()
-        return InstructionsResult(path=str(path))
+        return InstructionsResult(path=str(document.path))
 
     def _instructions(self, cmd: InstructionsCommand) -> CommandResult:
         if not cmd.path:
             return InstructionsResult(path=self.context.instructions_path)
         return self._set_instructions(cmd.path)
+
+    def _set_exam_definition(
+        self, value: str
+    ) -> ExamDefinitionResult | ErrorResponse:
+        from ..exams.definition import ExamDefinitionLoader
+
+        resolver = ResourceResolver(self.context.base_dir)
+        try:
+            path = resolver.resolve(value, ResourceKind.EXAM_DEFINITION)
+        except ResourcePathError as exc:
+            return ErrorResponse(message=exc.render())
+        try:
+            ExamDefinitionLoader().load(path, exam_id=None)
+        except ExamDefinitionError as exc:
+            return ErrorResponse(
+                message=(
+                    "Exam definition error\n"
+                    "Resource: exam_definition\n"
+                    f"Resolved path: {path}\n"
+                    f"Reason: {exc}"
+                )
+            )
+        self.context.set_exam_definition(path)
+        self.context.persist()
+        return ExamDefinitionResult(path=str(path))
+
+    def _exam_definition(self, cmd: ExamDefinitionCommand) -> CommandResult:
+        if not cmd.path:
+            return ExamDefinitionResult(path=self.context.exam_definition_path)
+        return self._set_exam_definition(cmd.path)
 
     def exam_preparation_status(self):
         """Read-only status used by the compact preparation panel."""

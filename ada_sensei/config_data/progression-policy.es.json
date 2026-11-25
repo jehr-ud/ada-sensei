@@ -1,0 +1,115 @@
+{
+  "policy_id": "mastery-progression-default-v1",
+  "version": "1.0.0",
+  "locale": "es-CO",
+  "applies_to": "stage_exit",
+  "principle": "El avance depende de dominio demostrado mediante evidencias; completar actividades o recibir una valoración del LLM no es suficiente.",
+  "score_scale": {
+    "min": 0,
+    "max": 4,
+    "criterion_aggregation": "arithmetic_mean",
+    "dimension_aggregation": "arithmetic_mean_of_criteria_within_dimension",
+    "overall_score": "sum(dimension_score * dimension_weight)",
+    "rounding": {
+      "internal_precision_decimals": 4,
+      "display_decimals": 2,
+      "decision_uses_unrounded_values": true
+    }
+  },
+  "required_dimensions": {
+    "construction": 0.4,
+    "analysis_design": 0.3,
+    "comprehension": 0.3
+  },
+  "decision_gates": {
+    "minimum_overall_score": 3.0,
+    "minimum_each_dimension_score": 2.5,
+    "minimum_critical_criterion_score": 2.0,
+    "require_all_rubric_criteria_assessed": true,
+    "require_evidence_for_each_dimension": true,
+    "require_exit_challenge": true,
+    "require_comprehension_check": true,
+    "require_reproducible_artifact_or_observation": true,
+    "all_gates_must_pass": true
+  },
+  "decision_statuses": {
+    "READY": "Todas las compuertas se cumplen; el Planner puede habilitar el avance a la siguiente etapa.",
+    "NOT_READY": "Existe evidencia suficiente para evaluar, pero una o más compuertas no se cumplen; permanece en la etapa y recibe actividades de refuerzo.",
+    "INSUFFICIENT_EVIDENCE": "Falta evidencia requerida, algún criterio no pudo evaluarse o la verificación técnica no se pudo completar; no equivale a aprobar ni reprobar.",
+    "EVALUATION_ERROR": "La evaluación falló por un problema técnico o de integridad de datos; no se toma una decisión de progresión."
+  },
+  "evidence_rules": {
+    "criterion_scores_require_references": true,
+    "accepted_evidence_types": [
+      "source_code",
+      "build_result",
+      "unit_test_result",
+      "static_analysis_result",
+      "runtime_observation",
+      "student_explanation",
+      "design_artifact",
+      "change_task_result",
+      "instructor_observation"
+    ],
+    "evidence_must_include": [
+      "evidence_id",
+      "type",
+      "source_or_location",
+      "observed_at",
+      "criterion_ids",
+      "summary"
+    ],
+    "llm_may_summarize_evidence_but_must_not_invent_it": true,
+    "no_evidence_is_not_zero": true,
+    "unavailable_tool_is_not_a_student_failure": true,
+    "student_explanation_must_be_linked_to_the_assessed_task": true,
+    "code_presence_alone_does_not_prove_runtime_correctness": true
+  },
+  "assessment_procedure": [
+    "Resolver la rúbrica versionada correspondiente a la etapa y al catálogo activos.",
+    "Presentar un reto de salida equivalente en dificultad a la rúbrica y recoger evidencias de construcción.",
+    "Solicitar al estudiante que explique, prediga o modifique parte de la solución para obtener evidencia de comprensión.",
+    "Recoger evidencia de análisis/diseño mediante una decisión justificada, descomposición o artefacto adecuado a la etapa.",
+    "Asignar puntuación 0..4 por criterio usando la escala común y referencias de evidencia.",
+    "Calcular dimensiones y puntaje global de forma determinista.",
+    "Aplicar todas las compuertas de progresión de forma determinista.",
+    "Entregar al estudiante el resultado, criterios satisfechos, brechas y actividad recomendada."
+  ],
+  "retry_policy": {
+    "practice_between_attempts_allowed": true,
+    "equivalent_but_not_identical_exit_challenge_required_on_retry": true,
+    "previous_attempts_are_immutable_history": true,
+    "latest_valid_attempt_controls_current_decision": true,
+    "allow_multiple_attempts": true,
+    "do_not_average_old_and_new_attempts_for_current_mastery": true,
+    "targeted_practice_should_address_failed_criteria": true
+  },
+  "assistance_policy": {
+    "asking_questions_is_not_automatically_penalized": true,
+    "record_assistance_events_and_level_when_available": true,
+    "rubric_scores_independence_only_when_criterion_describes_independence": true,
+    "assessment_policy_must_disclose_allowed_tools_and_hints_before_attempt": true,
+    "if_full_solution_was_provided_for_the_same_challenge_use_a_new_equivalent_challenge": true
+  },
+  "progression_rules": {
+    "only_planner_agent_may_issue_progression_decision": true,
+    "evaluator_agent_produces_assessment_evidence_and_scores_not_final_progression_state": true,
+    "teacher_agent_explains_decision_and_next_steps": true,
+    "never_skip_unmastered_prerequisites_automatically": true,
+    "student_may_select_an_initial_stage_but_selection_does_not_mark_prior_stages_as_mastered": true,
+    "diagnostic_may_recommend_a_stage_or_challenge_but_only_a_valid_stage_exit_assessment_can_mark_mastery": true,
+    "exam_results_do_not_change_learning_stage_unless_an_explicit_course_policy_maps_exam_evidence_to_stage_mastery": true
+  },
+  "policy_configuration": {
+    "instructor_overrides_allowed": true,
+    "overrides_must_be_versioned": true,
+    "evaluation_result_must_record_policy_id_and_version": true,
+    "rubric_id_and_version_must_be_recorded": true,
+    "thresholds_must_not_be_changed_by_the_llm_at_runtime": true
+  },
+  "assistance_metrics": {
+    "ask_count_is_not_a_progression_penalty": true,
+    "elapsed_time_is_not_a_progression_penalty": true,
+    "may_be_reported_as_context_only": true
+  }
+}

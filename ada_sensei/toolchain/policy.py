@@ -10,6 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from ..resources.paths import ResourceKind, ResourcePathError, ResourceResolver
 from .models import ToolId, ToolStatus
 
 PINNED_RESOLUTION_POLICY = "pinned-compatible-only"
@@ -298,7 +299,13 @@ def _matches(entry: CompatibilityEntry, detected: Mapping[str, str | None]) -> b
 
 
 def load_policy(path: str | Path | None = None) -> ToolchainPolicy:
-    policy_path = Path(path) if path is not None else DEFAULT_POLICY_PATH
+    source = path if path is not None else DEFAULT_POLICY_PATH
+    try:
+        policy_path = ResourceResolver(DEFAULT_POLICY_PATH.parent).resolve(
+            source, ResourceKind.TOOLCHAIN_POLICY
+        )
+    except ResourcePathError as exc:
+        raise PolicyError(exc.render()) from exc
     try:
         payload = json.loads(policy_path.read_text(encoding="utf-8"))
     except OSError as exc:

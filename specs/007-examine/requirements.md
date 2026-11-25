@@ -1096,3 +1096,35 @@ incluir `claim`, `evidence_refs` y `kind`; se prohíben alias como `description`
 `text`, `title` o `summary`, campos adicionales y respuestas vacías. Una salida
 inválida SHALL registrarse como limitación explícita sin alterar la puntuación
 determinista ni fabricar evidencia.
+
+---
+
+# Adenda normativa — Recursos de examen multiplataforma (2026-11-25)
+
+Prevalece sobre RQ-EXM-035 y sobre cualquier sección anterior que use
+`instructions_path` como definición JSON. La base de esta decisión es ADR-030.
+
+- **RQ-EXM-086 — Recursos separados:** `instructions_path`,
+  `exam_definition_path` y `project_path` son configuraciones independientes.
+  Ningún cargador puede utilizar el valor de otro recurso.
+- **RQ-EXM-087 — Instrucciones:** `/instructions <ruta>` acepta solo un archivo
+  Markdown regular, legible y no vacío con extensión `.md`. Rechaza una
+  definición de examen JSON con un error explícito de tipo de recurso.
+- **RQ-EXM-088 — Definición:** `/exam-definition <ruta>` y
+  `exam-init <ruta.json>` aceptan solo una definición JSON existente, regular,
+  legible, válida según el esquema y con semántica válida.
+- **RQ-EXM-089 — Resolución centralizada:** `ResourceResolver` expande `~`,
+  respeta rutas absolutas, resuelve relativas contra un directorio base
+  documentado, comprueba existencia/tipo/permisos y nunca cambia una ruta
+  inválida por otra sin declararlo.
+- **RQ-EXM-090 — Persistencia:** las referencias se guardan relativas al
+  directorio base cuando es posible. Una referencia absoluta o con base de otro
+  sistema se valida al cargar; si ya no existe, se informa sin reutilizarla.
+- **RQ-EXM-091 — Migración:** una sesión heredada cuya definición JSON válida
+  estuviera en `instructions_path` se migra explícitamente a
+  `exam_definition_path`; una ruta inválida no se convierte en instrucciones.
+- **RQ-EXM-092 — Empaquetado:** los recursos internos (instrucciones, schema,
+  configuración de learning path y política de toolchain) se incluyen en la
+  distribución y se localizan con `importlib.resources` cuando corresponda.
+- **RQ-EXM-093 — Errores:** todo error incluye el recurso, la ruta resuelta y
+  la razón concreta. El panel de preparación muestra y valida ambos recursos.

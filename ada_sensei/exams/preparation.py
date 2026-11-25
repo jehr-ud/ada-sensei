@@ -9,14 +9,19 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
 
 from ..evaluation.preflight import ProjectPreflight
 from ..locale.ui_strings import get_ui_string
+from ..resources.paths import (
+    ResourceKind,
+    ResourcePathError,
+    ResourceResolver,
+)
 from ..toolchain.manager import ToolchainManager
 from ..toolchain.models import ToolchainPreparationResult
-from .definition import ExamDefinitionLoader
-from .models import ExamDefinition, ExamDefinitionError
+from .definition import ExamDefinitionLoader, ExamDefinitionValidationError
+from .instructions import InstructionsLoader
+from .models import ExamDefinition
 from .store import ExamStore
 
 
@@ -31,6 +36,9 @@ class ExamPreparationStatus:
     instruction_blockers: tuple[str, ...]
     active_exam: bool
     ready_to_start: bool
+    exam_definition_path: str | None = None
+    exam_definition_ready: bool = False
+    exam_definition_blockers: tuple[str, ...] = ()
     definition: ExamDefinition | None = None
     toolchain_ready: bool = False
     toolchain_blockers: tuple[str, ...] = ()
@@ -43,6 +51,7 @@ class ExamPreparationStatus:
             result.append("no_student")
         result.extend(self.project_blockers)
         result.extend(self.instruction_blockers)
+        result.extend(self.exam_definition_blockers)
         if self.active_exam:
             result.append("active_exam")
         if self.project_ready and not self.toolchain_ready:
@@ -63,6 +72,8 @@ class ExamPreparationService:
     ) -> None:
         self.services = services
         self._env = env
+        config = getattr(services, "config", None)
+        self._base_dir = getattr(config, "base_dir", None)
         self.loader = ExamDefinitionLoader()
         self.toolchain = toolchain if toolchain is not None else ToolchainManager()
         self._progress = progress
@@ -71,6 +82,8 @@ class ExamPreparationService:
         self,
         *,
         require_instructions: bool = True,
+        require_exam_definition: bool = True,
+        definition_source: str | None = None,
         locale: str | None = None,
     ) -> ExamPreparationStatus:
         self._emit("exam_start_progress_validating", locale)
@@ -96,9 +109,16 @@ class ExamPreparationService:
         )
 
         instructions_path = context.instructions_path
-        definition, instruction_blockers = self._instructions(
+        instruction_blockers = self._instructions(
             instructions_path if require_instructions else None,
             required=require_instructions,
+        )
+        exam_definition_path = context.exam_definition_path
+        definition, exam_definition_blockers = self._definition(
+            exam_definition_path or definition_source
+            if require_exam_definition
+            else None,
+            required=require_exam_definition,
         )
         store = ExamStore(self.services.data_dir)
         # Do not rely only on the in-memory session pointer: after a UI restart
@@ -111,9 +131,10 @@ class ExamPreparationService:
                     active = candidate
                     break
         student_ready = bool(context.student_id)
-        instructions_ready = (
-            definition is not None and not instruction_blockers
-        ) or not require_instructions
+        instructions_ready = not instruction_blockers or not require_instructions
+        exam_definition_ready = (
+            definition is not None and not exam_definition_blockers
+        ) or not require_exam_definition
         return ExamPreparationStatus(
             student_ready=student_ready,
             project_path=readiness.project_path or project_path,
@@ -127,9 +148,13 @@ class ExamPreparationService:
                 student_ready
                 and project_ready
                 and instructions_ready
+                and exam_definition_ready
                 and active is None
                 and toolchain_ready
             ),
+            exam_definition_path=exam_definition_path,
+            exam_definition_ready=exam_definition_ready,
+            exam_definition_blockers=exam_definition_blockers,
             definition=definition,
             toolchain_ready=toolchain_ready,
             toolchain_blockers=toolchain_blockers,
@@ -146,24 +171,62 @@ class ExamPreparationService:
 
     def _instructions(
         self, configured: str | None, *, required: bool = True
+    ) -> tuple[str, ...]:
+        if not configured:
+            return ("no_instructions",) if required else ()
+        try:
+            InstructionsLoader(self._base_dir).load(configured)
+        except ResourcePathError as exc:
+            return (self._instructions_blocker(exc),)
+        return ()
+
+    def _definition(
+        self, configured: str | None, *, required: bool = True
     ) -> tuple[ExamDefinition | None, tuple[str, ...]]:
         if not configured:
-            return (None, ("no_instructions",) if required else ())
-        path = Path(configured)
-        if path.suffix.lower() != ".json":
-            return None, ("instructions_not_markdown",)
-        if not path.exists() or not path.is_file():
-            return None, ("instructions_missing",)
+            return (None, ("no_exam_definition",) if required else ())
+        if configured.strip().startswith("{"):
+            try:
+                return self.loader.load_text(configured, exam_id=None), ()
+            except ExamDefinitionValidationError:
+                return None, ("exam_definition_invalid",)
         try:
-            text = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeError):
-            return None, ("instructions_unreadable",)
-        if not text.strip():
-            return None, ("instructions_empty",)
+            resolved = ResourceResolver(self._base_dir).resolve(
+                configured, ResourceKind.EXAM_DEFINITION
+            )
+        except ResourcePathError as exc:
+            return None, (self._definition_blocker(exc),)
         try:
-            return self.loader.load(path, exam_id=None), ()
-        except ExamDefinitionError:
-            return None, ("instructions_invalid",)
+            return self.loader.load(resolved, exam_id=None), ()
+        except ExamDefinitionValidationError as exc:
+            reason = str(exc)
+            if "instructions" in reason:
+                return None, ("exam_definition_wrong_resource",)
+            return None, ("exam_definition_invalid",)
+
+    @staticmethod
+    def _instructions_blocker(error: ResourcePathError) -> str:
+        reason = error.reason.lower()
+        if "does not exist" in reason:
+            return "instructions_missing"
+        if "permission" in reason or "read" in reason or "utf-8" in reason:
+            return "instructions_unreadable"
+        if "empty" in reason:
+            return "instructions_empty"
+        if "mark" in reason:
+            return "instructions_not_markdown"
+        if "exam definition json" in reason:
+            return "instructions_wrong_resource"
+        return "instructions_invalid"
+
+    @staticmethod
+    def _definition_blocker(error: ResourcePathError) -> str:
+        reason = error.reason.lower()
+        if "does not exist" in reason:
+            return "exam_definition_missing"
+        if "permission" in reason or "read" in reason or "utf-8" in reason:
+            return "exam_definition_unreadable"
+        return "exam_definition_invalid"
 
 
 __all__ = ["ExamPreparationService", "ExamPreparationStatus"]

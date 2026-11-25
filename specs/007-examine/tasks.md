@@ -274,3 +274,20 @@ Evidencia: `tests/toolchain/test_manager.py`, `tests/toolchain/test_models.py`, 
 - [x] Añade pruebas de consistencia entre JSON del reporte, TUI y PDF.
 - [x] Ajusta el prompt y el esquema de `ExamInterpretationAgent` al contrato exacto de `claim`, `evidence_refs`, `kind` y `architecture` (RQ-EXM-085).
 - [ ] Añade fixture de regresión con el PDF de Domino Conquista que detecte discrepancias de nota y evidencia.
+
+## 10. Recursos de examen multiplataforma (ADR-030)
+
+- [x] Añadir ADR-030 y adendas normativas en spec/requirements/design.
+- [x] Implementar `ResourceResolver`, `ResourceReference` y errores tipados.
+- [x] Añadir `InstructionsLoader` y rechazo de definiciones JSON como instrucciones.
+- [x] Separar `instructions_path` de `exam_definition_path` en sesión, router,
+     PreparationService, TUI y `ExamineAction`.
+- [x] Persistir referencias relativas y migrar sesiones heredadas válidas.
+- [x] Incluir recursos internos en el paquete y resolverlos con `importlib.resources`.
+- [x] Añadir pruebas de rutas, confusión de recursos, permisos, Unicode, `~`,
+      otra plataforma, pip y regresión del flujo de examen.
+- [x] Ejecutar pytest completo, Ruff y verificación de empaquetado.
+- Evidencia multiplataforma: pytest completo ejecutado en macOS; Windows se cubre
+  con pruebas de rutas absolutas foráneas y `pathlib`. No se ejecutó Linux ni
+  Windows reales: el daemon de Docker no está disponible en este entorno y no
+  hay host Windows. El resolver no usa separadores ni rutas absolutas de un SO.

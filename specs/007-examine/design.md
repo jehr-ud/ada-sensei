@@ -1001,3 +1001,48 @@ El reporte R9 debe mostrar estado de preparación y ejecución por separado.
 10. TeacherAgent no puede invocar instalación ni modificar estados/puntuaciones.
 11. El panel muestra `Preparando…` antes de la validación pesada, emite avances
     reales por etapa y no crea el intento hasta que el preflight termina.
+
+---
+
+# Diseño normativo — Recursos de examen multiplataforma (2026-11-25)
+
+Prevalece sobre el diseño base que trata el enunciado Markdown/JSON/PDF como
+una única fuente. Implementa ADR-030 y RQ-EXM-086–093.
+
+## Componentes
+
+```
+UserConfig -> ResourceResolver -> InstructionsLoader -> InstructionsDocument
+                               -> ExamDefinitionLoader -> ExamDefinition
+PackageData -> importlib.resources -> InstructionsLoader / schema / policies
+SessionState -> ResourceReference -> ResourceResolver (validación al cargar)
+```
+
+`ResourceResolver` es el único lugar que convierte texto de configuración en
+una ruta del sistema. Devuelve una ruta resuelta y lanza `ResourcePathError`
+con `resource`, `resolved_path` y `reason`. No invoca `chdir()`.
+
+## Reglas de resolución
+
+- Configuración relativa: `base_dir` explícito de `Config`, capturado al arrancar.
+- Configuración absoluta: se conserva si existe y es legible.
+- Recursos internos: `importlib.resources.files(package).joinpath(...)`.
+- Persistencia: `ResourceReference(value, base)`; `value` es relativa cuando la
+  ruta está bajo `base`. Las referencias heredadas como texto se aceptan y
+  validan sin reescribirlas.
+
+## cargadores
+
+`InstructionsLoader` comprueba extensión `.md`, tipo regular, legibilidad,
+contenido no vacío y ausencia de un objeto JSON de definición de examen.
+`ExamDefinitionLoader` mantiene la validación JSON Schema y semántica actual y
+añade resolución centralizada. `SessionContext` migra una definición JSON
+válida desde `instructions_path` a `exam_definition_path` al restaurar una
+sesión heredada.
+
+## Pruebas
+
+`tests/resources/`, `tests/exams/`, `tests/cli/` y `tests/context/` cubren rutas
+absolutas/relativas/`~`/espacios/Unicode, confusión de recursos, archivos
+inexistentes, directorios, permisos, otra plataforma, migración y recursos
+empaquetados.

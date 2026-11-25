@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from ..resources.paths import ResourceKind, ResourcePathError, ResourceResolver
 from .models import (
     ProgressionPolicy,
     RubricCatalog,
@@ -12,7 +13,20 @@ from .models import (
 )
 
 # Two levels up from ada_sensei/learning/ → repo root, then config/
-_DEFAULT_CONFIG_DIR = Path(__file__).parent.parent.parent / "config"
+_REPO_CONFIG_DIR = Path(__file__).parent.parent.parent / "config"
+_PACKAGE_CONFIG = "ada_sensei.config_data"
+
+
+def _default_config_dir() -> Path:
+    if _REPO_CONFIG_DIR.is_dir():
+        return _REPO_CONFIG_DIR
+    resolver = ResourceResolver(_REPO_CONFIG_DIR)
+    return resolver.resolve_package(
+        _PACKAGE_CONFIG, "__init__.py", ResourceKind.LEARNING_PATH
+    ).parent
+
+
+_DEFAULT_CONFIG_DIR = _default_config_dir()
 
 _LOCALE_SUFFIX: dict[str, str] = {
     "en-US": "en",
@@ -247,12 +261,22 @@ class LearningCatalogLoader:
         return suffix
 
     def _read_json(self, path: Path) -> dict:
-        if not path.exists():
-            raise ConfigLoadError(f"config file not found: {path}")
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            resolved = ResourceResolver(self.config_dir).resolve(
+                path, ResourceKind.LEARNING_PATH, base_dir=self.config_dir
+            )
+        except ResourcePathError as exc:
+            raise ConfigLoadError(
+                f"config file not found: {exc.path}\n{exc.render()}"
+            ) from exc
+        try:
+            return json.loads(resolved.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
-            raise ConfigLoadError(f"invalid JSON in {path}: {exc}") from exc
+            raise ConfigLoadError(f"invalid JSON in {resolved}: {exc}") from exc
+        except OSError as exc:
+            raise ConfigLoadError(
+                f"learning resource could not be read: {resolved}: {exc}"
+            ) from exc
 
 
 __all__ = ["ConfigLoadError", "LearningCatalogLoader"]

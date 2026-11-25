@@ -469,9 +469,9 @@ class ExamPreparationList(Static):
             return text
         title = "Preparar examen" if es else "Prepare exam"
         intro = (
-            "Usa /project <ruta> y /instructions <ruta.json> para estar listo."
+            "Usa /project, /instructions <.md> y /exam-definition <.json>."
             if es
-            else "Use /project <path> and /instructions <path.json> to get ready."
+            else "Use /project, /instructions <.md> and /exam-definition <.json>."
         )
         missing = "Faltan requisitos" if es else "Requirements missing"
         ready = "Listo para comenzar" if es else "Ready to start"
@@ -481,6 +481,10 @@ class ExamPreparationList(Static):
         instructions = self.status.instructions_path or (
             "No configuradas" if es else "Not configured"
         )
+        definition = getattr(self.status, "exam_definition_path", None) or (
+            "No configurada" if es else "Not configured"
+        )
+        resources = f"{instructions} | {definition}"
         state = ready if self.ready else missing
         toolchain_ready = getattr(self.status, "toolchain_ready", False)
         toolchain = (
@@ -497,7 +501,7 @@ class ExamPreparationList(Static):
         text = Text(f"{title}\n\n{intro}\n\n")
         text.append(f"{'Estudiante' if es else 'Student'}: {student}\n")
         text.append(f"{'Proyecto' if es else 'Project'}: {project}\n")
-        text.append(f"{'Definición' if es else 'Definition'}: {instructions}\n")
+        text.append(f"{'Recursos' if es else 'Resources'}: {resources}\n")
         text.append(f"{'Toolchain' if es else 'Toolchain'}: {toolchain}\n")
         # The blocker list is intentionally NOT rendered here: it is variable
         # length and would push the options past the panel's ``max-height``,

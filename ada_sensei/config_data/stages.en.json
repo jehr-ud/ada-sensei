@@ -1,0 +1,580 @@
+{
+  "schema_version": "1.0.0",
+  "catalog_id": "android-learning-path",
+  "catalog_version": "1.2.0",
+  "locale": "en-US",
+  "title": "Android Development Learning Path",
+  "description": "Versioned stage catalog for ADA Sensei. The catalog defines what is learned and in which order; rubrics and the progression policy define how learning is assessed and when advancement is enabled.",
+  "default_stage_id": "kotlin-fundamentals",
+  "stage_order_policy": "sequential_with_diagnostic_entry",
+  "stage_selection_rules": {
+    "allow_student_to_choose_initial_stage": true,
+    "recommend_initial_diagnostic": true,
+    "diagnostic_may_recommend_entry_stage": true,
+    "skipped_stages_are_not_automatically_mastered": true,
+    "mastery_must_be_recorded_per_stage": true,
+    "only_planner_can_confirm_stage_progression": true
+  },
+  "stages": [
+    {
+      "id": "kotlin-fundamentals",
+      "number": 1,
+      "title": "Kotlin Fundamentals",
+      "objective": "Write and explain small Kotlin programs using the language fundamentals.",
+      "description": "Build a programming foundation for understanding and writing the logic used in Android applications.",
+      "prerequisites": [],
+      "learning_outcomes": [
+        "Declare variables and constants and choose appropriate data types.",
+        "Use operators, expressions, conditionals, and loops to solve problems.",
+        "Define functions with parameters and return values.",
+        "Create simple classes and objects and understand constructors and properties.",
+        "Use collections and handle nullable values with null safety.",
+        "Explain, test, and modify a small Kotlin solution."
+      ],
+      "key_concepts": [
+        "val y var",
+        "tipos de data",
+        "operadores",
+        "if y when",
+        "for y while",
+        "funciones",
+        "parámetros and retorno",
+        "clases y objetos",
+        "constructores y propiedades",
+        "colecciones",
+        "null safety"
+      ],
+      "learning_activities": [
+        "explanation guiada",
+        "ejemplos comentados",
+        "retos progresivos",
+        "depuración de code",
+        "reto de salida independiente"
+      ],
+      "actions": {
+        "learn": [
+          "ask",
+          "examples"
+        ],
+        "practice": [
+          "practice",
+          "ask",
+          "examples"
+        ],
+        "stage_assessment": [
+          "evaluate"
+        ]
+      },
+      "rubric_id": "stage-kotlin-fundamentals-v1",
+      "exit_challenge_id": "kotlin-fundamentals-exit-challenge"
+    },
+    {
+      "id": "android-project-structure",
+      "number": 2,
+      "title": "Android Project Structure",
+      "objective": "Understand, build, run, and modify the basic structure of an Android project.",
+      "description": "Understand how files, configuration, and resources are organized to build an Android application.",
+      "prerequisites": [
+        "kotlin-fundamentals"
+      ],
+      "learning_outcomes": [
+        "Identify the project's main modules, folders, and files.",
+        "Explain the purpose of AndroidManifest.xml.",
+        "Recognize the roles of Gradle, plugins, dependencies, and build configuration.",
+        "Build and run the application on an available emulator or device.",
+        "Locate and diagnose basic configuration or build errors."
+      ],
+      "key_concepts": [
+        "Android Studio",
+        "módulos and source sets",
+        "AndroidManifest.xml",
+        "Gradle",
+        "plugins y dependencias",
+        "recursos",
+        "build variants",
+        "emulador",
+        "compilación and ejecución"
+      ],
+      "learning_activities": [
+        "recorrido guiado of the project",
+        "lectura de archivos",
+        "cambio withtrolado de withfiguración",
+        "diagnóstico de errores",
+        "reto de salida"
+      ],
+      "actions": {
+        "learn": [
+          "ask",
+          "examples"
+        ],
+        "practice": [
+          "practice",
+          "ask",
+          "examples"
+        ],
+        "stage_assessment": [
+          "evaluate"
+        ]
+      },
+      "rubric_id": "stage-android-project-structure-v1",
+      "exit_challenge_id": "android-project-structure-exit-challenge"
+    },
+    {
+      "id": "activities-lifecycle",
+      "number": 3,
+      "title": "Activities and Lifecycle",
+      "objective": "Implement and explain a basic Android screen flow and the main lifecycle events of an Activity.",
+      "description": "Understand how Activities are created and managed and how an application responds to navigation and common state changes.",
+      "prerequisites": [
+        "android-project-structure"
+      ],
+      "learning_outcomes": [
+        "Identify the purpose of an Activity and its entry point.",
+        "Explain the main lifecycle callbacks.",
+        "Navigate between screens using explicit Intents.",
+        "Pass simple data between Activities.",
+        "Recognize basic issues related to recreation and state."
+      ],
+      "key_concepts": [
+        "Activity",
+        "onCreate",
+        "onStart",
+        "onResume",
+        "onPause",
+        "onStop",
+        "onDestroy",
+        "Intent explícito",
+        "extras",
+        "navegación",
+        "recreación de Activitand",
+        "estado"
+      ],
+      "learning_activities": [
+        "diagrama of the ciclo de vida",
+        "ejemplos de callbacks",
+        "implementsción de dos pantallas",
+        "experimentos de navegación",
+        "reto de salida"
+      ],
+      "actions": {
+        "learn": [
+          "ask",
+          "examples"
+        ],
+        "practice": [
+          "practice",
+          "ask",
+          "examples"
+        ],
+        "stage_assessment": [
+          "evaluate"
+        ]
+      },
+      "rubric_id": "stage-activities-lifecycle-v1",
+      "exit_challenge_id": "activities-lifecycle-exit-challenge"
+    },
+    {
+      "id": "jetpack-compose-ui",
+      "number": 4,
+      "title": "Building Interfaces with Jetpack Compose",
+      "objective": "Build a declarative and interactive interface with Jetpack Compose.",
+      "description": "Create interfaces using composable components, layouts, events, and basic local state.",
+      "prerequisites": [
+        "kotlin-fundamentals",
+        "android-project-structure",
+        "activities-lifecycle"
+      ],
+      "learning_outcomes": [
+        "Create @Composable functions.",
+        "Display content with Text, Button, TextField, and images where appropriate.",
+        "Arrange components using Column, Row, and other appropriate layouts.",
+        "Respond to user events.",
+        "Build simple forms with basic validation.",
+        "Explain the relationship between state and the UI representation."
+      ],
+      "key_concepts": [
+        "declarative UI",
+        "@Composable",
+        "Text",
+        "Button",
+        "TextField",
+        "Column",
+        "Row",
+        "Modifier",
+        "eventos",
+        "previews",
+        "estado local"
+      ],
+      "learning_activities": [
+        "lectura de composables",
+        "rewithstrucción de a interface",
+        "formulario interactivo",
+        "reto visual with requirements",
+        "reto de salida"
+      ],
+      "actions": {
+        "learn": [
+          "ask",
+          "examples"
+        ],
+        "practice": [
+          "practice",
+          "ask",
+          "examples"
+        ],
+        "stage_assessment": [
+          "evaluate"
+        ]
+      },
+      "rubric_id": "stage-jetpack-compose-ui-v1",
+      "exit_challenge_id": "jetpack-compose-ui-exit-challenge"
+    },
+    {
+      "id": "state-basic-architecture",
+      "number": 5,
+      "title": "State and Basic Architecture",
+      "objective": "Separate the UI from presentation logic and manage state predictably in a small Android application.",
+      "description": "Organize an application so that state, user actions, and presentation logic are understandable and testable.",
+      "prerequisites": [
+        "jetpack-compose-ui"
+      ],
+      "learning_outcomes": [
+        "Distinguish UI state, events, and domain data.",
+        "Apply state hoisting where appropriate.",
+        "Use ViewModel to retain and coordinate presentation state.",
+        "Represent loading, success, empty, and error states where relevant.",
+        "Separate responsibilities between composables and presentation logic.",
+        "Test logic that does not directly depend on the UI."
+      ],
+      "key_concepts": [
+        "UI state",
+        "eventos",
+        "state hoisting",
+        "ViewModel",
+        "StateFlow o mecanismo equivalente",
+        "seforción de responsibilities",
+        "states de carga and error",
+        "testabilidad"
+      ],
+      "learning_activities": [
+        "refactorización de UI with lógica mezclada",
+        "moof theado de UI state",
+        "implementsción with ViewMoof the",
+        "tests de lógica",
+        "reto de salida"
+      ],
+      "actions": {
+        "learn": [
+          "ask",
+          "examples"
+        ],
+        "practice": [
+          "practice",
+          "ask",
+          "examples"
+        ],
+        "stage_assessment": [
+          "evaluate"
+        ]
+      },
+      "rubric_id": "stage-state-basic-architecture-v1",
+      "exit_challenge_id": "state-basic-architecture-exit-challenge"
+    },
+    {
+      "id": "android-basic-application",
+      "number": 6,
+      "title": "Basic Android application",
+      "objective": "Integrate Kotlin, Android, Compose, and basic state/architecture knowledge in a small, functional application.",
+      "description": "Build a bounded integration project with an app idea proposed by the Trainer subagent and adapted to the learner’s level, interests, and prior evidence. The challenge consolidates earlier knowledge without introducing web services or external persistence yet.",
+      "prerequisites": [
+        "state-basic-architecture"
+      ],
+      "learning_outcomes": [
+        "Turn a simple need into verifiable functional requirements.",
+        "Build a Compose interface with interaction and navigation or a multi-screen flow where appropriate.",
+        "Manage state and events predictably.",
+        "Separate composables from presentation logic, using ViewModel where appropriate.",
+        "Validate inputs and handle empty states and edge cases.",
+        "Test core logic and explain implementation decisions."
+      ],
+      "key_concepts": [
+        "integration of prior concepts",
+        "functional requirements",
+        "Jetpack Compose",
+        "events and state",
+        "ViewModel",
+        "separation of responsibilities",
+        "validation",
+        "unit testing"
+      ],
+      "learning_activities": [
+        "review an application proposal generated by Trainer",
+        "agree on scope and acceptance criteria",
+        "implement the application in small increments",
+        "test main flows and edge cases",
+        "explain the data flow and implement a small change"
+      ],
+      "actions": {
+        "learn": [
+          "ask",
+          "examples"
+        ],
+        "practice": [
+          "practice",
+          "ask",
+          "examples"
+        ],
+        "stage_assessment": [
+          "evaluate"
+        ]
+      },
+      "rubric_id": "stage-android-basic-application-v1",
+      "exit_challenge_id": "android-basic-application-exit-challenge",
+      "project_generation": {
+        "proposal_agent": "Trainer",
+        "mode": "dynamic_personalized_proposal",
+        "learner_may_accept_or_refine": true,
+        "inputs": [
+          "selected_locale",
+          "learner_interests_if_known",
+          "mastered_stages",
+          "previous_evaluation_evidence",
+          "available_project_context"
+        ],
+        "fixed_learning_targets": [
+          "Kotlin fundamentals",
+          "Android project structure and lifecycle",
+          "Jetpack Compose UI",
+          "state management and basic presentation architecture",
+          "input validation and edge cases",
+          "testable logic and student explanation"
+        ],
+        "constraints": [
+          "Do not require web services, remote APIs, authentication, databases, or external persistence.",
+          "Keep the project small enough to demonstrate in one stage exit challenge.",
+          "Do not require concepts that are not in the prerequisite stages.",
+          "Generate explicit functional requirements and observable acceptance criteria.",
+          "Use a deterministic rubric independent of the chosen app theme.",
+          "If learner interests or prior evidence are unavailable, propose a simple default application.",
+          "Do not let the LLM decide mastery or progression; return a proposal for student confirmation and later evidence-based evaluation."
+        ],
+        "proposal_output": [
+          "app_title",
+          "problem_statement",
+          "target_user",
+          "scope",
+          "functional_requirements",
+          "acceptance_criteria",
+          "suggested_screen_flow",
+          "data_model",
+          "test_scenarios",
+          "out_of_scope",
+          "mapping_to_learning_targets"
+        ]
+      }
+    },
+    {
+      "id": "web-services-api-integration",
+      "number": 7,
+      "title": "Web Services and API Integration",
+      "objective": "Desarrollar applicationes Android que se comuniquin with servicios web for withsultar and enviar data, ejecutar operaciones asíncronas and gestionar errores de red.",
+      "description": "Introducir the comunicación HTTP, las API REST, the serialización JSON and the integración de data remotos in Android with Kotlin. Comprender the ciclo solicitud-respuesta and manejar in a fiable los states de red.",
+      "prerequisites": [
+        "android-basic-application"
+      ],
+      "learning_outcomes": [
+        "Explain the propósito de los servicios web and las API REST in applicationes móviles.",
+        "Identifiesr métodos HTTP, codes de state, encabezados, endpoints and cuerpos de solicitud.",
+        "Interpretar objetos and arreglos JSON and mapearlos a data classes de Kotlin.",
+        "Realizar solicitudes HTTP GET for withsultar data de a API remota.",
+        "Realizar solicitudes HTTP POST for enviar data a a API remota.",
+        "Usar a cliente HTTP como Retrofit o Ktor Client for comunicarse with servicios web.",
+        "Usar corrutinas de Kotlin for ejecutar solicitudes de red in a asíncrona sin bloquear the hilo principal.",
+        "Representar states de carga, éxito, vacío and error in the interface.",
+        "Gestionar fallos de red, errores HTTP, tiempos de espera and respuestas inválidas.",
+        "Seforr the comunicación with the API de the interface through moof theos de data and abstracciones de repositorio apropiadas.",
+        "Mostrar data remotos in a interface de Jetpack Compose.",
+        "Explain las implicaciones de seguridad al transmitir data and gestionar credenciales de API."
+      ],
+      "key_concepts": [
+        "servicios web",
+        "API REST",
+        "HTTP",
+        "solicitudes GET y POST",
+        "codes de state HTTP",
+        "encabezados de solicitud",
+        "cuerpos de solicitud",
+        "serialización and deserialización JSON",
+        "data classes de Kotlin",
+        "Retrofit",
+        "Ktor Client",
+        "corrutinas de Kotlin",
+        "funciones suspend",
+        "operaciones asíncronas",
+        "permisos de red",
+        "states de carga and error",
+        "manejo de errores de API",
+        "patrón repositorio",
+        "fuentes de data remotas",
+        "seguridad de red"
+      ],
+      "learning_activities": [
+        "inspeccionar and comprender a API REST",
+        "analizar solicitudes y respuestas HTTP",
+        "mapear respuestas JSON a data classes de Kotlin",
+        "implementsr a solicitud GET",
+        "mostrar datos remotos en Jetpack Compose",
+        "implementsr a solicitud POST",
+        "gestionar states de carga, éxito, vacío and error",
+        "simular fallos de red e inspeccionar errores HTTP",
+        "refactorizar the code de red in a repositorio",
+        "completar a reto independiente de integración de API"
+      ],
+      "actions": {
+        "learn": [
+          "ask",
+          "examples"
+        ],
+        "practice": [
+          "practice",
+          "ask",
+          "examples"
+        ],
+        "stage_assessment": [
+          "evaluate"
+        ]
+      },
+      "rubric_id": "stage-web-services-api-integration-v1",
+      "exit_challenge_id": "web-services-api-integration-exit-challenge"
+    },
+    {
+      "id": "clean-architecture-code-quality",
+      "number": 8,
+      "title": "Clean Architecture and Code Quality",
+      "objective": "Design and improve a small Android application by separating responsibilities and verifying its quality through tests and tools.",
+      "description": "Introduce layer and dependency boundaries, testing, and refactoring without imposing unnecessary complexity.",
+      "prerequisites": [
+        "state-basic-architecture"
+      ],
+      "learning_outcomes": [
+        "Explain the responsibilities and boundaries of the selected layers.",
+        "Separate presentation, domain, and data access when justified by the problem.",
+        "Define contracts and implement repositories appropriate to the project's scope.",
+        "Direct dependencies toward abstractions where appropriate.",
+        "Write unit tests for relevant logic.",
+        "Use static analysis, review readability, and refactor without changing expected behavior.",
+        "Explain when an abstraction adds value and when it would be unnecessary."
+      ],
+      "key_concepts": [
+        "seforción by capas",
+        "dominio",
+        "casos de uso",
+        "repositorios",
+        "inandección de dependencies",
+        "dirección de dependencies",
+        "pruebas unitarias",
+        "lint",
+        "análisis estático",
+        "refactorización",
+        "legibilidad y mantenibilidad"
+      ],
+      "learning_activities": [
+        "análisis de arquitectura existente",
+        "diseño de componentes",
+        "Uso de Room",
+        "refactorización guiada",
+        "pruebas unitarias",
+        "revisión de calidad",
+        "reto de salida"
+      ],
+      "actions": {
+        "learn": [
+          "ask",
+          "examples"
+        ],
+        "practice": [
+          "practice",
+          "ask",
+          "examples"
+        ],
+        "stage_assessment": [
+          "evaluate"
+        ]
+      },
+      "rubric_id": "stage-clean-architecture-code-quality-v1",
+      "exit_challenge_id": "clean-architecture-code-quality-exit-challenge"
+    },
+    {
+      "id": "independent-projects",
+      "number": 9,
+      "title": "Independent Projects",
+      "objective": "Plan, design, implement, validate, and explain an independent Android project that integrates acquired skills.",
+      "description": "Apply previous skills to a chosen problem with clear requirements, incremental deliveries, and justified technical decisions.",
+      "prerequisites": [
+        "clean-architecture-code-quality"
+      ],
+      "learning_outcomes": [
+        "Define the problem, users, and verifiable requirements.",
+        "Break the project into tasks and incremental deliveries.",
+        "Design navigation, UI, state, and code organization according to the scope.",
+        "Implement features and handle relevant errors.",
+        "Validate behavior using appropriate tests and technical checks.",
+        "Document decisions, limitations, and how to run the project.",
+        "Present and justify the result and propose future improvements."
+      ],
+      "key_concepts": [
+        "definición de problema",
+        "requisitos funcionales y no funcionales",
+        "planificación incremental",
+        "diseño de solución",
+        "integración",
+        "pruebas",
+        "documentación",
+        "decisiones técnicas",
+        "limitaciones y mejoras"
+      ],
+      "learning_activities": [
+        "propuesta de project",
+        "revisión de requirements",
+        "plan por hitos",
+        "implementsción incremental",
+        "demostración",
+        "retrospectiva and defensa técnica"
+      ],
+      "actions": {
+        "learn": [
+          "ask",
+          "examples"
+        ],
+        "practice": [
+          "practice",
+          "ask",
+          "examples"
+        ],
+        "stage_assessment": [
+          "evaluate"
+        ]
+      },
+      "rubric_id": "stage-independent-projects-v1",
+      "exit_challenge_id": "independent-projects-exit-challenge"
+    }
+  ],
+  "cross_stage_rules": {
+    "actions_are_reused": [
+      "ask",
+      "practice",
+      "examples",
+      "evaluate",
+      "exam-init",
+      "exam-finish"
+    ],
+    "learning_mode_assessment": "La evaluación de salida determina dominio de the etapa and elegibilidad for avanzar; no equivale a a examin sumativo.",
+    "exam_mode_is_independent": "exam-init and exam-finish puedin utilizarse in cualquier etapa and no cambian automáticamente the etapa ni su dominio.",
+    "agent_responsibilities": {
+      "teacher": "Orquesta las acciones and subagentes, adapta the experiencia al objetivo de aprendizaje and presenta the respuesta final.",
+      "planner": "Registra evidences and aplica progression-policand.json for decidir the elegibilidad de avance.",
+      "evaluator": "Realiza diagnósticos and evaluaciones, aplica stage-rubrics.json and entrega resultados respaldados by evidences.",
+      "trainer": "Explica withceptos, resuelve dudas, ofrece ejemplos and genera práctica adaptada a the etapa and a las necesidades observadas."
+    }
+  }
+}

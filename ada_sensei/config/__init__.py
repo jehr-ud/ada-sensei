@@ -13,6 +13,8 @@ ENV_PREFIX = "ADA_SENSEI_"
 
 ENV_KEYS: dict[str, str] = {
     "PROJECT_PATH": "project.path",
+    "EXAM_INSTRUCTIONS_PATH": "exam.instructions_path",
+    "EXAM_DEFINITION_PATH": "exam.exam_definition_path",
     "LLM_PROVIDER": "llm.provider",
     "LLM_MODEL": "llm.model",
     "LLM_BASE_URL": "llm.base_url",
@@ -35,6 +37,11 @@ ENV_KEYS: dict[str, str] = {
 
 class ProjectConfig(BaseModel):
     path: str = "."
+
+
+class ExamPathsConfig(BaseModel):
+    instructions_path: str | None = None
+    exam_definition_path: str | None = None
 
 
 class LLMContextConfig(BaseModel):
@@ -93,6 +100,7 @@ class SecretsConfig(BaseModel):
 
 class Config(BaseModel):
     project: ProjectConfig = Field(default_factory=ProjectConfig)
+    exam: ExamPathsConfig = Field(default_factory=ExamPathsConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
@@ -100,6 +108,8 @@ class Config(BaseModel):
     data_dir: Path | None = None
     config_file: Path | None = None
     cache_dir: Path | None = None
+    #: Base used to resolve relative paths configured by the user.
+    base_dir: Path | None = None
 
     @property
     def resolved_data_dir(self) -> Path:
@@ -108,6 +118,7 @@ class Config(BaseModel):
 
 class _ConfigBuilder(BaseModel):
     project: dict[str, Any] = Field(default_factory=dict)
+    exam: dict[str, Any] = Field(default_factory=dict)
     llm: dict[str, Any] = Field(default_factory=dict)
     tools: dict[str, Any] = Field(default_factory=dict)
     storage: dict[str, Any] = Field(default_factory=dict)
@@ -146,6 +157,7 @@ class ConfigLoader:
     ) -> Config:
         data: dict[str, Any] = {
             "project": {},
+            "exam": {},
             "llm": {},
             "tools": {},
             "storage": {},
@@ -157,7 +169,7 @@ class ConfigLoader:
         if file_path.exists():
             with file_path.open("rb") as fh:
                 raw = tomllib.load(fh)
-            for key in ("project", "llm", "tools", "storage", "secrets"):
+            for key in ("project", "exam", "llm", "tools", "storage", "secrets"):
                 data[key].update(raw.get(key, {}))
         else:
             file_path = paths.config_file
@@ -179,12 +191,14 @@ class ConfigLoader:
         builder = _ConfigBuilder.model_validate(data)
         merged = Config(
             project=ProjectConfig(**builder.project),
+            exam=ExamPathsConfig(**builder.exam),
             llm=LLMConfig(**builder.llm),
             tools=ToolsConfig(**builder.tools),
             storage=StorageConfig(**builder.storage),
             secrets=SecretsConfig(**builder.secrets),
         )
 
+        merged.base_dir = self._cwd
         merged.data_dir = Path(
             os.path.expandvars(builder.storage.get("data_dir") or str(paths.data_dir))
         )

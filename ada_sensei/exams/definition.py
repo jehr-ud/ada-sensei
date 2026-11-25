@@ -18,6 +18,7 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
+from ..resources.paths import ResourceKind, ResourcePathError, ResourceResolver
 from .models import (
     DEFAULT_EXAM_RUBRIC_REF,
     AcceptanceCriterion,
@@ -55,21 +56,40 @@ class ExamDefinitionValidationError(ExamDefinitionError):
         )
 
 
+class ExamDefinitionResourceError(ExamDefinitionValidationError):
+    """A definition path cannot be resolved without confusing another resource."""
+
+    def __init__(self, error: ResourcePathError) -> None:
+        self.resource = error.resource
+        self.path = error.path
+        self.reason = error.reason
+        self.issues = ()
+        ExamDefinitionError.__init__(self, error.render())
+
+
 class ExamDefinitionLoader:
     """Resolves a validated ``ExamDefinition`` from a teacher JSON file."""
 
     def load(
-        self, source: str | Path, *, exam_id: str | None = None
+        self,
+        source: str | Path,
+        *,
+        exam_id: str | None = None,
+        base_dir: str | Path | None = None,
     ) -> ExamDefinition:
-        path = Path(source).expanduser()
-        if not path.is_file():
-            raise ExamDefinitionValidationError(
-                [
-                    ExamDefinitionIssue(
-                        "/", "definition_not_found", f"exam definition not found: {path}"
-                    )
-                ]
-            )
+        resolver = ResourceResolver(base_dir)
+        try:
+            path = resolver.resolve(source, ResourceKind.EXAM_DEFINITION)
+        except ResourcePathError as exc:
+            if exc.reason == "file does not exist":
+                raise ExamDefinitionValidationError(
+                    [
+                        ExamDefinitionIssue(
+                            "/", "definition_not_found", str(exc)
+                        )
+                    ]
+                ) from exc
+            raise ExamDefinitionResourceError(exc) from exc
         if path.suffix.lower() != ".json":
             raise ExamDefinitionValidationError(
                 [
@@ -82,13 +102,13 @@ class ExamDefinitionLoader:
             )
         try:
             raw = path.read_text(encoding="utf-8")
-        except OSError as exc:
-            raise ExamDefinitionValidationError(
-                [
-                    ExamDefinitionIssue(
-                        "/", "definition_unreadable", str(exc)
-                    )
-                ]
+        except (OSError, UnicodeError) as exc:
+            raise ExamDefinitionResourceError(
+                ResourcePathError(
+                    ResourceKind.EXAM_DEFINITION,
+                    path,
+                    f"file could not be read: {exc}",
+                )
             ) from exc
         return self._definition_from_json(
             raw, exam_id, str(path), str(path)
@@ -429,5 +449,6 @@ def _as_optional_int(value: object) -> int | None:
 __all__ = [
     "ExamDefinitionIssue",
     "ExamDefinitionLoader",
+    "ExamDefinitionResourceError",
     "ExamDefinitionValidationError",
 ]
