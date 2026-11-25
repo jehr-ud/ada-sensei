@@ -32,3 +32,9 @@
 - [ ] Implement `DefaultModelProvisioner` (Ollama detection/install, model pull, outcome recording, one-command installer script `install.sh`).
 - [ ] Add provisioning unit tests (missing server, missing model, failure reported as limitation, no redundant work).
 - [ ] Add metadata test proving GitHub-only install (`pip install git+https://github.com/jehr-ud/ada-sensei.git`).
+
+## ADR-032 — SDK desde `local.properties`
+
+- [x] Usar `sdk.dir` literal de `local.properties` antes que variables de entorno.
+- [x] Eliminar la normalización destructiva de barras invertidas.
+- [x] Cubrir Windows escapado, WSL, Linux y fallback de entorno con pruebas.

@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ada_sensei.evaluation.preflight import ProjectPreflight
-from ada_sensei.tools.discovery import Tool
+from ada_sensei.tools.discovery import Tool, ToolDiscovery
 
 
 class FakeDiscovery:
@@ -114,3 +114,19 @@ def test_missing_toolchain_reports_reasons(tmp_path):
         for issue in readiness.issues
         if issue.code != "no_android_sdk"
     )
+
+
+def test_literal_sdk_dir_satisfies_preflight(tmp_path):
+    class LiteralSdkDiscovery(FakeDiscovery):
+        def find_sdk(self, env=None, project=None):
+            return ToolDiscovery.find_sdk(env=env, project=project)
+
+    project = _project(tmp_path)
+    value = r"C\:\\Users\\LENOVO\\AppData\\Local\\Android\\Sdk"
+    (project / "local.properties").write_text(
+        f"sdk.dir={value}\n", encoding="utf-8"
+    )
+
+    readiness = ProjectPreflight(discovery=LiteralSdkDiscovery()).check(project)
+
+    assert "no_android_sdk" not in [issue.code for issue in readiness.issues]

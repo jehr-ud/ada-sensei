@@ -151,3 +151,11 @@ The `ContextManager` SHALL:
 
 Cloud multi-user platform, authentication, mobile UI, model training, and full
 autonomous project modification remain out of scope (inherited from 000-project).
+
+## Adenda — Autoridad de `local.properties` (2026-11-25)
+
+`sdk.dir` en `local.properties` es la fuente autoritativa del Android SDK. Su
+valor se usa literalmente, sin normalización de barras invertidas ni conversión
+entre rutas de Windows, WSL y Linux. Las variables `ANDROID_HOME` y
+`ANDROID_SDK_ROOT` son solo un fallback cuando no existe un `sdk.dir` utilizable.
+La decisión completa está en `ADR-032-local-properties-sdk-authority.md`.

@@ -225,3 +225,10 @@ output policy and SHALL never mutate persisted learning state directly.
 ### RQ-FND-034 Learning persistence isolation
 Learning progress, mastery assessments, and exam attempts SHALL be stored as
 separate record types and SHALL not overwrite student project files.
+
+### RQ-FND-035 Android SDK configuration authority
+When a project contains a non-empty `sdk.dir` in `local.properties`, tool
+discovery SHALL use that literal value as the Android SDK path and SHALL NOT
+normalize, unescape, expand or translate it. Environment variables
+`ANDROID_HOME` and `ANDROID_SDK_ROOT` SHALL be used only when no usable `sdk.dir`
+is present. See ADR-032.

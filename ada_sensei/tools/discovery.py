@@ -103,14 +103,17 @@ class ToolDiscovery:
         env: dict[str, str] | None = None, project: str | Path | None = None
     ) -> Tool:
         env = env if env is not None else os.environ
-        candidate = env.get("ANDROID_HOME") or env.get("ANDROID_SDK_ROOT")
-        if not candidate and project:
+        if project:
             local_props = Path(project) / "local.properties"
             if local_props.is_file():
                 for line in local_props.read_text().splitlines():
                     if line.startswith("sdk.dir="):
-                        candidate = line.split("=", 1)[1].replace("\\", "").strip()
-                        break
+                        candidate = line.split("=", 1)[1].strip()
+                        if candidate:
+                            return Tool(
+                                name="android-sdk", command=candidate, available=True
+                            )
+        candidate = env.get("ANDROID_HOME") or env.get("ANDROID_SDK_ROOT")
         if candidate and Path(candidate).is_dir():
             return Tool(name="android-sdk", command=candidate, available=True)
         return Tool(

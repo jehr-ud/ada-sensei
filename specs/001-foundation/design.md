@@ -258,3 +258,15 @@ their business rules.
 Student learning state is stored separately from the active CLI session and exam
 records. Learning-stage records SHALL include catalog/version ids so a future
 JSON catalog update does not silently reinterpret historical results.
+
+## Android SDK discovery update (ADR-032)
+
+`ToolDiscovery.find_sdk()` reads `<project>/local.properties` first. The first
+non-empty `sdk.dir` value is returned verbatim as `Tool.command` and marked
+available. No `replace()`, `expanduser()`, `resolve()`, drive-letter conversion
+or SDK subdirectory check is applied to that value.
+
+If no `sdk.dir` is available, the previous fallback applies: `ANDROID_HOME`,
+then `ANDROID_SDK_ROOT`, each validated with `Path(candidate).is_dir()`. This
+keeps existing environment-based setups working without letting them override
+the project's own Gradle configuration.
