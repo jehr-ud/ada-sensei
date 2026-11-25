@@ -14,7 +14,7 @@ from .models import ToolId, ToolStatus
 
 PINNED_RESOLUTION_POLICY = "pinned-compatible-only"
 DEFAULT_POLICY_PATH = (
-    Path(__file__).resolve().parents[2]
+    Path(__file__).resolve().parents[1]
     / "specs"
     / "007-examine"
     / "toolchain-policy.json"
