@@ -12,7 +12,7 @@ from __future__ import annotations
 import contextlib
 from importlib import metadata
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 
 def get_app_version() -> str:
