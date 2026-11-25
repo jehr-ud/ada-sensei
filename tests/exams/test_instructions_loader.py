@@ -56,7 +56,7 @@ def test_rejects_exam_definition_as_instructions(tmp_path):
 
     message = str(exc.value)
     assert "Instructions resource error" in message
-    assert "exam definition JSON cannot be used as instructions" in message
+    assert "configure it with /instructions <path>" in message
     assert "Resource: instructions" in message
 
 

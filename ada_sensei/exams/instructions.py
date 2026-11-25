@@ -63,7 +63,7 @@ class InstructionsLoader:
                 ResourceKind.INSTRUCTIONS,
                 path,
                 "exam definition JSON cannot be used as instructions; "
-                "configure it with /exam-definition <path>",
+                "configure it with /instructions <path>",
             )
         if path.suffix.lower() != ".md":
             raise ResourcePathError(
@@ -99,7 +99,7 @@ class InstructionsLoader:
                 ResourceKind.INSTRUCTIONS,
                 path,
                 "exam definition JSON cannot be used as instructions; "
-                "configure it with /exam-definition <path>",
+                "configure it with /instructions <path>",
             )
         raise ResourcePathError(
             ResourceKind.INSTRUCTIONS,

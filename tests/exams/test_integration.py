@@ -105,14 +105,11 @@ class BuildFailRunner:
         )
 
 
-def test_start_uses_separate_instructions_and_definition(tmp_path):
+def test_start_uses_json_definition_without_markdown_instructions(tmp_path):
     project = make_project(tmp_path)
     definition = tmp_path / "exam.json"
     definition.write_text(STATEMENT_JSON, encoding="utf-8")
-    instructions = tmp_path / "instructions.md"
-    instructions.write_text("# Exam instructions\n\nBuild the app.", encoding="utf-8")
     services = make_context(tmp_path, project)
-    services.context.set_instructions(instructions)
     services.context.set_exam_definition(definition)
     action = ExamineAction(
         services, runner=OkRunner(), toolchain=ReadyToolchainManager()

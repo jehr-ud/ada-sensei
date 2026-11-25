@@ -70,8 +70,8 @@ class EvaluateCommand:
 class ExamineStartCommand:
     """Request to start an exam (``/exam-init``).
 
-    ``statement`` is the instructor statement: a path, a Markdown/structured
-    definition, or inline text. Identity is never read from it (RQ-EXM-001);
+    ``statement`` is the instructor statement: a JSON definition path or inline
+    JSON. Identity is never read from it (RQ-EXM-001);
     ``student_id``/``project_id`` only override the session values explicitly.
     ``yes`` carries the non-interactive start confirmation (RQ-EXM-003).
     """
@@ -113,14 +113,7 @@ class ProjectCommand:
 
 @dataclass
 class InstructionsCommand:
-    """Request to set / display the Markdown exam instructions."""
-
-    path: str | None = None
-
-
-@dataclass
-class ExamDefinitionCommand:
-    """Request to set / display the JSON exam definition."""
+    """Request to set / display the validated JSON exam definition."""
 
     path: str | None = None
 
@@ -200,16 +193,6 @@ class ProjectResult:
 
 @dataclass
 class InstructionsResult:
-    """Result of configuring the instructor's Markdown instructions."""
-
-    path: str | None
-
-    def present(self) -> str:
-        return f"Exam instructions: {self.path or 'not configured'}"
-
-
-@dataclass
-class ExamDefinitionResult:
     """Result of configuring the validated JSON exam definition."""
 
     path: str | None
@@ -301,7 +284,6 @@ CommandResult = (
     | ExamFinishResult
     | ProjectResult
     | InstructionsResult
-    | ExamDefinitionResult
     | AssistanceResult
     | HelpResult
     | ClearResult
@@ -324,7 +306,6 @@ Command = (
     | ExamineFinishCommand
     | ProjectCommand
     | InstructionsCommand
-    | ExamDefinitionCommand
     | HintCommand
     | MoreCommand
     | SolutionCommand

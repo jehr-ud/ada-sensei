@@ -279,3 +279,15 @@ When the input area is focused:
 5. Press Up when the caret is not on the first line of a multiline draft and history browsing is inactive: the caret moves normally.
 6. Edit a recalled prompt and press Enter: the edited prompt is submitted through the currently selected action or shared slash-command parser, as applicable.
 7. History navigation does not change the selected action, learning stage, scores, evidence, or exam state.
+
+## Addendum — slash command precedence and safe session files (RQ-TUI-041, RQ-CLI-022)
+
+Slash-prefixed input always belongs to the shared command parser. The TUI SHALL
+route it before welcome-name, pending-exam, and onboarding free-text handlers.
+A slash command SHALL never be accepted as a student name, exam answer, or
+onboarding answer.
+
+Session persistence SHALL derive a filename from the student identifier without
+allowing that identifier to escape the sessions directory. This is a storage
+concern only; the identifier itself remains the explicit name received from the
+student.

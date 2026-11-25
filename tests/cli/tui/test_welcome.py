@@ -7,6 +7,7 @@ profiles are greeted with "Welcome back".
 
 from __future__ import annotations
 
+from ada_sensei.cli.commands import QuitCommand
 from ada_sensei.cli.router import Router
 from ada_sensei.cli.tui.app import AdaSenseiTUI
 from ada_sensei.config import Config
@@ -82,6 +83,19 @@ def test_identity_not_inferred_from_greeting(tmp_path):
     assert app.ui_state.awaiting_name is True
     assert app.router.context.student_id is None
     assert any("didn't catch" in text for text in captured)
+
+
+def test_slash_exit_during_welcome_is_not_a_name(tmp_path):
+    app = Fixtures.make_app(tmp_path)
+    app.ui_state.awaiting_name = True
+    handled = []
+    app._handle_command = lambda command: handled.append(command)
+
+    app._process_line("/exit")
+
+    assert handled and isinstance(handled[-1], QuitCommand)
+    assert app.router.context.student_id is None
+    assert app.ui_state.awaiting_name is True
 
 
 def test_mount_asks_when_nothing_remembered(tmp_path):

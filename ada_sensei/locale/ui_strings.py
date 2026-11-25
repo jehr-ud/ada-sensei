@@ -130,7 +130,7 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
         ),
         "preflight_instructions_not_markdown": (
             "The instructions file must be Markdown (.md). The JSON definition "
-            "is configured with /exam-definition <path>."
+            "is configured with /instructions <path>."
         ),
         "preflight_instructions_missing": (
             "The exam instructions file was not found. Check the path set with "
@@ -149,15 +149,15 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
         ),
         "preflight_instructions_wrong_resource": (
             "An exam definition JSON cannot be used as instructions. Configure "
-            "it with /exam-definition <path>."
+            "it with /instructions <path>."
         ),
         "preflight_no_exam_definition": (
             "No exam definition JSON is configured. Set one with "
-            "/exam-definition <path>."
+            "/instructions <path>."
         ),
         "preflight_exam_definition_missing": (
             "The exam definition JSON was not found. Check the path set with "
-            "/exam-definition <path>."
+            "/instructions <path>."
         ),
         "preflight_exam_definition_unreadable": (
             "The exam definition JSON could not be read. Check its permissions "
@@ -348,7 +348,7 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
         ),
         "preflight_instructions_not_markdown": (
             "El archivo de instrucciones debe ser Markdown (.md). La definición "
-            "JSON se configura con /exam-definition <ruta>."
+            "JSON se configura con /instructions <ruta>."
         ),
         "preflight_instructions_missing": (
             "No se encontró el archivo de instrucciones del examen. Revisa la "
@@ -367,15 +367,15 @@ _UI_STRINGS: dict[str, dict[str, str]] = {
         ),
         "preflight_instructions_wrong_resource": (
             "Un JSON de definición de examen no puede usarse como instrucciones. "
-            "Configúralo con /exam-definition <ruta>."
+            "Configúralo con /instructions <ruta>."
         ),
         "preflight_no_exam_definition": (
             "No hay una definición JSON de examen configurada. Configúrala con "
-            "/exam-definition <ruta>."
+            "/instructions <ruta>."
         ),
         "preflight_exam_definition_missing": (
             "No se encontró la definición JSON del examen. Revisa la ruta "
-            "configurada con /exam-definition <ruta>."
+            "configurada con /instructions <ruta>."
         ),
         "preflight_exam_definition_unreadable": (
             "No se pudo leer la definición JSON del examen. Revisa sus permisos "

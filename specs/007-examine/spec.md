@@ -1246,3 +1246,22 @@ Toda ruta de usuario se resuelve mediante un único componente basado en
 
 Los mensajes de error identifican el recurso, la ruta resuelta y la causa
 concreta. El TUI muestra ambos recursos en el panel de preparación.
+
+---
+
+# Adenda normativa — Comando único `/instructions` (2026-11-25)
+
+Esta adenda prevalece sobre la adenda ADR-030 anterior y sobre cualquier texto
+que presente `/exam-definition` como comando disponible. La decisión completa
+está en `ADR-031-instructions-json-command.md`.
+
+`/instructions <ruta>` configura o muestra la definición JSON del examen. La
+ruta debe resolverse con `ResourceResolver`, existir, ser legible y validarse
+con `exam-definition.schema.json`. `/exam-definition` no existe en el parser, el
+router, la ayuda ni el TUI.
+
+El campo interno `exam_definition_path` sigue siendo la fuente autoritativa. El
+campo heredado `instructions_path` no se usa como Markdown ni se valida por
+separado; el panel de preparación muestra una sola ruta de definición. Se
+conservan sin cambios la resolución multiplataforma, la persistencia de
+referencias, la migración de sesiones heredadas y el formato de errores.

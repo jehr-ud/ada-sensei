@@ -106,6 +106,14 @@ display a notice to the user (RQ-FND-028).
 description of each, and a concrete usage example. `ada-sensei <action> --help`
 SHALL list the action-specific options.
 
+## RQ-CLI-022 Safe session key derivation
+
+`SessionContext` SHALL confine session files to the configured sessions
+directory. A raw student identifier SHALL NOT be used directly as a path
+segment: absolute, parent-traversal, separator-containing, or otherwise unsafe
+identifiers SHALL be mapped to a deterministic safe filename. Existing safe
+names SHALL keep their current filenames.
+
 ---
 
 ## Interactive TUI Requirements
@@ -584,3 +592,10 @@ while leaving the input editable. Confirm SHALL run the pending command and
 Cancel SHALL abort it without executing the action. The controls SHALL be
 hidden when no confirmation is pending and SHALL NOT imply that an action ran
 when the user has not confirmed.
+
+## RQ-TUI-041 Slash command precedence
+
+A slash-prefixed input SHALL be parsed and dispatched as a typed command even
+while a welcome-name, pending-exam, or onboarding free-text flow is active.
+Such input SHALL NOT be consumed as a free-text answer and SHALL NOT establish
+student identity.

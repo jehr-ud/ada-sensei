@@ -469,22 +469,21 @@ class ExamPreparationList(Static):
             return text
         title = "Preparar examen" if es else "Prepare exam"
         intro = (
-            "Usa /project, /instructions <.md> y /exam-definition <.json>."
+            "Usa /project y /instructions <ruta.json>."
             if es
-            else "Use /project, /instructions <.md> and /exam-definition <.json>."
+            else "Use /project and /instructions <path.json>."
         )
         missing = "Faltan requisitos" if es else "Requirements missing"
         ready = "Listo para comenzar" if es else "Ready to start"
         project = self.status.project_path or (
             "No configurado" if es else "Not configured"
         )
-        instructions = self.status.instructions_path or (
-            "No configuradas" if es else "Not configured"
+        definition = (
+            getattr(self.status, "exam_definition_path", None)
+            or self.status.instructions_path
+            or ("No configurada" if es else "Not configured")
         )
-        definition = getattr(self.status, "exam_definition_path", None) or (
-            "No configurada" if es else "Not configured"
-        )
-        resources = f"{instructions} | {definition}"
+        resources = definition
         state = ready if self.ready else missing
         toolchain_ready = getattr(self.status, "toolchain_ready", False)
         toolchain = (

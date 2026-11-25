@@ -20,7 +20,6 @@ from ..resources.paths import (
 from ..toolchain.manager import ToolchainManager
 from ..toolchain.models import ToolchainPreparationResult
 from .definition import ExamDefinitionLoader, ExamDefinitionValidationError
-from .instructions import InstructionsLoader
 from .models import ExamDefinition
 from .store import ExamStore
 
@@ -81,7 +80,6 @@ class ExamPreparationService:
     def validate(
         self,
         *,
-        require_instructions: bool = True,
         require_exam_definition: bool = True,
         definition_source: str | None = None,
         locale: str | None = None,
@@ -108,12 +106,8 @@ class ExamPreparationService:
             toolchain_preparation is not None and toolchain_preparation.ready
         )
 
-        instructions_path = context.instructions_path
-        instruction_blockers = self._instructions(
-            instructions_path if require_instructions else None,
-            required=require_instructions,
-        )
         exam_definition_path = context.exam_definition_path
+        instructions_path = exam_definition_path or context.instructions_path
         definition, exam_definition_blockers = self._definition(
             exam_definition_path or definition_source
             if require_exam_definition
@@ -131,7 +125,7 @@ class ExamPreparationService:
                     active = candidate
                     break
         student_ready = bool(context.student_id)
-        instructions_ready = not instruction_blockers or not require_instructions
+        instructions_ready = True
         exam_definition_ready = (
             definition is not None and not exam_definition_blockers
         ) or not require_exam_definition
@@ -142,7 +136,7 @@ class ExamPreparationService:
             project_blockers=project_blockers,
             instructions_path=instructions_path,
             instructions_ready=instructions_ready,
-            instruction_blockers=instruction_blockers,
+            instruction_blockers=(),
             active_exam=active is not None,
             ready_to_start=(
                 student_ready
@@ -169,17 +163,6 @@ class ExamPreparationService:
         path = getattr(self.services.config.project, "path", None)
         return None if path in (None, "", ".") else str(path)
 
-    def _instructions(
-        self, configured: str | None, *, required: bool = True
-    ) -> tuple[str, ...]:
-        if not configured:
-            return ("no_instructions",) if required else ()
-        try:
-            InstructionsLoader(self._base_dir).load(configured)
-        except ResourcePathError as exc:
-            return (self._instructions_blocker(exc),)
-        return ()
-
     def _definition(
         self, configured: str | None, *, required: bool = True
     ) -> tuple[ExamDefinition | None, tuple[str, ...]]:
@@ -203,21 +186,6 @@ class ExamPreparationService:
             if "instructions" in reason:
                 return None, ("exam_definition_wrong_resource",)
             return None, ("exam_definition_invalid",)
-
-    @staticmethod
-    def _instructions_blocker(error: ResourcePathError) -> str:
-        reason = error.reason.lower()
-        if "does not exist" in reason:
-            return "instructions_missing"
-        if "permission" in reason or "read" in reason or "utf-8" in reason:
-            return "instructions_unreadable"
-        if "empty" in reason:
-            return "instructions_empty"
-        if "mark" in reason:
-            return "instructions_not_markdown"
-        if "exam definition json" in reason:
-            return "instructions_wrong_resource"
-        return "instructions_invalid"
 
     @staticmethod
     def _definition_blocker(error: ResourcePathError) -> str:

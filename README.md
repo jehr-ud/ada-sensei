@@ -12,8 +12,7 @@ rather than a code generator.
 - `/examples` — teachable Android examples tailored to the current stage.
 - `/evaluate` — evidence-based project evaluation (build, unit tests, Android Lint, Detekt).
 - `/project <path>` — configure the Android project workspace.
-- `/instructions <path.md>` — configure teacher-authored Markdown instructions.
-- `/exam-definition <path.json>` — configure the validated JSON exam definition.
+- `/instructions <path.json>` — configure the validated JSON exam definition.
 - `/exam-init [path.json]` / `/exam-finish` — exam workflow with timed attempts and detailed reports.
 - `/learn` — review stage concepts and learning objectives.
 - `/diagnose` — run a diagnostic to identify strengths and gaps.

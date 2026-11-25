@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -19,6 +20,7 @@ from .urns import URN
 
 MAX_TURNS = 60
 SESSION_ID_ANON = "anonymous"
+_UNSAFE_SESSION_CHARS = frozenset('/\\:*?"<>|\x00')
 
 
 class SessionState(BaseModel):
@@ -63,10 +65,11 @@ class SessionContext:
         self.state = SessionState()
         self.migrated_resources: tuple[str, ...] = ()
         if config is not None:
-            if config.exam.instructions_path:
-                self.set_instructions(config.exam.instructions_path)
-            if config.exam.exam_definition_path:
-                self.set_exam_definition(config.exam.exam_definition_path)
+            configured = (
+                config.exam.exam_definition_path or config.exam.instructions_path
+            )
+            if configured:
+                self.set_exam_definition(configured)
 
     @property
     def student_id(self) -> str | None:
@@ -142,9 +145,21 @@ class SessionContext:
 
     @property
     def session_key(self) -> str:
-        if self.state.student_id:
-            return self.state.student_id.rsplit("://", 1)[-1]
-        return SESSION_ID_ANON
+        if not self.state.student_id:
+            return SESSION_ID_ANON
+        uid = self.state.student_id.rsplit("://", 1)[-1]
+        safe = (
+            bool(uid)
+            and uid not in {".", ".."}
+            and not any(char in uid for char in _UNSAFE_SESSION_CHARS)
+            and not uid.endswith((".", " "))
+        )
+        if safe:
+            return uid
+        digest = hashlib.sha256(
+            self.state.student_id.encode("utf-8")
+        ).hexdigest()[:16]
+        return f"student-{digest}"
 
     def set_student(self, student_id: str | None) -> None:
         self.state.student_id = student_id
@@ -162,13 +177,6 @@ class SessionContext:
         resolved = str(Path(path).expanduser().resolve())
         self.state.project_path = resolved
         self.state.project_id = URN.project_id_from_path(resolved)
-
-    def set_instructions(self, path: str | Path | None) -> None:
-        self.state.instructions_path = (
-            self._resolver.reference_for(path, ResourceKind.INSTRUCTIONS)
-            if path is not None
-            else None
-        )
 
     def set_exam_definition(self, path: str | Path | None) -> None:
         self.state.exam_definition_path = (

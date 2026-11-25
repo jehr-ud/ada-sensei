@@ -1,8 +1,9 @@
 # ADR-030 — Resolución independiente de recursos de examen
 
 ## Estado
-Aceptado (2026-11-25). Prevalece sobre ADR-026 y sobre cualquier texto base que
-identifique `/instructions` con la definición JSON del examen.
+Parcialmente superado por ADR-031 (2026-11-25). Se conservan la resolución
+centralizada, la persistencia de referencias y los mensajes de error. La decisión
+de interfaz que separaba `/instructions` de `/exam-definition` queda reemplazada.
 
 ## Contexto
 

@@ -1128,3 +1128,24 @@ Prevalece sobre RQ-EXM-035 y sobre cualquier sección anterior que use
   distribución y se localizan con `importlib.resources` cuando corresponda.
 - **RQ-EXM-093 — Errores:** todo error incluye el recurso, la ruta resuelta y
   la razón concreta. El panel de preparación muestra y valida ambos recursos.
+
+---
+
+# Adenda normativa — Comando único `/instructions` (2026-11-25)
+
+Prevalece sobre RQ-EXM-086 a RQ-EXM-093 en todo lo relativo a la interfaz de
+configuración. La base de esta decisión es ADR-031.
+
+- **RQ-EXM-094 — Comando único:** `/instructions <ruta>` SHALL ser el único
+  comando visible para configurar o mostrar la definición JSON del examen.
+  SHALL validar existencia, tipo regular, legibilidad, esquema y semántica.
+- **RQ-EXM-095 — Retiro de `/exam-definition`:** `/exam-definition` SHALL NO
+  existir en el parser, router, ayuda, registro de acciones ni TUI.
+- **RQ-EXM-096 — Fuente interna:** `exam_definition_path` SHALL seguir siendo
+  la fuente autoritativa. `instructions_path` SHALL tratarse solo como campo
+  heredado de sesión y SHALL NO validarse como Markdown.
+- **RQ-EXM-097 — Preparación:** el preflight SHALL requerir una definición JSON
+  válida configurada con `/instructions`; SHALL NO requerir instrucciones
+  Markdown independientes.
+- **RQ-EXM-098 — Conservación:** RQ-EXM-089 a RQ-EXM-093 SHALL conservarse en
+  resolución, persistencia, migración, empaquetado y errores.

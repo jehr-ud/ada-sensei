@@ -1046,3 +1046,26 @@ sesión heredada.
 absolutas/relativas/`~`/espacios/Unicode, confusión de recursos, archivos
 inexistentes, directorios, permisos, otra plataforma, migración y recursos
 empaquetados.
+
+---
+
+# Diseño normativo — Comando único `/instructions` (2026-11-25)
+
+Esta sección prevalece sobre el diseño ADR-030 anterior. Implementa ADR-031 y
+RQ-EXM-094–098.
+
+```
+/instructions <ruta.json> -> ResourceResolver -> ExamDefinitionLoader
+                         -> SessionContext.exam_definition_path
+                         -> ExamPreparationService -> ExamineAction
+```
+
+`CommandRouter._instructions` reutiliza el mismo helper de validación que
+`exam-init <ruta.json>` y devuelve `InstructionsResult`. El nombre visible del
+comando permanece `/instructions` por compatibilidad; el recurso validado es la
+definición JSON.
+
+`ExamPreparationService` no carga Markdown. `instructions_path` se usa solo para
+mostrar la ruta heredada y el panel presenta una única línea de definición.
+`ResourceResolver`, `ResourceReference`, `importlib.resources` y el formato de
+errores se conservan.

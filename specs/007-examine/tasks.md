@@ -291,3 +291,14 @@ Evidencia: `tests/toolchain/test_manager.py`, `tests/toolchain/test_models.py`, 
   con pruebas de rutas absolutas foráneas y `pathlib`. No se ejecutó Linux ni
   Windows reales: el daemon de Docker no está disponible en este entorno y no
   hay host Windows. El resolver no usa separadores ni rutas absolutas de un SO.
+
+## 11. Comando único `/instructions` (ADR-031)
+
+- [x] Añadir ADR-031 y adendas normativas en spec/requirements/design.
+- [x] Hacer que `/instructions <path.json>` valide y configure la definición.
+- [x] Eliminar `/exam-definition` de parser, router, ayuda y TUI.
+- [x] Quitar la validación de instrucciones Markdown del preflight.
+- [x] Actualizar pruebas y resultado de verificación.
+- Evidencia: pytest completo 743 passed; Ruff sin hallazgos nuevos (69
+  preexistentes); wheel construido e instalado con recursos y superficie de
+  comandos verificados.

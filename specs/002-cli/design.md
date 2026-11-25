@@ -611,3 +611,16 @@ Add only user-submitted, non-whitespace input. Do not record assistant responses
 ### Tests
 
 Cover empty history, first Up, repeated Up, Down, restoration of the draft, normal cursor movement within multiline text, edit-before-submit, Enter and Shift+Enter, blank input, max-history bound, and no changes to action selection or domain state.
+
+## Addendum — command precedence and session key safety
+
+`AdaSenseiTUI._process_line` SHALL handle blank input first, then slash-prefixed
+input, then pending free-text flows. Slash input goes through
+`CommandParser.parse_line`/`_command_from_line` and the shared router, so
+`/exit` cannot be rebound as an identity and `/help` remains available during a
+pending flow.
+
+`SessionContext.session_key` SHALL return the existing URN tail only when it is
+a safe single path component. Otherwise it SHALL return a deterministic encoded
+form (for example, a prefixed hash) so `persist()` and `_load_state()` always
+read/write inside `_session_dir`. The student identifier itself is unchanged.

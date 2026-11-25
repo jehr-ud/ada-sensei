@@ -137,13 +137,13 @@ _ACTIONS: list[ActionDefinition] = [
         requires_text=True,
         help_es=(
             "Uso: /exam-init <ruta.json>. Configura una definición JSON válida "
-            "según exam-definition.schema.json. Las instrucciones Markdown se "
-            "configuran con /instructions <ruta.md>. Requiere confirmación."
+            "según exam-definition.schema.json, igual que /instructions <ruta.json>. "
+            "Requiere confirmación."
         ),
         help_en=(
             "Usage: /exam-init <path.json>. Configures a JSON definition valid "
-            "against exam-definition.schema.json. Markdown instructions are set "
-            "with /instructions <path.md>. Requires confirmation."
+            "against exam-definition.schema.json, the same as /instructions "
+            "<path.json>. Requires confirmation."
         ),
         outcome_es="El examen comenzará tras tu confirmación; sigue las instrucciones.",
         outcome_en="The exam starts after your confirmation; follow the instructions.",

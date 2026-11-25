@@ -330,3 +330,20 @@ Evidence: `InputHistory` helper (`ada_sensei/cli/tui/history.py`, `MAX_HISTORY_E
 - [x] Recalled input is editable and only executes on Enter.
 - [x] No learning/exam domain state is mutated by navigation.
 - [x] Automated tests pass and evidence is recorded.
+
+## Addendum — slash command precedence and safe session files
+
+- [x] Parse and dispatch slash commands before welcome-name, pending-exam, and
+      onboarding free-text handlers.
+- [x] Ensure `/exit` and `/quit` never become a student identifier.
+- [x] Confine `SessionContext` session files to the sessions directory for
+      absolute, traversal, and separator-containing identifiers.
+- [x] Add regression tests for TUI precedence and safe session filenames.
+- [x] Run relevant TUI/context tests, full suite, and Ruff.
+
+Evidence: `tests/cli/tui/test_welcome.py` and
+`tests/context/test_resource_persistence.py` cover the reported `/exit` case,
+traversal identifiers, and preservation of safe legacy names. Full suite:
+`743 passed`. Ruff: no introduced findings; 69 pre-existing findings remain.
+Root cause: `/exit` was consumed as the welcome name, and its raw value became
+a session filename with a leading separator.

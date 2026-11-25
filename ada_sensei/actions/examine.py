@@ -298,8 +298,8 @@ class ExamineAction:
         status = ExamPreparationService(
             self.services, toolchain=self.toolchain, progress=self._progress_callback
         ).validate(
-            require_instructions=bool(self.services.context.instructions_path),
-            require_exam_definition=bool(configured_definition or definition_source),
+            require_exam_definition=bool(configured_definition or definition_source)
+            or not statement_text,
             definition_source=definition_source,
             locale=locale,
         )

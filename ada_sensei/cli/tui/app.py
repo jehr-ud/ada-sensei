@@ -83,8 +83,7 @@ HELP_TEXT = (
     "  /exam-init <statement>      open the compact exam preparation panel\n"
     "  /exam-finish               finish the active exam (compact confirmation)\n"
     "  /project <path>             configure the Android project for an exam\n"
-    "  /instructions <path.md>     configure the teacher's Markdown instructions\n"
-    "  /exam-definition <path.json> configure the validated exam definition\n"
+    "  /instructions <path.json>   configure the validated exam definition\n"
     "  /learn [topic]              explain current-stage concepts\n"
     "  /diagnose [stage]           run a brief diagnostic\n"
     "  /language <locale>          change language (es-CO | en-US)\n"
@@ -97,7 +96,7 @@ HELP_TEXT = (
     "  /ask why does LazyColumn not update?\n"
     "  /examples ViewModel\n"
     "  /evaluate --yes\n"
-    "  /exam-definition docs/exam.json\n"
+    "  /instructions docs/exam.json\n"
     "  /exam-init docs/exam.json\n"
     "  /exam-finish\n"
     "  /hint\n"
@@ -932,18 +931,27 @@ class AdaSenseiTUI(App):
                 if _key is not None:
                     self._emit(_ui(_key, self._current_locale()))
                 return
+        if line.startswith("/"):
+            if line.startswith("/name"):
+                self._handle_name_command(line)
+                self._maybe_start_onboarding()
+                return
+            try:
+                command = self._command_from_line(line)
+            except Exception as exc:
+                self._emit("Error: " + self.formatter.error(str(exc)))
+                return
+            self._render_user_message(line, command)
+            self._handle_command(command)
+            return
         if self.ui_state.awaiting_name:
             self._resolve_pending_name(line)
             return
         if self._pending_exam is not None:
             self._resolve_pending_exam(self._pending_exam, line)
             return
-        if self._pending_onboarding and not line.startswith("/"):
+        if self._pending_onboarding:
             self._resolve_pending_onboarding(line)
-            return
-        if line.startswith("/name"):
-            self._handle_name_command(line)
-            self._maybe_start_onboarding()
             return
         try:
             command = self._command_from_line(line)

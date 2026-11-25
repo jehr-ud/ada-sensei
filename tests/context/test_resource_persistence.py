@@ -75,3 +75,39 @@ def test_reference_type_is_preserved(tmp_path):
     context = SessionContext(data_dir=tmp_path)
     context.state.instructions_path = reference
     assert "default.en.md" in (context.instructions_path or "")
+
+
+def test_unsafe_student_identifier_stays_inside_sessions_dir(tmp_path):
+    context = SessionContext(data_dir=tmp_path / "data")
+    context.set_student("/exit")
+    context.persist()
+
+    sessions = tmp_path / "data" / "sessions"
+    files = list(sessions.glob("*.json"))
+
+    assert context.session_key.startswith("student-")
+    assert len(files) == 1
+    assert files[0].parent == sessions
+    assert not (tmp_path / "exit.json").exists()
+
+
+def test_traversal_identifier_stays_inside_sessions_dir(tmp_path):
+    context = SessionContext(data_dir=tmp_path / "data")
+    context.set_student("../../outside")
+    context.persist()
+
+    sessions = tmp_path / "data" / "sessions"
+    files = list(sessions.glob("*.json"))
+
+    assert len(files) == 1
+    assert files[0].parent == sessions
+    assert not (tmp_path / "outside.json").exists()
+
+
+def test_safe_name_keeps_legacy_filename(tmp_path):
+    context = SessionContext(data_dir=tmp_path / "data")
+    context.set_student("Ana María")
+    context.persist()
+
+    assert context.session_key == "Ana María"
+    assert (tmp_path / "data" / "sessions" / "Ana María.json").is_file()

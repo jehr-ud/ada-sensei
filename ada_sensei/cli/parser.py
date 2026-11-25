@@ -16,7 +16,6 @@ from .commands import (
     Command,
     DiagnoseCommand,
     EvaluateCommand,
-    ExamDefinitionCommand,
     ExamineFinishCommand,
     ExamineStartCommand,
     ExamplesCommand,
@@ -197,8 +196,6 @@ class CommandParser:
                 return ProjectCommand(path=rest[1] if len(rest) > 1 else None)
             if token == "/instructions":
                 return InstructionsCommand(path=rest[1] if len(rest) > 1 else None)
-            if token == "/exam-definition":
-                return ExamDefinitionCommand(path=rest[1] if len(rest) > 1 else None)
             if token in ("/hint", "/more", "/solution"):
                 return cls._slash_assist(token)
             if token == "/clear":
@@ -246,8 +243,6 @@ class CommandParser:
             return ProjectCommand(path=rest[1] if len(rest) > 1 else None)
         if token == "instructions":
             return InstructionsCommand(path=rest[1] if len(rest) > 1 else None)
-        if token == "exam-definition":
-            return ExamDefinitionCommand(path=rest[1] if len(rest) > 1 else None)
         if token in ("hint", "more", "solution"):
             return cls._slash_assist("/" + token)
         if token in ("clear",):
@@ -287,7 +282,6 @@ class CommandParser:
             "help",
             "project",
             "instructions",
-            "exam-definition",
             "hint",
             "more",
             "solution",
@@ -328,10 +322,8 @@ class CommandParser:
                 "  /exit, /quit              leave the session",
                 "  /project [<path>]         set / show the active project",
                 "    e.g. /project ~/my-project",
-                "  /instructions [<path.md>] set / show Markdown instructions",
-                "    e.g. /instructions docs/instructions.md",
-                "  /exam-definition [<path>] set / show the JSON exam definition",
-                "    e.g. /exam-definition docs/exam.json",
+                "  /instructions [<path.json>] set / show the JSON exam definition",
+                "    e.g. /instructions docs/exam.json",
                 "  /practice [options]       start a practice session",
                 "    e.g. /practice --topic state --difficulty intermediate",
                 "  /ask <question>           ask a question",

@@ -14,7 +14,7 @@ DEFAULT_TEMPLATE = """\
 path = "."
 
 [exam]
-# instructions_path = "instructions/exam.md"
+# instructions_path = "exams/exam.json"
 # exam_definition_path = "exams/exam.json"
 
 [llm]

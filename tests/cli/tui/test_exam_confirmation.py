@@ -98,9 +98,11 @@ def _status(*, ready: bool = False, instructions_path: str = "") -> SimpleNamesp
         instructions_path=instructions_path or "/tmp/exam.json",
         exam_definition_path=instructions_path or "/tmp/exam.json",
         instructions_ready=ready,
-        instruction_blockers=() if ready else ("no_instructions",),
+        instruction_blockers=(),
+        exam_definition_ready=ready,
+        exam_definition_blockers=() if ready else ("no_exam_definition",),
         active_exam=False,
-        blockers=() if ready else ("no_project", "no_instructions"),
+        blockers=() if ready else ("no_project", "no_exam_definition"),
         toolchain_ready=ready,
         toolchain_blockers=(),
     )
@@ -128,7 +130,7 @@ def test_preparation_service_reports_localized_stage_progress(tmp_path, monkeypa
         app.router.services(), toolchain=FakeToolchain(), progress=messages.append
     )
 
-    service.validate(require_instructions=False, locale="es-CO")
+    service.validate(locale="es-CO")
 
     assert messages[0] == "Validando requisitos del examen…"
     assert "Preparando herramientas de análisis estático" in messages[1]
