@@ -30,4 +30,5 @@ def test_project_command_updates_config_and_session(tmp_path):
 
     assert result.path == str(project.resolve())
     assert router.config.project.path == str(project.resolve())
+    assert router.context.project_path == str(project.resolve())
     assert router.context.project_id == result.project_id

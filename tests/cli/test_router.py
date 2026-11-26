@@ -11,6 +11,7 @@ from ada_sensei.cli.commands import (
 from ada_sensei.cli.errors import CLIError
 from ada_sensei.cli.router import Router
 from ada_sensei.config import Config
+from ada_sensei.evaluation.preflight import ProjectReadiness
 from ada_sensei.llm.base import LLMClient
 
 
@@ -76,6 +77,31 @@ def test_unsupported_provider_rejected(tmp_path):
     config.llm.provider = "other"
     with pytest.raises(CLIError):
         Router(config=config)
+
+
+def test_project_readiness_uses_active_context_project(tmp_path, monkeypatch):
+    captured = {}
+    active = tmp_path / "active"
+    active.mkdir()
+    router = Fixtures.make_router(tmp_path)
+    router.context.set_project(active)
+
+    class RecordingPreflight:
+        def __init__(self, env=None):
+            captured["env"] = env
+
+        def check(self, project_path):
+            captured["project_path"] = project_path
+            return ProjectReadiness(project_path=str(project_path))
+
+    monkeypatch.setattr(
+        "ada_sensei.evaluation.preflight.ProjectPreflight", RecordingPreflight
+    )
+
+    readiness = router.check_project_readiness()
+
+    assert captured["project_path"] == str(active.resolve())
+    assert readiness.project_path == str(active.resolve())
 
 
 def test_evaluate_exercise_flag(tmp_path, monkeypatch):

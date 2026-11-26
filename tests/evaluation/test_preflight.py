@@ -8,8 +8,12 @@ write to the project.
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
-from ada_sensei.evaluation.preflight import ProjectPreflight
+from ada_sensei.evaluation.preflight import (
+    ProjectPreflight,
+    resolve_active_project_path,
+)
 from ada_sensei.tools.discovery import Tool, ToolDiscovery
 
 
@@ -33,7 +37,7 @@ class FakeDiscovery:
             message="gradle wrapper or gradle not found",
         )
 
-    def find_jdk(self, env=None):
+    def find_jdk(self, env=None, project=None):
         if self.jdk:
             return Tool(name="jdk", command="java", version="17", available=True)
         return Tool(
@@ -130,3 +134,26 @@ def test_literal_sdk_dir_satisfies_preflight(tmp_path):
     readiness = ProjectPreflight(discovery=LiteralSdkDiscovery()).check(project)
 
     assert "no_android_sdk" not in [issue.code for issue in readiness.issues]
+
+
+def test_active_project_path_prefers_context_over_config(tmp_path):
+    context = SimpleNamespace(project_path=str(tmp_path / "active"))
+    config = SimpleNamespace(project=SimpleNamespace(path=str(tmp_path / "config")))
+
+    assert resolve_active_project_path(context, config) == str(tmp_path / "active")
+
+
+def test_active_project_path_falls_back_to_config(tmp_path):
+    context = SimpleNamespace(project_path=None)
+    config = SimpleNamespace(project=SimpleNamespace(path=str(tmp_path / "configured")))
+
+    assert resolve_active_project_path(context, config) == str(
+        tmp_path / "configured"
+    )
+
+
+def test_active_project_path_ignores_unset_markers():
+    context = SimpleNamespace(project_path=".")
+    config = SimpleNamespace(project=SimpleNamespace(path=""))
+
+    assert resolve_active_project_path(context, config) is None

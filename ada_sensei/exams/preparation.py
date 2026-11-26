@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from ..evaluation.preflight import ProjectPreflight
+from ..evaluation.preflight import ProjectPreflight, resolve_active_project_path
 from ..locale.ui_strings import get_ui_string
 from ..resources.paths import (
     ResourceKind,
@@ -86,7 +86,7 @@ class ExamPreparationService:
     ) -> ExamPreparationStatus:
         self._emit("exam_start_progress_validating", locale)
         context = self.services.context
-        project_path = context.project_path or self._configured_project_path()
+        project_path = resolve_active_project_path(context, self.services.config)
         readiness = ProjectPreflight(env=self._env).check(project_path)
         project_blockers = tuple(issue.code for issue in readiness.issues)
         project_ready = readiness.ready
@@ -158,10 +158,6 @@ class ExamPreparationService:
     def _emit(self, key: str, locale: str | None) -> None:
         if self._progress is not None:
             self._progress(get_ui_string(key, locale))
-
-    def _configured_project_path(self) -> str | None:
-        path = getattr(self.services.config.project, "path", None)
-        return None if path in (None, "", ".") else str(path)
 
     def _definition(
         self, configured: str | None, *, required: bool = True

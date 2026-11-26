@@ -361,9 +361,10 @@ class CommandRouter:
         attempt is created, so a missing Gradle/Android setup is reported as a
         blocking reason instead of a degraded evaluation later.
         """
-        from ..evaluation.preflight import ProjectPreflight
+        from ..evaluation.preflight import ProjectPreflight, resolve_active_project_path
 
-        return ProjectPreflight(env=self.env).check(self.config.project.path)
+        project_path = resolve_active_project_path(self.context, self.config)
+        return ProjectPreflight(env=self.env).check(project_path)
 
     def exam_status(self) -> ExamStatus | None:
         """Authoritative exam status for the TUI, or ``None`` when idle.

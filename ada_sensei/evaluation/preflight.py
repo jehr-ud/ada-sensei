@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from ..tools.discovery import ToolDiscovery
 
@@ -39,6 +40,23 @@ class ProjectReadiness:
     @property
     def ready(self) -> bool:
         return not self.issues
+
+
+def resolve_active_project_path(context: Any, config: Any) -> str | None:
+    """Resolve the single project path used by every exam preflight.
+
+    Precedence is ``SessionContext.project_path`` followed by the configured
+    project path; ``None``, ``""`` and ``"."`` mean no active project. A context
+    path is preserved even when stale so preflight reports that exact path
+    instead of silently validating a different configured directory.
+    """
+    context_path = getattr(context, "project_path", None)
+    if context_path not in (None, "", "."):
+        return str(Path(str(context_path)).expanduser())
+    configured = getattr(getattr(config, "project", None), "path", None)
+    if configured in (None, "", "."):
+        return None
+    return str(Path(str(configured)).expanduser())
 
 
 class ProjectPreflight:
@@ -79,7 +97,7 @@ class ProjectPreflight:
         if not self._has_build_file(resolved):
             issues.append(ProjectIssue("no_build_file"))
 
-        jdk = self._discovery.find_jdk(env=self._env)
+        jdk = self._discovery.find_jdk(env=self._env, project=resolved)
         if not jdk.available:
             issues.append(ProjectIssue("no_jdk", jdk.message))
 
@@ -109,4 +127,9 @@ class ProjectPreflight:
         return any(path.name in _BUILD_FILES for path in cls._files(root))
 
 
-__all__ = ["ProjectIssue", "ProjectPreflight", "ProjectReadiness"]
+__all__ = [
+    "ProjectIssue",
+    "ProjectPreflight",
+    "ProjectReadiness",
+    "resolve_active_project_path",
+]

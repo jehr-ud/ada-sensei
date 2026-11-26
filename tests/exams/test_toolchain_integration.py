@@ -6,6 +6,7 @@ import pytest
 from ada_sensei.actions.examine import ExamineAction, ExamStartInput
 from ada_sensei.evaluation import EvaluatorAgent, OverallStatus
 from ada_sensei.exams.models import ExamResult, ExamStateError, ExamStatus
+from ada_sensei.exams.preparation import ExamPreparationService
 from ada_sensei.exams.scoring import ExamScorer
 from ada_sensei.exams.store import ExamStore
 from exams_helpers import (
@@ -45,6 +46,22 @@ def test_blocked_toolchain_creates_no_attempt(tmp_path):
 
     assert store.list_ids() == []
     assert services.context.exam_attempt_id is None
+
+
+def test_sdk_preflight_uses_active_project_when_config_differs(tmp_path):
+    configured = make_project(tmp_path, "configured-app")
+    (configured / "local.properties").unlink()
+    active = make_project(tmp_path, "active-app")
+    services = make_context(tmp_path, configured)
+    services.context.set_project(active)
+
+    status = ExamPreparationService(
+        services, toolchain=ReadyToolchainManager()
+    ).validate(require_exam_definition=False)
+
+    assert status.project_path == str(active.resolve())
+    assert "no_android_sdk" not in status.project_blockers
+    assert status.project_ready
 
 
 def test_ready_toolchain_is_persisted_on_attempt(tmp_path):

@@ -461,3 +461,38 @@ def test_successful_preparation_is_cached_for_repeated_panel_validation(
 
     assert len(runner.calls) == 3
     assert second.model_dump() == first.model_dump()
+
+
+def test_reported_gradle_9_9_2_and_agp_9_5_3_remain_blocked(tmp_path: Path) -> None:
+    project = make_project(tmp_path)
+    (project / "gradle" / "wrapper" / "gradle-wrapper.properties").write_text(
+        "distributionUrl=https\\://services.gradle.org/distributions/gradle-9.9.2-bin.zip\n",
+        encoding="utf-8",
+    )
+    (project / "gradle" / "libs.versions.toml").write_text(
+        '[versions]\nagp = "9.5.3"\nkotlin = "2.2.10"\n',
+        encoding="utf-8",
+    )
+    (project / "app" / "build.gradle.kts").write_text(
+        "plugins {\n"
+        "  alias(libs.plugins.android.application)\n"
+        "  alias(libs.plugins.kotlin.android)\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    runner = FakeRunner()
+
+    result = ToolchainManager(runner=runner).prepare(project)
+
+    assert not result.ready
+    assert runner.calls == []
+    assert any(
+        "gradle=9.9.2" in blocker
+        and "kotlin=2.2.10" in blocker
+        and "agp=9.5.3" in blocker
+        for blocker in result.blockers
+    )
+    assert all(
+        status is ToolStatus.INCOMPATIBLE for status in result.manifest.tools.values()
+    )
+    assert not hasattr(result, "exam_attempt")
