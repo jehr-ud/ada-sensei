@@ -459,6 +459,8 @@ class ExamResult(EvaluationResult):
     suggested_grade: float | None = None
     report_id: str | None = None
     report_path: str | None = None
+    pdf_status: str | None = None
+    pdf_error: str | None = None
     #: Locale snapshot carried from the attempt (spec 0010, RQ-LNG-013).
     locale: str | None = None
     #: Verbatim label required by RQ-EXM-029.

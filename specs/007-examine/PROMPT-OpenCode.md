@@ -75,7 +75,8 @@ sobre cualquier regla antigua de rúbrica o arquitectura.
 6. El umbral de pruebas es 80% de requisitos funcionales con pruebas asociadas;
    muestra cobertura de requisitos separada de cobertura de líneas.
 7. El PDF se genera desde el modelo tipado `EvaluationReport`, sin LLM, con
-   tablas, IDs, estados, evidencias y fórmulas reproducibles. Máximo 4 páginas.
+   tablas, IDs, estados, evidencias y fórmulas reproducibles. Usa las páginas
+   necesarias sin eliminar secciones ni evidencias.
 8. No rellenes vacíos con suposiciones. Los errores de herramientas se reportan
    como estados de infraestructura y no como fallos del estudiante.
 9. TeacherAgent puede explicar hallazgos en diálogo, citando sus IDs, pero no

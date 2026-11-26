@@ -86,7 +86,7 @@ class ExamReportGenerator:
             left=f"Attempt {result.exam_attempt_id}",
             right=f"Report {report.report_id if report else report_id}",
         )
-        return writer.build(max_pages=4)
+        return writer.build()
 
     def _sections(self, result: ExamResult) -> list[tuple[str, str]]:
         report = result.evaluation_report

@@ -100,6 +100,23 @@ def _content_streams(data: bytes) -> list[bytes]:
     return streams
 
 
+def _stream_lines(stream: bytes) -> list[str]:
+    lines: list[str] = []
+    for token in _SHOW_RE.findall(stream):
+        for piece in re.findall(rb"\((?:\\.|[^\\()])*\)|<[0-9A-Fa-f\s]+>", token):
+            text = _decode_string(piece)
+            if text.strip():
+                lines.append(text.strip())
+    return lines
+
+
+def extract_page_texts(data: bytes) -> list[str]:
+    """Recover visible text per page, in page order."""
+    if not data.startswith(b"%PDF-"):
+        raise PdfTextExtractionError("file does not start with a %PDF- header")
+    return ["\n".join(_stream_lines(stream)) for stream in _content_streams(data)]
+
+
 def extract_text(data: bytes) -> str:
     """Recover the visible text of a PDF, page order preserved.
 
@@ -107,16 +124,12 @@ def extract_text(data: bytes) -> str:
     returns an empty string when the file is a valid PDF whose text cannot be
     recovered, so the caller can record a limitation (RQ-EXM-002).
     """
-    if not data.startswith(b"%PDF-"):
-        raise PdfTextExtractionError("file does not start with a %PDF- header")
-    lines: list[str] = []
-    for stream in _content_streams(data):
-        for token in _SHOW_RE.findall(stream):
-            for piece in re.findall(rb"\((?:\\.|[^\\()])*\)|<[0-9A-Fa-f\s]+>", token):
-                text = _decode_string(piece)
-                if text.strip():
-                    lines.append(text.strip())
-    return "\n".join(lines)
+    return "\n".join(
+        line
+        for page in extract_page_texts(data)
+        for line in page.splitlines()
+        if line.strip()
+    )
 
 
 def extract_text_file(path) -> str:
@@ -127,6 +140,7 @@ def extract_text_file(path) -> str:
 
 __all__ = [
     "PdfTextExtractionError",
+    "extract_page_texts",
     "extract_text",
     "extract_text_file",
 ]

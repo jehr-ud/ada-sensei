@@ -75,6 +75,10 @@ class InstrumentedNotSupportedError(Exception):
     """``connectedAndroidTest`` stays unimplemented (spec.md §Evaluation scope)."""
 
 
+class ExamPdfRetryError(Exception):
+    """The persisted report cannot be used to regenerate the PDF."""
+
+
 #: Evidence-collection stage -> localized progress UI key (RQ-EXM-048).
 _PROGRESS_STAGE_KEYS: dict[str, str] = {
     "inspection": "exam_progress_inspecting",
@@ -207,6 +211,8 @@ class ExamFinishResult(ActionResult):
             )
         parts.append(result.grade_disclosure)
         parts.append(f"Report: {self.report_path}")
+        if result.pdf_status == "failed":
+            parts.append("PDF generation failed; retry from the persisted report.")
         return "\n\n".join(parts)
 
 
@@ -420,15 +426,77 @@ class ExamineAction:
         # other generated exam documentation, never in ADA Sensei's data dir.
         docs = self.docs.docs_for(definition.exam_id)
         report_target = docs.ensure() / REPORT_NAME
-        path, report_id = self.reports.generate(result, definition, path=report_target)
-        result.report_id = report_id
-        result.report_path = str(path)
-        self.docs.write_finish_docs(result, definition, docs=docs)
+        if result.evaluation_report is not None:
+            result.report_id = result.evaluation_report.report_id
+        result.report_path = str(report_target)
+        result.pdf_status = "pending"
         self._log(attempt, ExamEventType.evaluation_completed)
         self._persist(result, attempt)
+        try:
+            path, report_id = self.reports.generate(
+                result, definition, path=report_target
+            )
+            result.report_id = report_id
+            result.report_path = str(path)
+            result.pdf_status = "generated"
+            result.pdf_error = None
+        except Exception as exc:  # noqa: BLE001 - recorded in the persisted result
+            path = report_target
+            result.pdf_status = "failed"
+            result.pdf_error = f"{type(exc).__name__}: {exc}"
+            result.limitations.append(
+                f"PDF report generation failed: {result.pdf_error}"
+            )
+        self.docs.write_finish_docs(result, definition, docs=docs)
+        self._persist_pdf_state(result)
         self.services.context.clear_exam()
         self.services.context.persist()
         return ExamFinishResult(result=result, report_path=str(path))
+
+    def retry_report_pdf(self, result_id: str) -> ExamFinishResult:
+        """Regenerate the PDF from the persisted ``EvaluationReport`` only."""
+        persisted = self.services.results.get(result_id)
+        if not isinstance(persisted, ExamResult):
+            raise ExamPdfRetryError(f"exam result {result_id} was not found")
+        report = persisted.evaluation_report
+        if report is None:
+            raise ExamPdfRetryError(
+                f"exam result {persisted.id} has no persisted EvaluationReport"
+            )
+        required = (
+            "report_id",
+            "student_id",
+            "project_id",
+            "exam_id",
+            "attempt_id",
+            "rubric_id",
+            "rubric_version",
+        )
+        incomplete = [name for name in required if not getattr(report, name)]
+        if incomplete:
+            raise ExamPdfRetryError(
+                f"persisted EvaluationReport {persisted.id} is incomplete: "
+                + ", ".join(incomplete)
+            )
+        persisted.report_id = report.report_id
+        docs = self.docs.docs_for(report.exam_id)
+        report_target = docs.ensure() / REPORT_NAME
+        try:
+            path, report_id = self.reports.generate(persisted, path=report_target)
+            persisted.report_id = report_id
+            persisted.report_path = str(path)
+            persisted.pdf_status = "generated"
+            persisted.pdf_error = None
+        except Exception as exc:  # noqa: BLE001 - recorded in the persisted result
+            path = report_target
+            persisted.report_path = str(path)
+            persisted.pdf_status = "failed"
+            persisted.pdf_error = f"{type(exc).__name__}: {exc}"
+            persisted.limitations.append(
+                f"PDF report generation failed: {persisted.pdf_error}"
+            )
+        self._persist_pdf_state(persisted)
+        return ExamFinishResult(result=persisted, report_path=str(path))
 
     # -- assembly ---------------------------------------------------------
 
@@ -797,6 +865,14 @@ class ExamineAction:
         self.store.append(event)
         attempt.event_ids.append(event.event_id)
 
+    def _persist_pdf_state(self, result: ExamResult) -> None:
+        try:
+            self.services.results.save(result)
+        except Exception as exc:  # noqa: BLE001 - surfaced as a limitation
+            result.limitations.append(
+                f"PDF generation state for {result.id} was NOT persisted: {exc}"
+            )
+
     def _persist(self, result: ExamResult, attempt: ExamAttempt) -> None:
         """RQ-EXM-026/027: failures are explicit, never swallowed."""
         try:
@@ -825,6 +901,7 @@ __all__ = [
     "ExamConfirmationRequired",
     "ExamFinishInput",
     "ExamFinishResult",
+    "ExamPdfRetryError",
     "ExamNotActiveError",
     "ExamStartInput",
     "ExamStartResult",

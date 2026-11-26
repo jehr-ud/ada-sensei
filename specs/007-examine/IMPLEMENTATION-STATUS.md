@@ -117,7 +117,7 @@ inutilizable con la configuración entregada.
 | D5: A1–A7 e indicadores | PARCIAL | Subcriterios declarados (`rubric.py:318-382`); sin analizador por indicador |
 | Estados PASS/PARTIAL/FAIL/NOT_* /INFO | PARCIAL | Enumeración disponible (`evaluation/models.py:160-185`); cobertura de reglas incompleta |
 | `AnalyzerCoverage` por dimensión | PARCIAL | Proyección simple en `exam_agent.py:100-102` |
-| PDF solo desde `EvaluationReport`, sin prosa LLM, máximo 4 páginas | FALTA | `exams/report.py:58-59,122-137,221-258` sigue renderizando `ExamResult` con secciones narrativas y «Clean architecture» |
+| PDF solo desde `EvaluationReport`, sin prosa LLM, páginas adaptativas | FALTA | `exams/report.py:58-59,122-137,221-258` sigue renderizando `ExamResult` con secciones narrativas y «Clean architecture» |
 | Tablas R1–R12 | PARCIAL | Secciones y renderizado tipado (`report.py:262-279`); las pruebas solo verifican encabezados (`tests/exams/test_evaluation_report.py:78-102`) |
 | Catálogo de observaciones/recomendaciones localizado | PARCIAL | Observaciones derivadas de hallazgos; sin catálogo versionado completo ni pruebas de plantillas |
 | Bloqueo de LLM para notas/estados/PDF | PARCIAL | Scoring determinista probado; el PDF hereda campos narrativos del LLM |
@@ -167,7 +167,7 @@ inutilizable con la configuración entregada.
    alimentadas por el LLM (`feedback`, `strengths`, `weaknesses`,
    `recommendations`: `:225-244`), tabla de cálculo propia y sección
    «Clean architecture» (`:229-232`). Las tablas R1–R12 se añaden como bloques
-   adicionales (`:262-279`). No hay límite de 4 páginas.
+   adicionales (`:262-279`). El PDF ya no impone un límite fijo de páginas.
 4. **Checksums de toolchain pendientes.** La matriz cubre Gradle 8.4 y 9.5
    (`toolchain-policy.json:11-45`), injecta Detekt/KtLint en un workspace temporal
    (`manager.py:286-365`) y fue verificada contra un proyecto Android real con
@@ -254,7 +254,7 @@ inutilizable con la configuración entregada.
 3. Implementar evaluadores independientes para T1–T3, M1–M5 y A1–A7 con reglas
    versionadas, evidencia y `calculation_trace` verificable.
 4. Generar el PDF únicamente desde `EvaluationReport`, sin secciones narrativas
-   del LLM, sin «Clean Architecture», con catálogo localizado y límite de 4 páginas.
+   del LLM, sin «Clean Architecture», con catálogo localizado y paginación adaptativa.
 5. Registrar checksums de los plugin markers de `toolchain-policy.json:34-45` y
    automatizar el health check de integración con Gradle real en CI.
 6. Implementar `unmapped_observations` y el registro de verificadores con
@@ -290,8 +290,8 @@ durante la implementación.
 - `ExamineAction` produce un único `EvaluationReport` y lo consumen `present()`,
   el PDF, el resumen Markdown, el historial y las explicaciones del teacher.
 - El PDF usa ocho secciones v2, agrupa hallazgos, limita acciones a cinco,
-  muestra evidencia `ruta:líneas`, cobertura/peso excluido y un máximo de
-  cuatro páginas; no recalcula ninguna nota.
+  muestra evidencia `ruta:líneas`, cobertura/peso excluido y pagina según el
+  contenido; no recalcula ninguna nota.
 - Estados LLM no evaluables se excluyen del denominador, se declaran en la
   cobertura y nunca se convierten en cero; `LLM_UNAVAILABLE` marca el informe
   como `BLOCKED`.

@@ -79,6 +79,7 @@ class Page:
     height: float
     lines: list[TextLine] = field(default_factory=list)
     rules: list[float] = field(default_factory=list)
+    footer_lines: int = 0
 
 
 def text_width(text: str, size: float, bold: bool = False) -> float:
@@ -276,20 +277,30 @@ class SimplePdfWriter:
         """Add a stable identification footer to every laid-out page."""
         size = 8.0
         y = self.margin / 2
-        for page in self.pages:
-            page.lines.append(TextLine(self.margin, y, (Span(left),), size))
+        for index, page in enumerate(self.pages, start=1):
+            center = f"Page {index} of {len(self.pages)}"
+            center_x = (page.width - text_width(center, size)) / 2
             right_x = page.width - self.margin - text_width(right, size)
-            page.lines.append(TextLine(right_x, y, (Span(right),), size))
+            page.lines.extend(
+                (
+                    TextLine(self.margin, y, (Span(left),), size),
+                    TextLine(center_x, y, (Span(center),), size),
+                    TextLine(right_x, y, (Span(right),), size),
+                )
+            )
+            page.footer_lines = 3
 
     # -- serialization ----------------------------------------------------
 
-    def build(self, *, max_pages: int | None = None) -> bytes:
+    def build(self) -> bytes:
         if not self.pages:
             self._new_page()
-        if max_pages is not None and len(self.pages) > max_pages:
-            raise PdfError(
-                f"report needs {len(self.pages)} pages; limit is {max_pages}"
-            )
+        while len(self.pages) > 1:
+            page = self.pages[-1]
+            body_lines = len(page.lines) - page.footer_lines
+            if body_lines > 0 or page.rules:
+                break
+            self.pages.pop()
         return _serialize(
             self.pages, self.page_width, self.page_height, compress=self.compress
         )

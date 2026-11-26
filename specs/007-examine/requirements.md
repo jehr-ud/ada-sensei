@@ -681,11 +681,14 @@ que el LLM complete campos numéricos faltantes.
 
 ## 11. Especificación del PDF: tablas y reglas de cada tabla
 
-El PDF oficial es un informe técnico compacto de máximo 4 páginas, generado
-directamente desde `EvaluationReport`. Sin párrafos de interpretación libre,
-sin fortalezas/debilidades generadas por LLM y sin conclusiones conversacionales.
-Usa títulos, tablas, indicadores, estados y hallazgos concretos. Las etiquetas
-se localizan mediante catálogos `es-CO` y `en-US`; los IDs y códigos permanecen.
+El PDF oficial es un informe técnico generado directamente desde
+`EvaluationReport`; ocupa las páginas que exija su contenido y no impone un
+límite fijo. No elimina secciones obligatorias ni evidencias para reducir
+páginas, evita páginas vacías o contenido cortado y numera cada página. Sin
+párrafos de interpretación libre, sin fortalezas/debilidades generadas por LLM
+y sin conclusiones conversacionales. Usa títulos, tablas, indicadores, estados
+y hallazgos concretos. Las etiquetas se localizan mediante catálogos `es-CO` y
+`en-US`; los IDs y códigos permanecen.
 
 ### Tabla R1 — Identificación
 
@@ -1149,3 +1152,22 @@ configuración. La base de esta decisión es ADR-031.
   Markdown independientes.
 - **RQ-EXM-098 — Conservación:** RQ-EXM-089 a RQ-EXM-093 SHALL conservarse en
   resolución, persistencia, migración, empaquetado y errores.
+
+---
+
+# Adenda normativa — PDF paginado y reintento (2026-11-26)
+
+- **RQ-EXM-099 — Paginación adaptativa:** el PDF SHALL ocupar tantas páginas
+  como requiera el contenido de `EvaluationReport`, sin límite fijo, sin
+  eliminar secciones obligatorias ni evidencias, sin páginas vacías o contenido
+  cortado y con numeración de páginas.
+- **RQ-EXM-100 — Persistencia anterior al PDF:** `ExamineAction.finish()`
+  SHALL persistir el `EvaluationReport` antes de generar el PDF. Un fallo de
+  generación SHALL conservar el reporte, marcar la evaluación como terminada y
+  registrar el error; un éxito SHALL registrar la ruta del PDF y su estado.
+- **RQ-EXM-101 — Reintento PDF:** la operación de reintento SHALL recuperar el
+  mismo `EvaluationReport` persistido y regenerar el PDF conservando
+  `evaluation_id`, sin crear otro `ExamAttempt`, sin ejecutar herramientas o
+  modelo, sin recalcular la nota y sin duplicar resultados persistidos. Si el
+  reporte no existe o está incompleto, SHALL informar el problema sin iniciar
+  otra evaluación automáticamente.

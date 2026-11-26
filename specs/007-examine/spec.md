@@ -768,11 +768,20 @@ que el LLM complete campos numéricos faltantes.
 
 ## 11. Especificación del PDF: tablas y reglas de cada tabla
 
-El PDF oficial es un informe técnico compacto de máximo 4 páginas, generado
-directamente desde `EvaluationReport`. Sin párrafos de interpretación libre,
-sin fortalezas/debilidades generadas por LLM y sin conclusiones conversacionales.
-Usa títulos, tablas, indicadores, estados y hallazgos concretos. Las etiquetas
-se localizan mediante catálogos `es-CO` y `en-US`; los IDs y códigos permanecen.
+El PDF oficial es un informe técnico generado directamente desde
+`EvaluationReport`; ocupa las páginas que exija su contenido y no impone un
+límite fijo. No elimina secciones obligatorias ni evidencias para reducir
+páginas, evita páginas vacías o contenido cortado y numera cada página. Sin
+párrafos de interpretación libre, sin fortalezas/debilidades generadas por LLM
+y sin conclusiones conversacionales. Usa títulos, tablas, indicadores, estados
+y hallazgos concretos. Las etiquetas se localizan mediante catálogos `es-CO` y
+`en-US`; los IDs y códigos permanecen.
+
+`ExamineAction.finish()` persiste el `EvaluationReport` antes de intentar el
+PDF. Si la generación falla, la evaluación queda terminada, el reporte se
+conserva y el error de generación queda registrado. El reintento regenera el
+PDF desde ese mismo `EvaluationReport`, sin nueva evaluación, sin otro intento
+y sin duplicar resultados persistidos.
 
 ### Tabla R1 — Identificación
 

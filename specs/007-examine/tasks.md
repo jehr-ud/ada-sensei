@@ -188,12 +188,14 @@ Decisiones de resolución aplicadas:
 
 ## D. PDF determinista
 - [ ] Rediseñar `ExamReportGenerator` para producir las tablas R1–R12.
-- [ ] Generar PDF de máximo 4 páginas, sin narrativa libre LLM.
+- [ ] Generar PDF con páginas adaptativas, sin límite fijo ni narrativa libre LLM.
 - [ ] Crear catálogo de observaciones/recomendaciones `es-CO` y `en-US`.
 - [ ] Incluir hallazgos con IDs, severidad, archivo/línea y evidencia.
 - [ ] Mostrar las cinco dimensiones siempre, incluyendo no evaluadas.
 - [ ] Incluir cobertura, cálculo reproducible, versión de reglas y limitaciones.
 - [ ] Generar el PDF solo desde `EvaluationReport`.
+- [ ] Persistir el reporte antes del PDF y registrar ruta/estado o error.
+- [ ] Reintentar el PDF desde el reporte persistido sin reevaluar ni duplicar.
 
 ## E. TeacherAgent
 - [ ] TeacherAgent invoca EvaluatorAgent y consume `EvaluationReport`.
