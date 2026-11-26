@@ -101,6 +101,10 @@ _TOML_AGP = re.compile(
     r"^\s*(?:agp|android-gradle-plugin|android_gradle_plugin)\s*=\s*[\"']([^\"']+)[\"']",
     re.M,
 )
+_GRADLE_DAEMON_JVM_PROPERTIES = Path("gradle") / "gradle-daemon-jvm.properties"
+_DAEMON_JVM_TOOLCHAIN = re.compile(
+    r"^\s*toolchainVersion\s*=\s*(\d+)(?:\.\d+)?\s*$", re.MULTILINE
+)
 _TASK_PATTERN = re.compile(
     r"\b(lint[A-Za-z0-9]*|detekt[A-Za-z0-9]*|ktlint[A-Za-z0-9]*)\b"
 )
@@ -570,6 +574,11 @@ def detect_project_profile(
         match = re.search(r"jvmToolchain\((\d+)\)", all_text)
         if match:
             jdk = match.group(1)
+    if jdk is None:
+        daemon_properties = project / _GRADLE_DAEMON_JVM_PROPERTIES
+        if daemon_properties.is_file():
+            match = _DAEMON_JVM_TOOLCHAIN.search(_read_text(daemon_properties))
+            jdk = match.group(1) if match else None
 
     kotlin = _first_match(_KOTLIN_PATTERNS, all_text) or _first_match(
         [_TOML_KOTLIN], toml_text

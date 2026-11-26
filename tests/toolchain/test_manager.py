@@ -101,6 +101,12 @@ def make_modern_project(tmp_path: Path) -> Path:
     return project
 
 
+def write_daemon_jvm_version(project: Path, version: str) -> None:
+    (project / "gradle" / "gradle-daemon-jvm.properties").write_text(
+        f"toolchainVersion={version}\n", encoding="utf-8"
+    )
+
+
 def pinned_policy(*, gradle: str = "8.4") -> dict:
     return {
         "policy_id": "test-pinned-toolchain",
@@ -411,6 +417,77 @@ def test_source_compatibility_is_not_runtime_jdk(tmp_path: Path) -> None:
     assert profile.agp == "9.3.3"
 
 
+def test_daemon_jvm_properties_declares_runtime_jdk(tmp_path: Path) -> None:
+    project = make_modern_project(tmp_path)
+    write_daemon_jvm_version(project, "17")
+
+    profile = detect_project_profile(project)
+
+    assert profile.jdk == "17"
+    assert profile.gradle == "9.5.0"
+    assert profile.kotlin == "2.2.10"
+    assert profile.agp == "9.3.3"
+
+
+@pytest.mark.parametrize(("declared", "expected"), [("17.0", "17"), ("21.0", "21")])
+def test_daemon_jvm_properties_uses_major_version(
+    tmp_path: Path, declared: str, expected: str
+) -> None:
+    project = make_modern_project(tmp_path)
+    write_daemon_jvm_version(project, declared)
+
+    assert detect_project_profile(project).jdk == expected
+
+
+def test_daemon_jvm_properties_is_last_jdk_source(tmp_path: Path) -> None:
+    project = make_modern_project(tmp_path)
+    write_daemon_jvm_version(project, "17")
+    assert detect_project_profile(project).jdk == "17"
+
+    build_file = project / "app" / "build.gradle.kts"
+    build_file.write_text(
+        build_file.read_text(encoding="utf-8") + "jvmToolchain(21)\n",
+        encoding="utf-8",
+    )
+    assert detect_project_profile(project).jdk == "21"
+
+    (project / "gradle.properties").write_text(
+        "org.gradle.java.home=/jdk-11/Contents/Home\n", encoding="utf-8"
+    )
+    assert detect_project_profile(project).jdk == "11"
+
+    (project / ".java-version").write_text("8\n", encoding="utf-8")
+    assert detect_project_profile(project).jdk == "8"
+
+
+@pytest.mark.parametrize(
+    "declared", ["", "seventeen", "17.0.1", "17 # comment"]
+)
+def test_invalid_daemon_jvm_properties_are_ignored(
+    tmp_path: Path, declared: str
+) -> None:
+    project = make_modern_project(tmp_path)
+    write_daemon_jvm_version(project, declared)
+
+    assert detect_project_profile(project).jdk is None
+
+
+def test_daemon_jvm_properties_are_compatible_with_supported_profile(
+    tmp_path: Path,
+) -> None:
+    project = make_modern_project(tmp_path)
+    write_daemon_jvm_version(project, "17")
+    runner = FakeRunner()
+
+    result = ToolchainManager(
+        runner=runner, workspace_root=tmp_path / "ws"
+    ).prepare(project)
+
+    assert result.ready is True
+    assert result.blockers == []
+    assert len(runner.calls) == 3
+
+
 def test_default_policy_auto_configures_missing_static_tools(tmp_path: Path) -> None:
     project = make_modern_project(tmp_path)
     runner = FakeRunner()
@@ -465,6 +542,8 @@ def test_successful_preparation_is_cached_for_repeated_panel_validation(
 
 def test_reported_gradle_9_9_2_and_agp_9_5_3_remain_blocked(tmp_path: Path) -> None:
     project = make_project(tmp_path)
+    (project / ".java-version").unlink()
+    write_daemon_jvm_version(project, "17")
     (project / "gradle" / "wrapper" / "gradle-wrapper.properties").write_text(
         "distributionUrl=https\\://services.gradle.org/distributions/gradle-9.9.2-bin.zip\n",
         encoding="utf-8",
@@ -487,7 +566,8 @@ def test_reported_gradle_9_9_2_and_agp_9_5_3_remain_blocked(tmp_path: Path) -> N
     assert not result.ready
     assert runner.calls == []
     assert any(
-        "gradle=9.9.2" in blocker
+        "jdk=17" in blocker
+        and "gradle=9.9.2" in blocker
         and "kotlin=2.2.10" in blocker
         and "agp=9.5.3" in blocker
         for blocker in result.blockers
